@@ -41,5 +41,14 @@ export async function getProject(id: string): Promise<Project | undefined> {
 }
 
 export function formatMoney({ amount, currency }: { amount: number; currency: string }) {
-  return `${currency} ${(amount / 100).toLocaleString("en-KE")}`;
+  return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(
+    amount / 100,
+  );
+}
+
+/** Distinct facet values, for the filter dropdowns */
+export async function getFacetOptions() {
+  const all = await getProjects();
+  const uniq = (key: keyof Project["facets"]) => [...new Set(all.map((p) => p.facets[key]))].sort();
+  return { cause: uniq("cause"), group: uniq("group"), region: uniq("region") };
 }
