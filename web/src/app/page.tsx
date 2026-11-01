@@ -26,7 +26,7 @@ export default async function Home() {
     <>
       {/* Hero: one static slide, two actions */}
       <section className="relative flex min-h-[560px] items-center overflow-hidden bg-ink pb-16 pt-32 lg:min-h-[640px] lg:pt-[110px]">
-        <div className="absolute inset-0 bg-[linear-gradient(120deg,#1b1f2e_30%,#3b2f7a_75%,#674df0_100%)]" aria-hidden />
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,#1b192c_30%,#4319cc_75%,#5a3fe4_100%)]" aria-hidden />
         <div className="absolute -right-20 top-1/4 hidden size-[420px] border border-white/10 lg:block" aria-hidden />
         <div className="absolute right-32 top-1/3 hidden size-[300px] border border-white/10 lg:block" aria-hidden />
         <div className="container-k relative">
@@ -52,7 +52,7 @@ export default async function Home() {
           <div className="relative hidden pl-10 lg:block">
             <span className="absolute left-0 top-0 h-[200px] w-[30px] bg-accent" aria-hidden />
             <span className="absolute bottom-0 left-0 h-[200px] w-[30px] bg-brand" aria-hidden />
-            <div className="aspect-[4/5] bg-[linear-gradient(160deg,#674df0,#1b1f2e)]" role="img" aria-label="Community project photo placeholder" />
+            <div className="aspect-[4/5] bg-[linear-gradient(160deg,#5a3fe4,#1b192c)]" role="img" aria-label="Community project photo placeholder" />
           </div>
           <div>
             <Eyebrow>Why it works</Eyebrow>
@@ -121,7 +121,7 @@ export default async function Home() {
       </section>
 
       {/* FAQ on a dark band */}
-      <section id="faq" className="bg-ink bg-[linear-gradient(135deg,#1b1f2e,#2b2550)] py-16 lg:py-[120px]">
+      <section id="faq" className="bg-ink bg-[linear-gradient(135deg,#1b192c,#2e009c)] py-16 lg:py-[120px]">
         <div className="container-k grid gap-12 lg:grid-cols-2">
           <div>
             <Eyebrow dark>Questions</Eyebrow>
@@ -174,7 +174,7 @@ export default async function Home() {
 
       {/* Together CTA band */}
       <section className="relative bg-ink py-20 text-center lg:py-28">
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,#3b2f7a,#1b1f2e)] opacity-90" aria-hidden />
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,#4319cc,#1b192c)] opacity-90" aria-hidden />
         <div className="container-k relative">
           <p className="mb-4 text-xl text-accent">Start small</p>
           <h2 className="section-title mx-auto mb-10 max-w-3xl text-white">Together we decide where the good goes</h2>

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 const art: Record<string, { from: string; to: string; label: string }> = {
   health: { from: "#c2410c", to: "#7c2d12", label: "Health" },
-  education: { from: "#674df0", to: "#3b2f7a", label: "Education" },
+  education: { from: "#5a3fe4", to: "#4319cc", label: "Education" },
   environment: { from: "#15803d", to: "#14532d", label: "Environment" },
   water: { from: "#0e7490", to: "#164e63", label: "Water" },
 };

@@ -2,23 +2,47 @@
 
 /* Design tokens modelled on Krowd "Home 2", with contrast fixes:
    body text darkened to #5F6270 (6:1); mint is a fill behind navy text, never text on white. */
+/* Colour roles generated from the brand seed #674DF0 (Material 3 tonal method, from UI Design
+   Council round 2): each role has a matching "on" colour, so every pair passes WCAG AA.
+   Krowd structure kept; mint stays a fill behind navy text only. */
 @theme {
-  --color-brand: #674df0;
-  --color-brand-dark: #5f48dc;
-  --color-brand-line: #765ff2;
-  --color-brand-tint: #d1c8fe;
-  --color-brand-soft: #f0edfd;
+  /* primary: buttons, links, tags (tone 40, 6.4:1 with white) */
+  --color-primary: #5a3fe4;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #e5deff;
+  --color-on-primary-container: #1a0064;
+  --color-primary-dark: #4319cc;
+  --color-primary-line: #735cff;
+  --color-primary-on-dark: #c8bfff;
+  /* secondary / surfaces */
+  --color-secondary: #5f5c72;
+  --color-surface: #fdf8fd;
+  --color-surface-variant: #f3eeff;
+  --color-on-surface: #1c1b1f;
+  --color-on-surface-variant: #48454f;
+  --color-outline: #797680;
+  --color-outline-variant: #e5e0ec;
+  --color-inverse-surface: #1b192c;
+  --color-error: #ba1a1a;
+  /* accent fill (behind dark text only) */
   --color-accent: #29f0b4;
-  --color-ink: #1b1f2e;
-  --color-text: #5f6270;
-  --color-surface-alt: #f7f7f9;
-  --color-line: #e9e9ee;
-  --color-footer-text: #a3a7b7;
-  --color-footer-line: #2d313e;
-  --color-danger: #b91c1c;
+
+  /* names used by the components, mapped onto the roles */
+  --color-brand: var(--color-primary);
+  --color-brand-dark: var(--color-primary-dark);
+  --color-brand-line: var(--color-primary-line);
+  --color-brand-tint: var(--color-primary-on-dark);
+  --color-brand-soft: var(--color-primary-container);
+  --color-ink: var(--color-inverse-surface);
+  --color-text: var(--color-on-surface-variant);
+  --color-surface-alt: var(--color-surface-variant);
+  --color-line: var(--color-outline-variant);
+  --color-footer-text: #c8c3dc;
+  --color-footer-line: #312e42;
+  --color-danger: var(--color-error);
 
   --color-cat-health: #c2410c;
-  --color-cat-education: #674df0;
+  --color-cat-education: #5a3fe4;
   --color-cat-environment: #15803d;
   --color-cat-water: #0e7490;
 
@@ -29,8 +53,12 @@
   --radius-full: 9999px;
 }
 
+html {
+  scroll-padding-top: 120px; /* sticky header never hides a focused element (WCAG 2.2) */
+}
+
 body {
-  background: #fff;
+  background: var(--color-surface);
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: 16px;
