@@ -26,6 +26,8 @@ export type Project = {
   backerCount: number;
   urgency: 1 | 2 | 3 | 4 | 5;
   status: ProjectStatus;
+  /** ISO date the current round of funding ends */
+  endsAt: string;
 };
 
 export type ProjectFilters = {

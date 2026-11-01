@@ -52,3 +52,7 @@ export async function getFacetOptions() {
   const uniq = (key: keyof Project["facets"]) => [...new Set(all.map((p) => p.facets[key]))].sort();
   return { cause: uniq("cause"), group: uniq("group"), region: uniq("region") };
 }
+
+export function daysLeft(p: Project) {
+  return Math.max(0, Math.ceil((new Date(p.endsAt).getTime() - Date.now()) / 86_400_000));
+}

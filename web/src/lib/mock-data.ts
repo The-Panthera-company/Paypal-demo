@@ -11,6 +11,8 @@ export const categories: Category[] = [
   { id: "water", name: "Water", projectCount: 1, raised: usd(430) },
 ];
 
+const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString();
+
 export const projects: Project[] = [
   {
     id: "lanet-library",
@@ -25,6 +27,7 @@ export const projects: Project[] = [
     backerCount: 16,
     urgency: 2,
     status: "active",
+    endsAt: inDays(20),
   },
   {
     id: "kaptembwo-desks",
@@ -39,6 +42,7 @@ export const projects: Project[] = [
     backerCount: 9,
     urgency: 4,
     status: "active",
+    endsAt: inDays(12),
   },
   {
     id: "girls-stem-club",
@@ -53,6 +57,7 @@ export const projects: Project[] = [
     backerCount: 4,
     urgency: 3,
     status: "active",
+    endsAt: inDays(26),
   },
   {
     id: "new-reading-corner",
@@ -67,6 +72,7 @@ export const projects: Project[] = [
     backerCount: 0,
     urgency: 2,
     status: "verified",
+    endsAt: inDays(30),
   },
   {
     id: "lupus-support",
@@ -81,6 +87,7 @@ export const projects: Project[] = [
     backerCount: 21,
     urgency: 5,
     status: "active",
+    endsAt: inDays(8),
   },
   {
     id: "mobile-clinic",
@@ -95,6 +102,7 @@ export const projects: Project[] = [
     backerCount: 14,
     urgency: 3,
     status: "active",
+    endsAt: inDays(18),
   },
   {
     id: "shoreline-trees",
@@ -109,6 +117,7 @@ export const projects: Project[] = [
     backerCount: 33,
     urgency: 3,
     status: "active",
+    endsAt: inDays(15),
   },
   {
     id: "village-borehole",
@@ -123,5 +132,6 @@ export const projects: Project[] = [
     backerCount: 12,
     urgency: 5,
     status: "active",
+    endsAt: inDays(5),
   },
 ];
