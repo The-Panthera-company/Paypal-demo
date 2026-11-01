@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { ImpactGallery } from "@/components/ImpactGallery";
 import { ProjectCard } from "@/components/ProjectCard";
+import { BackerStories, SponsorStrip } from "@/components/Sections";
 import { Eyebrow } from "@/components/ui";
-import { formatMoney, getCategories, getProjects } from "@/lib/api";
+import { formatDate, formatMoney, getBackerStories, getCategories, getImpactUpdates, getProjects, getSponsors } from "@/lib/api";
 
 const faqs = [
   ["How does matching work?", "A sponsor pool is shared by quadratic funding: a project backed by many people gets a bigger top-up than one backed by a few large gifts. Caps stop any single project taking everything."],
@@ -17,7 +19,15 @@ const steps = [
 ];
 
 export default async function Home() {
-  const [projects, categories] = await Promise.all([getProjects(), getCategories()]);
+  const [projects, categories, updates, stories, sponsors] = await Promise.all([
+    getProjects(),
+    getCategories(),
+    getImpactUpdates(),
+    getBackerStories(),
+    getSponsors(),
+  ]);
+  const galleryItems = updates.slice(0, 3).map((u) => ({ ...u, project: projects.find((p) => p.id === u.projectId) }));
+  const dateLabels = Object.fromEntries(updates.map((u) => [u.id, formatDate(u.date)]));
   const raised = projects.reduce((s, p) => s + p.raised.amount, 0);
   const backers = projects.reduce((s, p) => s + p.backerCount, 0);
   const featured = [...projects].sort((a, b) => b.urgency - a.urgency).slice(0, 6);
@@ -153,6 +163,24 @@ export default async function Home() {
         </div>
       </section>
 
+      {/* Impact gallery preview: proof from released milestones */}
+      <section className="section">
+        <div className="container-k">
+          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <Eyebrow>Proof, not promises</Eyebrow>
+              <h2 className="section-title">Latest impact</h2>
+            </div>
+            <Link href="/gallery" className="font-medium text-brand underline-offset-4 hover:underline">
+              See the full gallery
+            </Link>
+          </div>
+          <ImpactGallery items={galleryItems} dateLabels={dateLabels} />
+        </div>
+      </section>
+
+      <BackerStories stories={stories} projects={projects} />
+
       {/* How it works: 3 numbered steps */}
       <section id="how-it-works" className="section bg-surface-alt">
         <div className="container-k">
@@ -183,6 +211,8 @@ export default async function Home() {
           </Link>
         </div>
       </section>
+
+      <SponsorStrip sponsors={sponsors} />
     </>
   );
 }

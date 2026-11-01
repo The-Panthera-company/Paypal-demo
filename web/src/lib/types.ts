@@ -37,3 +37,25 @@ export type ProjectFilters = {
   region?: string;
   q?: string;
 };
+
+/** A milestone update with evidence (photo or receipt), shown in the impact gallery and story feed */
+export type ImpactUpdate = {
+  id: string;
+  projectId: string;
+  title: string;
+  caption: string;
+  kind: "photo" | "receipt";
+  date: string;
+  tranche?: Money;
+};
+
+/** A backer's own words about a project they supported (shown only with their consent) */
+export type BackerStory = {
+  id: string;
+  quote: string;
+  name: string;
+  role: string;
+  projectId: string;
+};
+
+export type Sponsor = { id: string; name: string; pool: Money };

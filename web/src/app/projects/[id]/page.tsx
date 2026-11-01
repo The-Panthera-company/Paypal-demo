@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { PageTitle } from "@/components/PageTitle";
 import { CategoryArt, ProgressBar, StatBox } from "@/components/ui";
-import { daysLeft, formatMoney, getProject } from "@/lib/api";
+import Link from "next/link";
+import { ProjectCard } from "@/components/ProjectCard";
+import { daysLeft, formatDate, formatMoney, getImpactUpdates, getProject, getSimilarProjects } from "@/lib/api";
 
 // Krowd single-project layout. Story/Updates tabs content: issue #11; PayPal button: #14.
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -9,6 +11,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const p = await getProject(id);
   if (!p) notFound();
   const pct = Math.round((p.raised.amount / p.goal.amount) * 100);
+  const [updates, similar] = await Promise.all([getImpactUpdates(p.id), getSimilarProjects(p)]);
 
   return (
     <>
@@ -69,9 +72,49 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               Matching money for this project is released in tranches: each milestone needs receipts and photos that pass
               our checks before the next payment is sent.
             </p>
+
+            <h2 className="mb-6 mt-12 text-3xl">Impact updates</h2>
+            {updates.length === 0 ? (
+              <p className="border border-dashed border-line p-6">No milestone released yet. Updates with receipts and photos appear here.</p>
+            ) : (
+              <ol className="space-y-6 border-l-2 border-line pl-6">
+                {updates.map((u) => (
+                  <li key={u.id} className="relative">
+                    <span className="absolute -left-[31px] top-1.5 size-3 bg-accent" aria-hidden />
+                    <p className="text-sm">
+                      {formatDate(u.date)} · {u.kind === "receipt" ? "Receipt" : "Photo"}
+                      {u.tranche && <> · {formatMoney(u.tranche)} released</>}
+                    </p>
+                    <h3 className="text-xl">{u.title}</h3>
+                    <p>{u.caption}</p>
+                  </li>
+                ))}
+              </ol>
+            )}
+
+            <p className="mt-12 text-sm">
+              Something wrong with this project?{" "}
+              <Link href={`/report?project=${p.id}`} className="font-medium text-brand underline">
+                Report it
+              </Link>{" "}
+              and an admin will review it.
+            </p>
           </div>
         </div>
       </section>
+
+      {similar.length > 0 && (
+        <section className="bg-surface-alt section">
+          <div className="container-k">
+            <h2 className="section-title mb-8">Similar projects</h2>
+            <div className="grid gap-[30px] sm:grid-cols-2 lg:grid-cols-3">
+              {similar.map((x) => (
+                <ProjectCard key={x.id} project={x} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="h-20 lg:hidden" aria-hidden />
       {/* Sticky back bar on phones */}

@@ -1,6 +1,6 @@
 // Local sample data so pages render before the Postman mock and Person 3's seed JSON exist.
 // The platform is not tied to one country: projects carry their own region and currency.
-import type { Category, Project } from "./types";
+import type { BackerStory, Category, ImpactUpdate, Project, Sponsor } from "./types";
 
 const usd = (amount: number) => ({ amount: amount * 100, currency: "USD" });
 
@@ -134,4 +134,31 @@ export const projects: Project[] = [
     status: "active",
     endsAt: inDays(5),
   },
+];
+
+
+const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+
+// Sample evidence. Real entries come from milestone uploads checked by the Milestone Agent.
+export const impactUpdates: ImpactUpdate[] = [
+  { id: "u1", projectId: "lanet-library", title: "First 120 books shelved", caption: "Receipt matched the tranche within 2%; supplier as planned.", kind: "photo", date: daysAgo(3), tranche: usd(300) },
+  { id: "u2", projectId: "shoreline-trees", title: "400 seedlings planted", caption: "Photo dated inside the milestone window; no duplicate images.", kind: "photo", date: daysAgo(6), tranche: usd(450) },
+  { id: "u3", projectId: "village-borehole", title: "Pump parts receipt", caption: "Receipt total 3,480 against a 3,500 tranche.", kind: "receipt", date: daysAgo(8), tranche: usd(350) },
+  { id: "u4", projectId: "mobile-clinic", title: "62 eye tests in one day", caption: "Clinic log and photos uploaded by the facilitator.", kind: "photo", date: daysAgo(11) },
+  { id: "u5", projectId: "kaptembwo-desks", title: "Carpenter's quote approved", caption: "Admin approved a tranche above the auto-release threshold.", kind: "receipt", date: daysAgo(13), tranche: usd(500) },
+  { id: "u6", projectId: "lupus-support", title: "Monthly medication delivered", caption: "Pharmacy receipt and delivery photo.", kind: "photo", date: daysAgo(15), tranche: usd(400) },
+];
+
+// Sample stories (fictional people) to show the layout until backers opt in to share theirs.
+export const backerStories: BackerStory[] = [
+  { id: "s1", quote: "I only gave a little, but seeing 16 people back the library made it feel like ours.", name: "Sample backer A", role: "Student, monthly Giving Agent", projectId: "lanet-library" },
+  { id: "s2", quote: "The receipt check is why I trust it. I can see exactly what my money bought.", name: "Sample backer B", role: "Nurse, backs health projects", projectId: "mobile-clinic" },
+  { id: "s3", quote: "My agent skipped a project I'd excluded and told me why. That's the control I wanted.", name: "Sample backer C", role: "Engineer, set up a mandate", projectId: "village-borehole" },
+];
+
+export const sponsors: Sponsor[] = [
+  { id: "sp1", name: "Sponsor One", pool: usd(5_000) },
+  { id: "sp2", name: "Sponsor Two", pool: usd(3_000) },
+  { id: "sp3", name: "Sponsor Three", pool: usd(1_500) },
+  { id: "sp4", name: "Sponsor Four", pool: usd(500) },
 ];

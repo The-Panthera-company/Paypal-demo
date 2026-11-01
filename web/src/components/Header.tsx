@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 const nav = [
   { href: "/", label: "Home" },
   { href: "/projects", label: "Explore" },
+  { href: "/gallery", label: "Gallery" },
   { href: "/leaderboard", label: "Leaderboard" },
   { href: "/mandate", label: "Giving Agent" },
   { href: "/report", label: "My Impact" },
@@ -40,7 +41,7 @@ export function Header() {
         }`}
       >
         <div className="flex h-20 items-center px-4 lg:h-[110px] lg:px-20">
-          <Link href="/" className="flex items-center gap-3 pr-6 text-white lg:border-r lg:border-white/15 lg:pr-10 lg:h-full">
+          <Link href="/" className="flex shrink-0 items-center gap-3 pr-6 text-white lg:h-full lg:border-r lg:border-white/15 lg:pr-8">
             <span className="corner grid size-10 place-items-center bg-brand font-display text-xl" style={{ ["--corner-size" as string]: "10px" }} aria-hidden>
               C
             </span>
@@ -56,7 +57,7 @@ export function Header() {
                     <Link
                       href={n.href}
                       aria-current={active ? "page" : undefined}
-                      className={`mx-3 block leading-[110px] transition-colors xl:mx-5 ${active ? "text-accent" : "text-white hover:text-accent"}`}
+                      className={`mx-2 block whitespace-nowrap leading-[110px] transition-colors xl:mx-3 ${active ? "text-accent" : "text-white hover:text-accent"}`}
                     >
                       {n.label}
                     </Link>
@@ -66,7 +67,7 @@ export function Header() {
             </ul>
           </nav>
 
-          <div className="ml-auto hidden h-full items-center border-l border-white/15 pl-10 lg:flex">
+          <div className="ml-auto hidden h-full shrink-0 items-center border-l border-white/15 pl-8 lg:flex">
             <Link href="/projects" className="btn">
               Back a project
             </Link>

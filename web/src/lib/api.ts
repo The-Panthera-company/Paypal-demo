@@ -1,8 +1,8 @@
 // One place for every call to the core API.
 // With NEXT_PUBLIC_API_URL unset, the app uses local mock data; set it to the
 // Postman mock URL, then to the real API, without touching the pages.
-import { categories, projects } from "./mock-data";
-import type { Category, Project, ProjectFilters } from "./types";
+import { backerStories, categories, impactUpdates, projects, sponsors } from "./mock-data";
+import type { BackerStory, Category, ImpactUpdate, Project, ProjectFilters, Sponsor } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -55,4 +55,28 @@ export async function getFacetOptions() {
 
 export function daysLeft(p: Project) {
   return Math.max(0, Math.ceil((new Date(p.endsAt).getTime() - Date.now()) / 86_400_000));
+}
+
+export async function getImpactUpdates(projectId?: string): Promise<ImpactUpdate[]> {
+  if (API_URL) return get<ImpactUpdate[]>(projectId ? `/projects/${projectId}/updates` : "/updates");
+  return impactUpdates.filter((u) => !projectId || u.projectId === projectId);
+}
+
+export async function getBackerStories(): Promise<BackerStory[]> {
+  if (API_URL) return get<BackerStory[]>("/stories");
+  return backerStories;
+}
+
+export async function getSponsors(): Promise<Sponsor[]> {
+  if (API_URL) return get<Sponsor[]>("/rounds/current/sponsors");
+  return sponsors;
+}
+
+export async function getSimilarProjects(p: Project, limit = 3): Promise<Project[]> {
+  const all = await getProjects({ category: p.categoryId });
+  return all.filter((x) => x.id !== p.id).slice(0, limit);
+}
+
+export function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }

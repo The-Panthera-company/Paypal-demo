@@ -5,6 +5,7 @@ const columns = [
     title: "Platform",
     links: [
       ["/projects", "Explore projects"],
+      ["/gallery", "Impact gallery"],
       ["/leaderboard", "Leaderboard"],
       ["/mandate", "Giving Agent"],
       ["/report", "My impact"],
