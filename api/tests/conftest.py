@@ -30,6 +30,9 @@ class FakePayPal:
         self.payment_source: dict = {"paypal": {"email_address": "donor@example.com"}}
         self.verification_status = "SUCCESS"
         self.get_order_down = False
+        self.payouts: dict[str, dict] = {}  # payout_batch_id -> request body
+        self.payout_error: tuple[int, dict] | None = None
+        self.payout_item_status = "SUCCESS"
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -47,6 +50,20 @@ class FakePayPal:
                 status, body = self.capture_override
                 return httpx.Response(status, json=body)
             return httpx.Response(201, json=self.capture(path.split("/")[-2]))
+        if path == "/v1/payments/payouts" and request.method == "POST":
+            if self.payout_error:
+                status, body = self.payout_error
+                return httpx.Response(status, json=body)
+            body = json.loads(request.content)
+            sender_batch_id = body["sender_batch_header"]["sender_batch_id"]
+            if any(b["sender_batch_header"]["sender_batch_id"] == sender_batch_id for b in self.payouts.values()):
+                return httpx.Response(400, json={"name": "USER_BUSINESS_ERROR", "details": [{"issue": "SENDER_BATCH_ID_ALREADY_USED"}]})
+            batch_id = f"BATCH{len(self.payouts) + 1}"
+            self.payouts[batch_id] = body
+            return httpx.Response(201, json={"batch_header": {"payout_batch_id": batch_id, "batch_status": "PENDING",
+                                                              "sender_batch_header": body["sender_batch_header"]}})
+        if path.startswith("/v1/payments/payouts/") and request.method == "GET":
+            return httpx.Response(200, json=self.payout_batch(path.split("/")[-1]))
         if path == "/v1/notifications/verify-webhook-signature":
             return httpx.Response(200, json={"verification_status": self.verification_status})
         if path.startswith("/v2/checkout/orders/") and request.method == "GET":
@@ -54,6 +71,23 @@ class FakePayPal:
                 return httpx.Response(503, json={"name": "SERVICE_UNAVAILABLE"})
             return httpx.Response(200, json=self.orders[path.split("/")[-1]])
         return httpx.Response(404, json={"name": "RESOURCE_NOT_FOUND"})
+
+    def payout_batch(self, batch_id: str, item_status: str | None = None) -> dict:
+        """A batch as GET /v1/payments/payouts/{id} returns it, items in payout_item_status."""
+        body = self.payouts[batch_id]
+        return {
+            "batch_header": {"payout_batch_id": batch_id, "batch_status": "SUCCESS",
+                             "sender_batch_header": body["sender_batch_header"]},
+            "items": [
+                {
+                    "payout_item_id": f"ITEM-{batch_id}-{n}",
+                    "transaction_status": item_status or self.payout_item_status,
+                    "payout_batch_id": batch_id,
+                    "payout_item": {k: item[k] for k in ("sender_item_id", "receiver", "amount")},
+                }
+                for n, item in enumerate(body["items"], start=1)
+            ],
+        }
 
     def capture(self, order_id: str) -> dict:
         """Capture at "PayPal". Tests call it directly for a capture our API never saw."""

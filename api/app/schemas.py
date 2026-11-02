@@ -525,8 +525,21 @@ class PayoutItem(BaseModel):
     project_id: int
     milestone_id: int | None
     amount_cents: int
-    receiver: str
-    status: str
+    receiver: str | None = Field(description="Null until the project has a payout account")
+    status: str = Field(description="NEW before sending, then PayPal's: PENDING, SUCCESS, UNCLAIMED, FAILED, ...")
+    payout_item_id: str | None = None
+    error: str | None = Field(None, description="Why it wasn't sent, e.g. NO_PAYOUT_ACCOUNT or a PayPal issue")
+
+
+class PayoutAccountIn(BaseModel):
+    paypal_email: str = Field(
+        pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="In the sandbox, a sandbox personal account's email"
+    )
+
+
+class PayoutAccountOut(PayoutAccountIn):
+    model_config = _example({"project_id": 1, "paypal_email": "lanet-library@example.com"})
+    project_id: int
 
 
 class PayoutOut(BaseModel):

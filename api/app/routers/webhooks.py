@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.models import AuditLog, Donation, DonationStatus, LedgerEntry, LedgerType, WebhookEvent
+from app import payouts
+from app.models import AuditLog, Donation, DonationStatus, LedgerEntry, LedgerType, Payout, WebhookEvent
 from app.money import from_paypal
 from app.paypal import PayPalClient, PayPalError, get_paypal
 from app.routers.donations import apply_capture
@@ -44,7 +45,8 @@ def paypal_webhook(
     settings: Settings = Depends(get_settings),
 ):
     """Verifies the signature, skips repeats by event id, then handles PAYMENT.CAPTURE.COMPLETED,
-    .PENDING, .DENIED, .REFUNDED and .REVERSED. Other types are recorded as ignored."""
+    .PENDING, .DENIED, .REFUNDED and .REVERSED, and the PAYMENT.PAYOUTSBATCH.* and
+    PAYMENT.PAYOUTS-ITEM.* events. Other types are recorded as ignored."""
     if not settings.paypal_webhook_id:
         raise _error(503, "WEBHOOK_NOT_CONFIGURED", "PAYPAL_WEBHOOK_ID is not set")
     event_id = event.get("id")
@@ -71,6 +73,10 @@ def paypal_webhook(
             result = _deny(db, resource)
         elif event_type in REFUND:
             result = _refund(db, resource, reversed_=event_type.endswith("REVERSED"))
+        elif event_type.startswith("PAYMENT.PAYOUTSBATCH."):
+            result = _payout_batch(db, resource)
+        elif event_type.startswith("PAYMENT.PAYOUTS-ITEM."):
+            result = "processed" if payouts.apply_item(db, resource) else "unmatched"
         else:
             result = "ignored"
     except PayPalError as e:
@@ -168,4 +174,17 @@ def _refund(db: Session, refund: dict, *, reversed_: bool) -> str:
                 reason="Donor's bank or PayPal reversed the payment (chargeback or dispute)",
             )
         )
+    return "processed"
+
+
+def _payout_batch(db: Session, batch: dict) -> str:
+    header = batch.get("batch_header", {})
+    payout = db.scalar(select(Payout).where(Payout.paypal_batch_id == header.get("payout_batch_id")))
+    if payout is None:  # we may have crashed before storing PayPal's batch id: match on ours
+        sender_batch_id = header.get("sender_batch_header", {}).get("sender_batch_id")
+        payout = db.scalar(select(Payout).where(Payout.sender_batch_id == sender_batch_id))
+        if payout is None:
+            return "unmatched"
+        payout.paypal_batch_id = header.get("payout_batch_id")
+    payouts.apply_batch(db, payout, batch)
     return "processed"

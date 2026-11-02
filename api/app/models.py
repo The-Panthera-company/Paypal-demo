@@ -1,4 +1,4 @@
-"""The fourteen tables from the System Design data model, plus webhook_events.
+"""The fourteen tables from the System Design data model, plus webhook_events and payout_accounts.
 
 Amounts are integers in minor units. List fields (tags, categories) are JSON so the
 same models run on Postgres and on SQLite in tests.
@@ -307,3 +307,14 @@ class WebhookEvent(Base):
     result: Mapped[str] = mapped_column(String(30))
     payload: Mapped[dict] = mapped_column(JSON)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PayoutAccount(Base):
+    """Where a project's tranches are paid: a PayPal account email. Its own table so existing
+    databases pick it up at startup (create_all adds tables, not columns)."""
+
+    __tablename__ = "payout_accounts"
+
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), primary_key=True)
+    paypal_email: Mapped[str] = mapped_column(String(254))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
