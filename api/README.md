@@ -38,7 +38,7 @@ A test fails if the file is out of date. Conventions:
 | Donations | create order, capture, `GET /donations/{id}`, `POST /donations/category-preview` | |
 | Donors | `GET`/`PATCH /donors/{id}`, mandate (`GET`/`PUT`), mandate runs, pending approvals and the yes/no | report |
 | Rounds | `GET /rounds/current`, `GET /rounds/{id}/leaderboard` | |
-| Admin | review queue, verify, cases list, resolve case, held milestones, milestone review, payouts list, audit log, webhook events | round close |
+| Admin | review queue, verify, payout account, cases list, resolve case, held milestones, milestone review, payouts (list, send, refresh, retry), audit log, webhook events | round close |
 | Internal (agents) | active mandates, mandate runs, checked donations, payout requests, Watchdog cases, audit | |
 | Webhooks | `POST /webhooks/paypal` (capture completed, pending, denied, refunded, reversed) | |
 
@@ -155,8 +155,19 @@ Ledger note for reconciliation: a top-up is a `donation` entry with no project; 
 
 - `POST /internal/payout-requests` (`milestone_id`, the four `checks`, `summary`): released when every check passes, the project has no open Watchdog case, and the tranche plus its match is at most `MILESTONE_AUTO_RELEASE_CENTS` (50,000). Otherwise `held_for_admin` with the reasons; the agent's summary is in the audit log.
 - Admin: `GET /admin/milestones/held`, then `POST /admin/milestones/{id}/review` `{"approve": true}` releases it, `false` sends it back to `open` for new evidence.
-- Released = milestone `released` plus a `tranche` ledger entry (amount + match). `payout_id` is null for now: sending released tranches to PayPal Payouts is the next task.
+- Released = milestone `released`, a `tranche` ledger entry (amount + match), and a PayPal payout (next section).
 - `POST /admin/projects/{id}/verify` `{"approve": true}` lists a project under review (`verified`); `false` sends it back to `draft`.
+
+## Payouts
+
+Every released tranche (auto-released or approved by an admin) is sent through PayPal Payouts as its own batch ([`app/payouts.py`](app/payouts.py)).
+
+- **Where it goes:** the project's payout account, `PUT /admin/projects/{id}/payout-account` `{"paypal_email": ...}`. In the sandbox use a sandbox personal account's email.
+- **Deterministic ids:** `sender_batch_id` is `milestone-<id>-<currency>` (also sent as `PayPal-Request-Id`). PayPal refuses a reused one for 30 days, so sending twice can't pay twice.
+- **Not sent yet:** no payout account, or PayPal refused (e.g. not enough balance in the sandbox business account) → the release still stands; the payout stays `pending` with the reason in each item's `error`. Fix it, then `POST /admin/payouts/{id}/send` (same id).
+- **Tracking:** batches start `processing`. The payout webhooks (`PAYMENT.PAYOUTSBATCH.*`, `PAYMENT.PAYOUTS-ITEM.*`) update each item's status; `POST /admin/payouts/{id}/refresh` asks PayPal directly if a webhook was missed. A `SUCCESS` item writes one `payout` ledger entry (by PayPal's `payout_item_id`). `UNCLAIMED` = the email has no PayPal account yet; PayPal returns it after 30 days.
+- **Retry:** items that `FAILED`, were `RETURNED` or `BLOCKED` → `POST /admin/payouts/{id}/retry` sends them in a new batch, `…-retry1`, `…-retry2`, using the project's current payout account (so fix the email first). The old items show `RETRIED`.
+- **Try it in the sandbox:** `seed_dev` adds a 30 USD milestone to Lanet Library. Set its payout account to a sandbox personal email, then release it with `POST /internal/payout-requests` (all four checks true). The money comes out of the sandbox business account, which holds the test donations.
 
 ## PayPal webhooks
 

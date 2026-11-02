@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import payouts
 from app.auth import require_internal
 from app.config import Settings, get_settings
 from app.db import get_db
@@ -25,11 +26,13 @@ from app.models import (
     MandateRun,
     Milestone,
     MilestoneStatus,
+    Payout,
     Project,
     TargetType,
     WatchdogCase,
 )
 from app.money import to_paypal
+from app.paypal import PayPalClient, get_paypal
 from app.routers.donations import mark_captured
 from app.routers.donors import mandate_out, run_out
 from app.schemas import (
@@ -187,8 +190,12 @@ def open_case(body: CaseIn, db: Session = Depends(get_db)):
     return case_out(case)
 
 
-def release_milestone(db: Session, milestone: Milestone) -> None:
-    """Mark a tranche released and book it; the Payouts step sends released tranches to PayPal."""
+def release_milestone(db: Session, paypal: PayPalClient, milestone: Milestone) -> Payout:
+    """Mark a tranche released, book it, and send it through PayPal Payouts.
+
+    The release is committed before PayPal is called, so a PayPal failure leaves a pending payout
+    (send it again from the admin console) rather than undoing the release.
+    """
     milestone.status = MilestoneStatus.released
     db.add(
         LedgerEntry(
@@ -198,12 +205,22 @@ def release_milestone(db: Session, milestone: Milestone) -> None:
             project_id=milestone.project_id,
         )
     )
+    payout = payouts.create_for_milestone(db, milestone)
+    db.commit()
+    payouts.send(db, paypal, payout)
+    return payout
 
 
 @router.post("/payout-requests", response_model=PayoutRequestOut, responses={**NOT_FOUND, 409: {"model": ErrorOut}})
-def payout_request(body: PayoutRequestIn, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+def payout_request(
+    body: PayoutRequestIn,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    paypal: PayPalClient = Depends(get_paypal),
+):
     """Milestone Agent: all checks pass, no open Watchdog case and the tranche (including its match)
-    is at most MILESTONE_AUTO_RELEASE_CENTS -> released; otherwise held for an admin."""
+    is at most MILESTONE_AUTO_RELEASE_CENTS -> released and sent through PayPal Payouts;
+    otherwise held for an admin."""
     milestone = db.get(Milestone, body.milestone_id)
     if milestone is None:
         raise _error(404, "MILESTONE_NOT_FOUND", "No such milestone")
@@ -222,12 +239,15 @@ def payout_request(body: PayoutRequestIn, db: Session = Depends(get_db), setting
     if open_case is not None:
         problems.append(f"open_watchdog_case ({open_case})")
 
+    payout = None
     if problems:
         milestone.status = MilestoneStatus.held
         status, reason = "held_for_admin", "Held: " + ", ".join(problems)
     else:
-        release_milestone(db, milestone)
+        payout = release_milestone(db, paypal, milestone)
         status, reason = "released", "All checks passed, below threshold"
+        if errors := {i.get("error") for i in payout.items if i.get("error")}:
+            reason += f"; payout not sent yet: {', '.join(sorted(errors))}"
     db.add(
         AuditLog(
             actor="milestone-agent",
@@ -238,7 +258,7 @@ def payout_request(body: PayoutRequestIn, db: Session = Depends(get_db), setting
         )
     )
     db.commit()
-    return PayoutRequestOut(status=status, payout_id=None, reason=reason)
+    return PayoutRequestOut(status=status, payout_id=payout.id if payout else None, reason=reason)
 
 
 @router.post("/audit", response_model=AuditOut, status_code=201)

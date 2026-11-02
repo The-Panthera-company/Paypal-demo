@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import payouts
 from app.auth import require_admin
 from app.db import get_db
 from app.models import (
@@ -14,11 +15,13 @@ from app.models import (
     Milestone,
     MilestoneStatus,
     Payout,
+    PayoutAccount,
     Project,
     ProjectStatus,
     WatchdogCase,
     WebhookEvent,
 )
+from app.paypal import PayPalClient, PayPalError, get_paypal
 from app.routers.catalogue import _summaries, milestone_out, project_detail
 from app.routers.internal import case_out, release_milestone
 from app.schemas import (
@@ -29,6 +32,8 @@ from app.schemas import (
     LeaderboardOut,
     MilestoneOut,
     MilestoneReviewIn,
+    PayoutAccountIn,
+    PayoutAccountOut,
     PayoutItem,
     PayoutOut,
     ProjectDetail,
@@ -121,36 +126,110 @@ def held_milestones(db: Session = Depends(get_db)):
 
 
 @router.post("/milestones/{milestone_id}/review", response_model=MilestoneOut, responses=ERRORS)
-def review_milestone(milestone_id: int, body: MilestoneReviewIn, db: Session = Depends(get_db)):
+def review_milestone(
+    milestone_id: int,
+    body: MilestoneReviewIn,
+    db: Session = Depends(get_db),
+    paypal: PayPalClient = Depends(get_paypal),
+):
     """Approve releases the tranche; reject sends it back so the project can submit better evidence."""
     milestone = db.get(Milestone, milestone_id)
     if milestone is None:
         raise _error(404, "MILESTONE_NOT_FOUND", "No such milestone")
     if milestone.status != MilestoneStatus.held:
         raise _error(409, "MILESTONE_NOT_HELD", f"Milestone is {milestone.status.value}")
-    if body.approve:
-        release_milestone(db, milestone)
-    else:
-        milestone.status = MilestoneStatus.open
     db.add(AuditLog(actor="admin", action="milestone_review", inputs={"milestone_id": milestone.id},
                     rule_result="released" if body.approve else "sent_back", reason=body.note))
+    if body.approve:
+        release_milestone(db, paypal, milestone)
+    else:
+        milestone.status = MilestoneStatus.open
     db.commit()
     return milestone_out(milestone)
 
 
+def payout_out(p: Payout) -> PayoutOut:
+    return PayoutOut(
+        id=p.id,
+        sender_batch_id=p.sender_batch_id,
+        currency=p.currency,
+        status=p.status,
+        paypal_batch_id=p.paypal_batch_id,
+        items=[PayoutItem(**i) for i in p.items or []],
+    )
+
+
 @router.get("/payouts", response_model=list[PayoutOut])
 def list_payouts(db: Session = Depends(get_db)):
-    return [
-        PayoutOut(
-            id=p.id,
-            sender_batch_id=p.sender_batch_id,
-            currency=p.currency,
-            status=p.status,
-            paypal_batch_id=p.paypal_batch_id,
-            items=[PayoutItem(**i) for i in p.items or []],
-        )
-        for p in db.scalars(select(Payout).order_by(Payout.created_at.desc()))
-    ]
+    return [payout_out(p) for p in db.scalars(select(Payout).order_by(Payout.id.desc()))]
+
+
+def _payout_or_404(db: Session, payout_id: int) -> Payout:
+    payout = db.get(Payout, payout_id)
+    if payout is None:
+        raise _error(404, "PAYOUT_NOT_FOUND", "No such payout")
+    return payout
+
+
+@router.post("/payouts/{payout_id}/send", response_model=PayoutOut, responses=ERRORS)
+def send_payout(payout_id: int, db: Session = Depends(get_db), paypal: PayPalClient = Depends(get_paypal)):
+    """Send a batch that is still pending (no payout account at release, or PayPal refused it).
+    Same sender_batch_id, so it can never pay twice."""
+    payout = _payout_or_404(db, payout_id)
+    if payout.paypal_batch_id:
+        raise _error(409, "ALREADY_SENT", "PayPal already accepted this batch; refresh it or retry failed items")
+    payouts.send(db, paypal, payout)
+    db.commit()
+    return payout_out(payout)
+
+
+@router.post("/payouts/{payout_id}/refresh", response_model=PayoutOut, responses={**ERRORS, 502: {"model": ErrorOut}})
+def refresh_payout(payout_id: int, db: Session = Depends(get_db), paypal: PayPalClient = Depends(get_paypal)):
+    """Ask PayPal for the batch's current status, in case a webhook was missed."""
+    payout = _payout_or_404(db, payout_id)
+    if not payout.paypal_batch_id:
+        raise _error(409, "NOT_SENT", "This batch hasn't been sent to PayPal")
+    try:
+        payouts.apply_batch(db, payout, paypal.get_payout(payout.paypal_batch_id))
+    except PayPalError as e:
+        raise _error(502, e.issue, "PayPal could not return the batch")
+    db.commit()
+    return payout_out(payout)
+
+
+@router.post("/payouts/{payout_id}/retry", response_model=PayoutOut, status_code=201, responses=ERRORS)
+def retry_payout(payout_id: int, db: Session = Depends(get_db), paypal: PayPalClient = Depends(get_paypal)):
+    """Failed, returned or blocked items go out again in a new batch with a new sender_batch_id."""
+    payout = _payout_or_404(db, payout_id)
+    new = payouts.retry(db, payout)
+    if new is None:
+        raise _error(409, "NOTHING_TO_RETRY", "No failed, returned or blocked items in this batch")
+    db.commit()
+    payouts.send(db, paypal, new)
+    db.commit()
+    return payout_out(new)
+
+
+@router.get("/projects/{project_id}/payout-account", response_model=PayoutAccountOut, responses=ERRORS)
+def get_payout_account(project_id: int, db: Session = Depends(get_db)):
+    account = db.get(PayoutAccount, project_id)
+    if account is None:
+        raise _error(404, "NO_PAYOUT_ACCOUNT", "This project has no payout account")
+    return PayoutAccountOut(project_id=project_id, paypal_email=account.paypal_email)
+
+
+@router.put("/projects/{project_id}/payout-account", response_model=PayoutAccountOut, responses=ERRORS)
+def set_payout_account(project_id: int, body: PayoutAccountIn, db: Session = Depends(get_db)):
+    """The PayPal email the project's tranches are paid to."""
+    if db.get(Project, project_id) is None:
+        raise _error(404, "PROJECT_NOT_FOUND", "No such project")
+    account = db.get(PayoutAccount, project_id) or PayoutAccount(project_id=project_id, paypal_email="")
+    account.paypal_email = body.paypal_email
+    db.add(account)
+    db.add(AuditLog(actor="admin", action="payout_account_set", inputs={"project_id": project_id},
+                    rule_result="set", reason=None))
+    db.commit()
+    return PayoutAccountOut(project_id=project_id, paypal_email=account.paypal_email)
 
 
 @router.get("/audit-log", response_model=list[AuditOut])

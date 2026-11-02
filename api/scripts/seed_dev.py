@@ -1,6 +1,7 @@
 """Minimal local data so the checkout page and catalogue work before P3's seed JSON lands.
 
-Adds the four categories, the worked-example Education projects and an open round if missing.
+Adds the four categories, the worked-example Education projects, a first milestone for
+Lanet Library (to try payouts) and an open round, each only if missing.
 The SQLite file is relative to where the API starts, so run this from the same folder:
     from api/:      .venv/Scripts/python -m scripts.seed_dev
     from the root:  PYTHONPATH=api api/.venv/Scripts/python -m scripts.seed_dev
@@ -11,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
 from app.db import Base, SessionLocal, engine
-from app.models import Category, Project, ProjectStatus, Round, RoundStatus
+from app.models import Category, Milestone, Project, ProjectStatus, Round, RoundStatus
 
 CATEGORIES = ["Health", "Education", "Environment", "Water"]
 PROJECTS = [
@@ -48,6 +49,10 @@ def main() -> None:
                         verified_at=datetime.now(timezone.utc),
                     )
                 )
+        db.flush()
+        library = db.scalar(select(Project).where(Project.title == "Lanet Library"))
+        if not db.scalar(select(Milestone).where(Milestone.project_id == library.id)):
+            db.add(Milestone(project_id=library.id, seq=1, title="Buy 40 books", amount=3000, currency="USD"))
         if not db.scalar(select(Round)):
             now = datetime.now(timezone.utc)
             db.add(

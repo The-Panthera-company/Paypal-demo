@@ -80,6 +80,33 @@ class PayPalClient:
     def get_order(self, order_id: str) -> dict:
         return self._request("GET", f"/v2/checkout/orders/{order_id}")
 
+    def create_payout(self, *, sender_batch_id: str, currency: str, items: list[dict]) -> dict:
+        """Send one Payouts batch. items: sender_item_id, receiver (email), amount (PayPal string), note.
+
+        sender_batch_id is deterministic: PayPal refuses a reused one for 30 days, so a retry can't pay twice.
+        """
+        body = {
+            "sender_batch_header": {
+                "sender_batch_id": sender_batch_id,
+                "email_subject": "You have a payout from Community Giving",
+                "email_message": "A milestone tranche for your project has been released.",
+            },
+            "items": [
+                {
+                    "recipient_type": "EMAIL",
+                    "receiver": i["receiver"],
+                    "amount": {"value": i["amount"], "currency": currency},
+                    "note": i["note"][:4000],
+                    "sender_item_id": i["sender_item_id"],
+                }
+                for i in items
+            ],
+        }
+        return self._request("POST", "/v1/payments/payouts", json=body, request_id=sender_batch_id)
+
+    def get_payout(self, payout_batch_id: str) -> dict:
+        return self._request("GET", f"/v1/payments/payouts/{payout_batch_id}")
+
     def verify_webhook_signature(self, *, headers: dict[str, str], event: dict, webhook_id: str) -> bool:
         """Ask PayPal whether this delivery really came from it, for our webhook.
 
