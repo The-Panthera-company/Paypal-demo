@@ -1,4 +1,4 @@
-"""Projected match for the open round, recomputed every few minutes.
+"""Projected match for the open round, recomputed every few minutes; rounds close here too.
 
 Render's free plan has no cron jobs and the service sleeps when idle, so two things keep
 projections fresh: a background loop inside the API while it is awake, and the leaderboard
@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import round_close
 from app.db import SessionLocal
 from app.engine import run_round
 from app.models import MatchResult, Round, RoundStatus
@@ -48,10 +49,13 @@ def refresh_if_stale(db: Session, round_: Round, max_age_seconds: int) -> None:
 
 
 def run_loop(stop: threading.Event, interval_seconds: int) -> None:
-    """Refresh the open round's projection every interval until `stop` is set."""
+    """Every interval until `stop` is set: close rounds that have ended (once no Watchdog case is
+    open), then refresh the open round's projection."""
     while not stop.wait(interval_seconds):
         try:
             with SessionLocal() as db:
+                round_close.close_due(db)
+                db.commit()
                 round_ = db.scalar(select(Round).where(Round.status == RoundStatus.open))
                 if round_ is not None:
                     refresh(db, round_)
