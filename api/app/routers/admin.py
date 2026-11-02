@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_admin
 from app.db import get_db
-from app.models import AuditLog, CaseStatus, Payout, Project, ProjectStatus, WatchdogCase
+from app.models import AuditLog, CaseStatus, Payout, Project, ProjectStatus, WatchdogCase, WebhookEvent
 from app.routers.catalogue import _summaries
 from app.schemas import (
     AuditOut,
@@ -20,6 +20,7 @@ from app.schemas import (
     ProjectDetail,
     ProjectSummary,
     VerifyIn,
+    WebhookEventOut,
 )
 from app.stubs import PLANNED, planned
 
@@ -109,6 +110,17 @@ def audit_log(
             created_at=a.created_at,
         )
         for a in db.scalars(stmt)
+    ]
+
+
+@router.get("/webhook-events", response_model=list[WebhookEventOut])
+def webhook_events(limit: int = Query(50, ge=1, le=500), db: Session = Depends(get_db)):
+    """Recent PayPal webhook deliveries and what we did with each; for checking the live setup."""
+    return [
+        WebhookEventOut(
+            id=e.id, event_type=e.event_type, resource_id=e.resource_id, result=e.result, received_at=e.received_at
+        )
+        for e in db.scalars(select(WebhookEvent).order_by(WebhookEvent.received_at.desc()).limit(limit))
     ]
 
 

@@ -1627,6 +1627,61 @@
         }
       }
     },
+    "/admin/webhook-events": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Webhook Events",
+        "description": "Recent PayPal webhook deliveries and what we did with each; for checking the live setup.",
+        "operationId": "webhook_events",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookEventOut"
+                  },
+                  "title": "Response Webhook Events"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/rounds/{round_id}/close": {
       "post": {
         "tags": [
@@ -2007,23 +2062,67 @@
           "webhooks"
         ],
         "summary": "Paypal Webhook",
-        "description": "Verifies the signature, ignores repeats by event id, then handles PAYMENT.CAPTURE.COMPLETED,\n.PENDING, .DENIED, .REFUNDED, .REVERSED and the Payouts batch/item events.",
+        "description": "Verifies the signature, skips repeats by event id, then handles PAYMENT.CAPTURE.COMPLETED,\n.PENDING, .DENIED, .REFUNDED and .REVERSED. Other types are recorded as ignored.",
         "operationId": "paypal_webhook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Event"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAck"
+                }
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "400": {
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -4702,6 +4801,83 @@
           "approve"
         ],
         "title": "VerifyIn"
+      },
+      "WebhookAck": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "processed",
+              "duplicate",
+              "ignored",
+              "unmatched",
+              "mismatch"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "status"
+        ],
+        "title": "WebhookAck",
+        "example": {
+          "event_id": "WH-2WR32451HC0233532-67976317FL4543714",
+          "status": "processed"
+        }
+      },
+      "WebhookEventOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "result": {
+            "type": "string",
+            "title": "Result"
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Received At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "resource_id",
+          "result",
+          "received_at"
+        ],
+        "title": "WebhookEventOut",
+        "example": {
+          "event_type": "PAYMENT.CAPTURE.REFUNDED",
+          "id": "WH-2WR32451HC0233532-67976317FL4543714",
+          "received_at": "2026-11-06T09:00:02Z",
+          "resource_id": "1JU08902781691411",
+          "result": "processed"
+        }
       }
     },
     "securitySchemes": {

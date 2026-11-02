@@ -24,6 +24,8 @@ class FakePayPal:
         self.capture_override: tuple[int, dict] | None = None
         self.capture_status = "COMPLETED"
         self.payment_source: dict = {"paypal": {"email_address": "donor@example.com"}}
+        self.verification_status = "SUCCESS"
+        self.get_order_down = False
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -40,32 +42,39 @@ class FakePayPal:
             if self.capture_override:
                 status, body = self.capture_override
                 return httpx.Response(status, json=body)
-            order_id = path.split("/")[-2]
-            order = self.orders[order_id]
-            unit = order["purchase_units"][0]
-            amount = unit["amount"]
-            unit["payments"] = {
-                "captures": [
-                    {
-                        "id": f"CAP-{order_id}",
-                        "status": self.capture_status,
-                        "amount": amount,
-                        "seller_receivable_breakdown": {
-                            "gross_amount": amount,
-                            "paypal_fee": {"currency_code": amount["currency_code"], "value": "0.59"},
-                        },
-                    }
-                ]
-            }
-            order.update(
-                status="COMPLETED",
-                payer={"payer_id": "PAYER123", "name": {"given_name": "Wanjiru"}},
-                payment_source=self.payment_source,
-            )
-            return httpx.Response(201, json=order)
+            return httpx.Response(201, json=self.capture(path.split("/")[-2]))
+        if path == "/v1/notifications/verify-webhook-signature":
+            return httpx.Response(200, json={"verification_status": self.verification_status})
         if path.startswith("/v2/checkout/orders/") and request.method == "GET":
+            if self.get_order_down:
+                return httpx.Response(503, json={"name": "SERVICE_UNAVAILABLE"})
             return httpx.Response(200, json=self.orders[path.split("/")[-1]])
         return httpx.Response(404, json={"name": "RESOURCE_NOT_FOUND"})
+
+    def capture(self, order_id: str) -> dict:
+        """Capture at "PayPal". Tests call it directly for a capture our API never saw."""
+        order = self.orders[order_id]
+        unit = order["purchase_units"][0]
+        amount = unit["amount"]
+        unit["payments"] = {
+            "captures": [
+                {
+                    "id": f"CAP-{order_id}",
+                    "status": self.capture_status,
+                    "amount": dict(amount),
+                    "seller_receivable_breakdown": {
+                        "gross_amount": amount,
+                        "paypal_fee": {"currency_code": amount["currency_code"], "value": "0.59"},
+                    },
+                }
+            ]
+        }
+        order.update(
+            status="COMPLETED",
+            payer={"payer_id": "PAYER123", "name": {"given_name": "Wanjiru"}},
+            payment_source=self.payment_source,
+        )
+        return order
 
 
 @pytest.fixture
@@ -123,6 +132,7 @@ def client(fake_paypal, db_session_factory):
         currency="USD",
         internal_token="internal-test-token",
         admin_token="admin-test-token",
+        paypal_webhook_id="WH-TEST",
     )
     paypal = PayPalClient(settings, transport=httpx.MockTransport(fake_paypal.handler))
 

@@ -38,9 +38,9 @@ A test fails if the file is out of date. Conventions:
 | Donations | create order, capture, `GET /donations/{id}` | `POST /donations/category-preview` |
 | Donors | `GET`/`PATCH /donors/{id}` (interests, leaderboard opt-in) | report, mandate, mandate runs, pending approvals |
 | Rounds | `GET /rounds/current` | leaderboard |
-| Admin | review queue, cases list, payouts list, audit log | verify, resolve case, milestone holds, round close |
+| Admin | review queue, cases list, payouts list, audit log, webhook events | verify, resolve case, milestone holds, round close |
 | Internal (agents) | `POST /internal/audit` | active mandates, mandate runs, checked donations, payout requests, Watchdog cases |
-| Webhooks | | `POST /webhooks/paypal` |
+| Webhooks | `POST /webhooks/paypal` (capture completed, pending, denied, refunded, reversed) | |
 
 ### Building against it (P2, P3)
 
@@ -94,6 +94,33 @@ Tests fake PayPal at the HTTP level; no keys or network needed.
 3. **Check it landed:** the donation should be `captured` with a capture ID, and the ledger should have a `donation` and a `fee` row. Both payments also show in the sandbox business account's activity at sandbox.paypal.com.
 4. **Failure cases worth trying:** close the popup (cancel), click capture twice (idempotent), and a declined card. In sandbox, PayPal fakes errors when the request carries a `PayPal-Mock-Response` header, e.g. `{"mock_application_codes": "INSTRUMENT_DECLINED"}` on the capture call. Try it from Postman.
 
+## PayPal webhooks
+
+PayPal tells us about payments that change after the donor leaves: a held payment that clears or is denied, refunds, and reversals (chargebacks). `POST /webhooks/paypal` handles them.
+
+| Event | What happens |
+|---|---|
+| `PAYMENT.CAPTURE.COMPLETED` / `.PENDING` | Re-reads the order from PayPal and records it like the capture route: catches a held payment clearing, or a capture our route missed (browser closed). |
+| `PAYMENT.CAPTURE.DENIED` | A pending donation becomes `failed`. |
+| `PAYMENT.CAPTURE.REFUNDED` | A `refund` ledger entry; once refunds reach the full amount the donation becomes `refunded` and leaves project totals and matching. A partial refund stays counted. |
+| `PAYMENT.CAPTURE.REVERSED` | Same as a refund, plus an audit-log entry (`actor: paypal`, `capture_reversed`) for the admin. |
+| anything else | Recorded as `ignored`. |
+
+- Every delivery is checked with PayPal's verify-signature API; unsigned or failing ones get 400. Without `PAYPAL_WEBHOOK_ID` the route refuses everything (503).
+- Events are stored by id in `webhook_events`, so a redelivery returns `duplicate` and changes nothing. If a PayPal call fails mid-handling we answer 502 and store nothing, so PayPal retries.
+- `GET /admin/webhook-events` (admin token) lists recent deliveries and the result of each. Use it to check the live setup.
+
+### Setup (one time, sandbox)
+
+1. developer.paypal.com → **Apps & Credentials** → Sandbox → open the app → **Webhooks → Add Webhook**.
+2. URL: `https://<render service>.onrender.com/webhooks/paypal`. Events: Payment capture **completed**, **denied**, **pending**, **refunded**, **reversed**. Save.
+3. Copy the **Webhook ID** shown next to it into Render → giving-api → Environment → `PAYPAL_WEBHOOK_ID`. Render redeploys.
+4. Test with real sandbox payments, not the dashboard's Webhooks simulator: simulator events can't pass signature verification and are rejected with `INVALID_SIGNATURE`.
+   - Pay on `https://<render service>.onrender.com/dev/checkout`, then check `/admin/webhook-events` for a `PAYMENT.CAPTURE.COMPLETED` row (`processed`).
+   - Refund it: sandbox.paypal.com → log in as the sandbox **business** account → Activity → the payment → **Refund**. A `PAYMENT.CAPTURE.REFUNDED` row should appear and the project's `raised_cents` drop.
+
+Webhooks can't reach `localhost`, so they only work on the deployed API.
+
 ## Donation flow (for P2)
 
 Load the JS SDK with the **same currency** the API uses:
@@ -140,6 +167,6 @@ Capture is idempotent: calling it twice returns the same donation and writes the
 - The browser never sets what gets recorded: create stores a pending donation first, `custom_id = donation:<id>`, and capture checks PayPal's amount, currency and custom_id against it.
 - `donations.paypal_capture_id` is stored because refunds and refund webhooks refer to the capture, not the order (added to the design's data model).
 - Guest detection: `payment_source.card` in the capture response, or no `payer_id` → `donors.is_guest = true`. **Verify against a real sandbox card payment.**
-- Capture status `PENDING` → donation `pending`, no ledger entry; the Day 4 webhook settles it.
+- Capture status `PENDING` → donation `pending`, no ledger entry; the `PAYMENT.CAPTURE.COMPLETED` webhook settles it.
 - PayPal's fee goes in as a separate `fee` ledger entry; the `donation` entry is the gross amount.
 - Tables are created at startup (`create_all`); swap for migrations if the schema starts changing under live data.

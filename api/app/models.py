@@ -1,4 +1,4 @@
-"""The fourteen tables from the System Design data model.
+"""The fourteen tables from the System Design data model, plus webhook_events.
 
 Amounts are integers in minor units. List fields (tags, categories) are JSON so the
 same models run on Postgres and on SQLite in tests.
@@ -293,3 +293,17 @@ class AuditLog(Base):
     rule_result: Mapped[str | None] = mapped_column(String(60))
     reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class WebhookEvent(Base):
+    """Every PayPal webhook we accepted, so a redelivery is recognised and skipped."""
+
+    __tablename__ = "webhook_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # PayPal's event id, WH-...
+    event_type: Mapped[str] = mapped_column(String(80))
+    resource_id: Mapped[str | None] = mapped_column(String(64))
+    # processed, ignored, unmatched or mismatch
+    result: Mapped[str] = mapped_column(String(30))
+    payload: Mapped[dict] = mapped_column(JSON)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
