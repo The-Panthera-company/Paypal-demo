@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import payouts
+from app import payouts, round_close
 from app.auth import require_admin
+from app.config import Settings, get_settings
 from app.db import get_db
 from app.models import (
     AuditLog,
@@ -18,12 +19,14 @@ from app.models import (
     PayoutAccount,
     Project,
     ProjectStatus,
+    Round,
     WatchdogCase,
     WebhookEvent,
 )
 from app.paypal import PayPalClient, PayPalError, get_paypal
 from app.routers.catalogue import _summaries, milestone_out, project_detail
 from app.routers.internal import case_out, release_milestone
+from app.routers.rounds import leaderboard
 from app.schemas import (
     AuditOut,
     CaseOut,
@@ -41,7 +44,6 @@ from app.schemas import (
     VerifyIn,
     WebhookEventOut,
 )
-from app.stubs import PLANNED, planned
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -114,6 +116,9 @@ def resolve_case(case_id: int, body: CaseResolveIn, db: Session = Depends(get_db
     db.add(AuditLog(actor="admin", action="case_resolved", inputs={"case_id": case.id, "project_id": project.id},
                     rule_result=result, reason=body.note))
     db.commit()
+    # A round waiting in `closing` for this case can finish now.
+    if round_close.close_due(db):
+        db.commit()
     return case_out(case)
 
 
@@ -267,7 +272,28 @@ def webhook_events(limit: int = Query(50, ge=1, le=500), db: Session = Depends(g
     ]
 
 
-@router.post("/rounds/{round_id}/close", response_model=LeaderboardOut, responses=PLANNED)
-def close_round(round_id: int):
-    """Waits for open Watchdog cases, computes final results, adds each match to the next tranche."""
-    planned("round close")
+@router.post("/rounds/{round_id}/close", response_model=LeaderboardOut, responses=ERRORS)
+def close_round(
+    round_id: int,
+    early: bool = Query(False, description="Close before the round's end time (e.g. for the demo)"),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """Computes final results and adds each project's match to its next milestone tranche.
+
+    Waits while any Watchdog case is open: the round moves to `closing`, the answer is 409
+    WAITING_FOR_CASES, and it closes on its own (background loop) once the cases are resolved.
+    Rounds also close on their own at their end time; this route is for closing now.
+    """
+    round_ = db.get(Round, round_id)
+    if round_ is None:
+        raise _error(404, "ROUND_NOT_FOUND", "No such round")
+    try:
+        closed = round_close.close(db, round_, early=early)
+    except round_close.CloseError as e:
+        raise _error(409, e.code, e.message)
+    db.commit()
+    if not closed:
+        cases = round_close.open_cases(db)
+        raise _error(409, "WAITING_FOR_CASES", f"Resolve the open Watchdog cases first: {cases}")
+    return leaderboard(round_id, db, settings)

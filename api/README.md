@@ -38,7 +38,7 @@ A test fails if the file is out of date. Conventions:
 | Donations | create order, capture, `GET /donations/{id}`, `POST /donations/category-preview` | |
 | Donors | `GET`/`PATCH /donors/{id}`, mandate (`GET`/`PUT`), mandate runs, pending approvals and the yes/no | report |
 | Rounds | `GET /rounds/current`, `GET /rounds/{id}/leaderboard` | |
-| Admin | review queue, verify, payout account, cases list, resolve case, held milestones, milestone review, payouts (list, send, refresh, retry), audit log, webhook events | round close |
+| Admin | review queue, verify, payout account, cases list, resolve case, held milestones, milestone review, payouts (list, send, refresh, retry), round close, audit log, webhook events | |
 | Internal (agents) | active mandates, mandate runs, checked donations, payout requests, Watchdog cases, audit | |
 | Webhooks | `POST /webhooks/paypal` (capture completed, pending, denied, refunded, reversed) | |
 
@@ -129,6 +129,15 @@ While a round is open its projected match is recomputed every `PROJECTION_INTERV
 - Projects whose matching is frozen are listed with a match of 0 and `matching_frozen: true`.
 - `projected_match_cents` on `GET /projects` reads the same rows.
 - If the pool is bigger than what projects still need, every project hits its goal cap and the rest stays in the pool.
+
+### Round close
+
+[`app/round_close.py`](app/round_close.py), System Design flow 4.
+
+- **When:** automatically, by the same background loop, once the round's `ends_at` has passed; or now with `POST /admin/rounds/{id}/close` (add `?early=true` before the end time, e.g. in the demo). Donations after `ends_at` fall outside the round's window on their own.
+- **Waits for the Watchdog:** while any case is open the round sits in `closing` and the route answers 409 `WAITING_FOR_CASES`. Resolving the last case closes it straight away.
+- **Then, once:** final results (`is_final=True` rows, which the leaderboard shows from then on); each project's match is added to the `match_amount` of its first unreleased milestone (a "Matching funds (<round>)" milestone is created if it has none), so it's paid out with that tranche's evidence; a `match` ledger entry per project; status `closed`. A closed round is never recomputed (409 `ROUND_CLOSED`).
+- Whatever the caps left unallocated stays unspent; the audit log's `round_closed` line says how much.
 
 ## Giving Agent mandates
 

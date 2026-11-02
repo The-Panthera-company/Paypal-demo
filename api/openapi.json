@@ -2050,7 +2050,7 @@
           "admin"
         ],
         "summary": "Close Round",
-        "description": "Waits for open Watchdog cases, computes final results, adds each match to the next tranche.",
+        "description": "Computes final results and adds each project's match to its next milestone tranche.\n\nWaits while any Watchdog case is open: the round moves to `closing`, the answer is 409\nWAITING_FOR_CASES, and it closes on its own (background loop) once the cases are resolved.\nRounds also close on their own at their end time; this route is for closing now.",
         "operationId": "close_round",
         "security": [
           {
@@ -2066,6 +2066,18 @@
               "type": "integer",
               "title": "Round Id"
             }
+          },
+          {
+            "name": "early",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Close before the round's end time (e.g. for the demo)",
+              "default": false,
+              "title": "Early"
+            },
+            "description": "Close before the round's end time (e.g. for the demo)"
           }
         ],
         "responses": {
@@ -2079,15 +2091,25 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
                 }
               }
-            }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "description": "Validation Error",
