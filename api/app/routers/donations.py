@@ -12,14 +12,14 @@ from pydantic import BaseModel, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.allocation import category_split
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.models import Category, Donation, DonationStatus, Donor, LedgerEntry, LedgerType, Project, TargetType
 from app.money import from_paypal, to_paypal
 from app.paypal import PayPalClient, PayPalError, get_paypal
 from app.routers.catalogue import LISTED
-from app.schemas import CategoryPreviewIn, CategoryPreviewOut, DonationOut
-from app.stubs import PLANNED, planned
+from app.schemas import Allocation, CategoryPreviewIn, CategoryPreviewOut, DonationOut, ErrorOut, ExcludedProject
 
 router = APIRouter(prefix="/donations", tags=["donations"])
 
@@ -150,10 +150,31 @@ def get_donation(donation_id: int, db: Session = Depends(get_db)):
     return donation_out(donation)
 
 
-@router.post("/category-preview", response_model=CategoryPreviewOut, responses=PLANNED)
-def category_preview(body: CategoryPreviewIn):
-    """Where a category gift would go before the donor pays, after their exclusions."""
-    planned("category split preview")
+@router.post("/category-preview", response_model=CategoryPreviewOut, responses={422: {"model": ErrorOut}})
+def category_preview(
+    body: CategoryPreviewIn, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)
+):
+    """Where a category gift would go before the donor pays, after their exclusions.
+
+    Rules: crowd (default) = 20% equally + 80% by how many people backed each project;
+    equal; closest_to_goal = fills the projects nearest their goal first.
+    """
+    if db.get(Category, body.category_id) is None:
+        raise _error(422, "CATEGORY_NOT_FOUND", "No such category")
+    result = category_split(db, body.category_id, body.amount_cents, body.rule, body.excluded_tags)
+    if not result.allocations:
+        raise _error(422, "NO_ELIGIBLE_PROJECTS", "No open projects in this category match your choices")
+    return CategoryPreviewOut(
+        category_id=body.category_id,
+        amount_cents=body.amount_cents,
+        currency=settings.currency,
+        rule=body.rule,
+        allocations=[
+            Allocation(project_id=pid, title=result.projects[pid].title, amount_cents=cents)
+            for pid, cents in sorted(result.allocations.items(), key=lambda kv: (-kv[1], kv[0]))
+        ],
+        excluded=[ExcludedProject(project_id=p.id, title=p.title, matched_tag=tag) for p, tag in result.excluded],
+    )
 
 
 def apply_capture(db: Session, donation: Donation, order: dict) -> None:

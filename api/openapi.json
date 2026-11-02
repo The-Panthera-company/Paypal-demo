@@ -600,7 +600,7 @@
           "donations"
         ],
         "summary": "Category Preview",
-        "description": "Where a category gift would go before the donor pays, after their exclusions.",
+        "description": "Where a category gift would go before the donor pays, after their exclusions.\n\nRules: crowd (default) = 20% equally + 80% by how many people backed each project;\nequal; closest_to_goal = fills the projects nearest their goal first.",
         "operationId": "category_preview",
         "requestBody": {
           "content": {
@@ -623,22 +623,12 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "422": {
+            "description": "Unprocessable Entity",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
