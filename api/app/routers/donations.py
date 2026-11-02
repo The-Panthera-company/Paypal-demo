@@ -5,16 +5,17 @@ create stores a pending donation first, and capture checks PayPal's answer again
 """
 
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.allocation import category_split
+from app.allocation import allocate_category_donation, category_split
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.models import Category, Donation, DonationStatus, Donor, LedgerEntry, LedgerType, Project, TargetType
+from app.models import Category, CategoryGift, Donation, DonationStatus, Donor, LedgerEntry, LedgerType, Project, TargetType
 from app.money import from_paypal, to_paypal
 from app.paypal import PayPalClient, PayPalError, get_paypal
 from app.routers.catalogue import LISTED
@@ -29,6 +30,9 @@ class CreateOrderIn(BaseModel):
     project_id: int | None = None
     category_id: int | None = None
     amount_cents: int
+    # CATEGORY only: how the gift is split across the category's projects (see /donations/category-preview).
+    rule: Literal["crowd", "equal", "closest_to_goal"] = "crowd"
+    excluded_tags: list[str] = []
 
     @model_validator(mode="after")
     def one_target(self):
@@ -90,6 +94,8 @@ def create_order(
         category = db.get(Category, body.category_id)
         if category is None:
             raise _error(422, "CATEGORY_NOT_FOUND", "No such category")
+        if not category_split(db, category.id, body.amount_cents, body.rule, body.excluded_tags).allocations:
+            raise _error(422, "NO_ELIGIBLE_PROJECTS", "No open projects in this category match your choices")
         target = f"{category.name} projects"
     else:
         target = "your Giving Agent budget"
@@ -103,6 +109,8 @@ def create_order(
     )
     db.add(donation)
     db.flush()  # assigns donation.id for custom_id
+    if body.target_type == TargetType.CATEGORY:
+        db.add(CategoryGift(donation_id=donation.id, rule=body.rule, excluded_tags=body.excluded_tags))
 
     try:
         order = paypal.create_order(
@@ -215,6 +223,8 @@ def mark_captured(db: Session, donation: Donation, capture: dict) -> None:
         return
     donation.status = DonationStatus.captured
     donation.captured_at = datetime.now(timezone.utc)
+    if donation.target_type == TargetType.CATEGORY:
+        allocate_category_donation(db, donation)
     db.add(
         LedgerEntry(
             type=LedgerType.donation,

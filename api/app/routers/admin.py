@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import payouts, round_close
+from app import payouts, reconciliation, round_close
 from app.auth import require_admin
 from app.config import Settings, get_settings
 from app.db import get_db
@@ -41,6 +41,8 @@ from app.schemas import (
     PayoutOut,
     ProjectDetail,
     ProjectSummary,
+    ReconciliationOut,
+    SweepOut,
     VerifyIn,
     WebhookEventOut,
 )
@@ -235,6 +237,19 @@ def set_payout_account(project_id: int, body: PayoutAccountIn, db: Session = Dep
                     rule_result="set", reason=None))
     db.commit()
     return PayoutAccountOut(project_id=project_id, paypal_email=account.paypal_email)
+
+
+@router.get("/reconciliation", response_model=ReconciliationOut)
+def reconciliation_report(db: Session = Depends(get_db)):
+    """Money in and out, and every check that our records add up. `ok` is false when any issue is an error."""
+    return reconciliation.report(db)
+
+
+@router.post("/reconciliation/sweep", response_model=SweepOut)
+def sweep_orders(db: Session = Depends(get_db), paypal: PayPalClient = Depends(get_paypal)):
+    """Settle PayPal orders our capture route never finished: asks PayPal for each order still open
+    after 30 minutes and captures, records or closes it."""
+    return reconciliation.sweep(db, paypal)
 
 
 @router.get("/audit-log", response_model=list[AuditOut])

@@ -305,7 +305,7 @@
           "catalogue"
         ],
         "summary": "Funding History",
-        "description": "Cumulative amount raised and backers per day, from captured donations.",
+        "description": "Cumulative amount raised and backers per day, from captured donations (category shares included).",
         "operationId": "funding_history",
         "parameters": [
           {
@@ -1916,6 +1916,60 @@
         }
       }
     },
+    "/admin/reconciliation": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Reconciliation Report",
+        "description": "Money in and out, and every check that our records add up. `ok` is false when any issue is an error.",
+        "operationId": "reconciliation_report",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/reconciliation/sweep": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Sweep Orders",
+        "description": "Settle PayPal orders our capture route never finished: asks PayPal for each order still open\nafter 30 minutes and captures, records or closes it.",
+        "operationId": "sweep_orders",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SweepOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/admin/audit-log": {
       "get": {
         "tags": [
@@ -3232,6 +3286,24 @@
           "amount_cents": {
             "type": "integer",
             "title": "Amount Cents"
+          },
+          "rule": {
+            "type": "string",
+            "enum": [
+              "crowd",
+              "equal",
+              "closest_to_goal"
+            ],
+            "title": "Rule",
+            "default": "crowd"
+          },
+          "excluded_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Tags",
+            "default": []
           }
         },
         "type": "object",
@@ -4986,6 +5058,102 @@
           "urgency": 4
         }
       },
+      "ReconciliationIssue": {
+        "properties": {
+          "check": {
+            "type": "string",
+            "title": "Check"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Severity"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "refs": {
+            "items": {},
+            "type": "array",
+            "title": "Refs",
+            "description": "Ids of the rows involved (donations, payouts, milestones, ...)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "check",
+          "severity",
+          "detail",
+          "refs"
+        ],
+        "title": "ReconciliationIssue"
+      },
+      "ReconciliationOut": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "description": "False when any issue is an error"
+          },
+          "totals": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Totals"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ReconciliationIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "ok",
+          "totals",
+          "issues"
+        ],
+        "title": "ReconciliationOut",
+        "example": {
+          "generated_at": "2026-11-10T09:00:00Z",
+          "issues": [
+            {
+              "check": "payout_unclaimed",
+              "detail": "Payouts sent to an email with no PayPal account yet (returned after 30 days)",
+              "refs": [
+                3
+              ],
+              "severity": "warning"
+            }
+          ],
+          "ok": true,
+          "totals": {
+            "agent_budget_unspent_cents": 700,
+            "category_unallocated_cents": 0,
+            "match_booked_cents": 274000,
+            "paid_out_cents": 30000,
+            "paypal_fees_cents": 4100,
+            "platform_balance_cents": 83900,
+            "received_via_paypal_cents": 120000,
+            "refunded_cents": 2000,
+            "released_not_yet_paid_cents": 5000,
+            "tranches_released_cents": 35000
+          }
+        }
+      },
       "ReportGift": {
         "properties": {
           "donation_id": {
@@ -5185,6 +5353,64 @@
           "milestone_id": 7,
           "project_id": 1,
           "title": "40 books delivered"
+        }
+      },
+      "SweepOut": {
+        "properties": {
+          "checked": {
+            "type": "integer",
+            "title": "Checked"
+          },
+          "captured": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Captured",
+            "description": "Donation ids captured or recorded now"
+          },
+          "failed": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Failed",
+            "description": "Voided, declined or abandoned (never approved)"
+          },
+          "unchanged": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Unchanged"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "checked",
+          "captured",
+          "failed",
+          "unchanged",
+          "errors"
+        ],
+        "title": "SweepOut",
+        "example": {
+          "captured": [
+            7
+          ],
+          "checked": 2,
+          "errors": [],
+          "failed": [
+            5
+          ],
+          "unchanged": []
         }
       },
       "TargetType": {

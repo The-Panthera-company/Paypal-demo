@@ -672,3 +672,51 @@ class WebhookEventOut(BaseModel):
     resource_id: str | None
     result: str
     received_at: datetime
+
+
+# --- Reconciliation ------------------------------------------------------------------------
+
+
+class ReconciliationIssue(BaseModel):
+    check: str
+    severity: Literal["error", "warning"]
+    detail: str
+    refs: list = Field(description="Ids of the rows involved (donations, payouts, milestones, ...)")
+
+
+class ReconciliationOut(BaseModel):
+    model_config = _example(
+        {
+            "generated_at": "2026-11-10T09:00:00Z",
+            "ok": True,
+            "totals": {
+                "received_via_paypal_cents": 120000,
+                "refunded_cents": 2000,
+                "paypal_fees_cents": 4100,
+                "paid_out_cents": 30000,
+                "platform_balance_cents": 83900,
+                "agent_budget_unspent_cents": 700,
+                "tranches_released_cents": 35000,
+                "released_not_yet_paid_cents": 5000,
+                "match_booked_cents": 274000,
+                "category_unallocated_cents": 0,
+            },
+            "issues": [
+                {"check": "payout_unclaimed", "severity": "warning",
+                 "detail": "Payouts sent to an email with no PayPal account yet (returned after 30 days)", "refs": [3]}
+            ],
+        }
+    )
+    generated_at: datetime
+    ok: bool = Field(description="False when any issue is an error")
+    totals: dict[str, int]
+    issues: list[ReconciliationIssue]
+
+
+class SweepOut(BaseModel):
+    model_config = _example({"checked": 2, "captured": [7], "failed": [5], "unchanged": [], "errors": []})
+    checked: int
+    captured: list[int] = Field(description="Donation ids captured or recorded now")
+    failed: list[int] = Field(description="Voided, declined or abandoned (never approved)")
+    unchanged: list[int]
+    errors: list[str]
