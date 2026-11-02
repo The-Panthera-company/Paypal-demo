@@ -69,7 +69,10 @@ class FakePayPal:
         if path.startswith("/v2/checkout/orders/") and request.method == "GET":
             if self.get_order_down:
                 return httpx.Response(503, json={"name": "SERVICE_UNAVAILABLE"})
-            return httpx.Response(200, json=self.orders[path.split("/")[-1]])
+            order = self.orders.get(path.split("/")[-1])
+            if order is None:
+                return httpx.Response(404, json={"name": "RESOURCE_NOT_FOUND", "details": [{"issue": "INVALID_RESOURCE_ID"}]})
+            return httpx.Response(200, json=order)
         return httpx.Response(404, json={"name": "RESOURCE_NOT_FOUND"})
 
     def payout_batch(self, batch_id: str, item_status: str | None = None) -> dict:

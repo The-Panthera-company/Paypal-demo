@@ -1,6 +1,7 @@
 """Public catalogue: categories, projects, their stories and funding history."""
 
 from collections import defaultdict
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import (
+    CategoryAllocation,
     Category,
     Donation,
     DonationStatus,
@@ -121,16 +123,12 @@ def project_detail(db: Session, project: Project) -> ProjectDetail:
 
 @router.get("/projects/{project_id}/funding-history", response_model=list[FundingPoint])
 def funding_history(project_id: int, db: Session = Depends(get_db)):
-    """Cumulative amount raised and backers per day, from captured donations."""
-    rows = db.execute(
-        select(Donation.captured_at, Donation.amount, Donation.donor_id)
-        .where(Donation.project_id == project_id, Donation.status == DonationStatus.captured)
-        .order_by(Donation.captured_at)
-    ).all()
+    """Cumulative amount raised and backers per day, from captured donations (category shares included)."""
+    rows = sorted(project_gifts(db, [project_id]), key=lambda r: r[3])
     by_day: dict = defaultdict(int)
     backers_by_day: dict = {}
     seen: set = set()
-    for captured_at, amount, donor_id in rows:
+    for _, donor_id, amount, captured_at in rows:
         day = captured_at.date()
         by_day[day] += amount
         seen.add(donor_id)
@@ -161,18 +159,30 @@ def add_document(project_id: int, body: DocumentIn):
     planned("document uploads")
 
 
+def project_gifts(db: Session, project_ids: list[int]) -> list[tuple[int, int | None, int, datetime]]:
+    """(project_id, donor_id, cents, captured_at) for money that reached these projects: captured
+    project and agent gifts, plus each captured category donation's share. Refunds drop out."""
+    direct = select(Donation.project_id, Donation.donor_id, Donation.amount, Donation.captured_at).where(
+        Donation.project_id.in_(project_ids), Donation.status == DonationStatus.captured
+    )
+    shares = (
+        select(CategoryAllocation.project_id, Donation.donor_id, CategoryAllocation.amount, Donation.captured_at)
+        .join(Donation, Donation.id == CategoryAllocation.donation_id)
+        .where(CategoryAllocation.project_id.in_(project_ids), Donation.status == DonationStatus.captured)
+    )
+    return [tuple(r) for r in db.execute(direct).all() + db.execute(shares).all()]
+
+
 def _summaries(db: Session, projects: list[Project]) -> list[ProjectSummary]:
     if not projects:
         return []
     ids = [p.id for p in projects]
-    totals = {
-        pid: (raised, backers)
-        for pid, raised, backers in db.execute(
-            select(Donation.project_id, func.sum(Donation.amount), func.count(func.distinct(Donation.donor_id)))
-            .where(Donation.project_id.in_(ids), Donation.status == DonationStatus.captured)
-            .group_by(Donation.project_id)
-        )
-    }
+    raised_by: dict[int, int] = defaultdict(int)
+    backers_by: dict[int, set] = defaultdict(set)
+    for pid, donor_id, amount, _ in project_gifts(db, ids):
+        raised_by[pid] += amount
+        backers_by[pid].add(donor_id)
+    totals = {pid: (raised_by[pid], len(backers_by[pid])) for pid in raised_by}
     open_round = db.scalar(select(Round.id).where(Round.status == RoundStatus.open))
     projected = (
         dict(

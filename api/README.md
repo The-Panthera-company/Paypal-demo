@@ -38,7 +38,7 @@ A test fails if the file is out of date. Conventions:
 | Donations | create order, capture, `GET /donations/{id}`, `POST /donations/category-preview` | |
 | Donors | `GET`/`PATCH /donors/{id}`, mandate (`GET`/`PUT`), mandate runs, pending approvals and the yes/no | report |
 | Rounds | `GET /rounds/current`, `GET /rounds/{id}/leaderboard` | |
-| Admin | review queue, verify, payout account, cases list, resolve case, held milestones, milestone review, payouts (list, send, refresh, retry), round close, audit log, webhook events | |
+| Admin | review queue, verify, payout account, cases list, resolve case, held milestones, milestone review, payouts (list, send, refresh, retry), round close, reconciliation and sweep, audit log, webhook events | |
 | Internal (agents) | active mandates, mandate runs, checked donations, payout requests, Watchdog cases, audit | |
 | Webhooks | `POST /webhooks/paypal` (capture completed, pending, denied, refunded, reversed) | |
 
@@ -107,7 +107,7 @@ Tests fake PayPal at the HTTP level; no keys or network needed.
 - Eligible = the category's verified or active projects, minus any whose tags match `excluded_tags` (case-insensitive; returned in `excluded` with the tag that matched), minus projects whose matching the Watchdog froze. None left → 422 `NO_ELIGIBLE_PROJECTS`.
 - Crowd score (design Step 2): `(Σ√d)² − Σd` over people, from project donations only, captured within the open round. One PayPal payer = one person, guests count half, refunds are gone, and only a person's first 50 USD per project counts. Many small backers beat one big one; one backer alone scores 0.
 - The math lives in `app/matching.py` (pure, tested against the design's worked example) so the matching engine reuses it.
-- Not yet: the chosen rule and exclusions aren't stored with the donation, and category money isn't allocated to projects after capture.
+- **Paying:** `POST /donations/orders` with `target_type: CATEGORY`, `category_id` and the same `rule` and `excluded_tags` the donor saw in the preview. Checkout is refused with `NO_ELIGIBLE_PROJECTS` if nothing is left. At capture the gift is split once with that rule onto the projects eligible at that moment (`category_allocations`), and each share counts toward the project's raised total, backers and funding history. A refund removes the shares. For matching, a category gift still counts at category level only (design Step 1).
 
 ## Matching engine
 
@@ -178,6 +178,15 @@ Every released tranche (auto-released or approved by an admin) is sent through P
 - **Retry:** items that `FAILED`, were `RETURNED` or `BLOCKED` → `POST /admin/payouts/{id}/retry` sends them in a new batch, `…-retry1`, `…-retry2`, using the project's current payout account (so fix the email first). The old items show `RETRIED`.
 - **Try it in the sandbox:** `seed_dev` adds a 30 USD milestone to Lanet Library. Set its payout account to a sandbox personal email, then release it with `POST /internal/payout-requests` (all four checks true). The money comes out of the sandbox business account, which holds the test donations.
 
+## Reconciliation
+
+- `GET /admin/reconciliation` (admin token) answers "do our records add up?" from our own database. `ok` is false when any issue is an error.
+  - **Totals:** received via PayPal, refunded, PayPal fees, paid out, platform balance (received − refunds − fees − payouts: what should sit in the sandbox business account from this app), unspent agent budget, tranches released and not yet paid, match booked, category money not allocated.
+  - **Errors:** captured payment without a ledger entry or without a capture id; ledger entry for a donation that isn't captured; refunds above the donation; category donation not split onto projects; negative agent balance; released tranche with no payout; successful payout not booked; a round matched beyond its pool; paid out more than received.
+  - **Warnings:** orders not captured after 30 minutes (run the sweep); payments PayPal has held for over 3 days; payouts not sent, unclaimed, or failed (send or retry them).
+- `POST /admin/reconciliation/sweep` asks PayPal about every order still open after 30 minutes: approved but never captured → captured now (the donor said yes in PayPal; this is the old popup-loop case); already captured → recorded; voided, or never approved after 3 hours → `failed`. One bad order doesn't stop the rest; it's listed in `errors`.
+- Compare `platform_balance_cents` with the sandbox business account's balance (sandbox.paypal.com) before the demo. They differ by anything else that account received or sent, e.g. earlier manual tests.
+
 ## PayPal webhooks
 
 PayPal tells us about payments that change after the donor leaves: a held payment that clears or is denied, refunds, and reversals (chargebacks). `POST /webhooks/paypal` handles them.
@@ -220,7 +229,7 @@ paypal.Buttons({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        target_type: "PROJECT",          // or "CATEGORY" with category_id
+        target_type: "PROJECT",          // or "CATEGORY" with category_id, rule, excluded_tags
         project_id: 1,
         amount_cents: 2000,              // integer minor units
       }),

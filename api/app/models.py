@@ -1,4 +1,5 @@
-"""The fourteen tables from the System Design data model, plus webhook_events and payout_accounts.
+"""The fourteen tables from the System Design data model, plus webhook_events, payout_accounts,
+category_gifts and category_allocations.
 
 Amounts are integers in minor units. List fields (tags, categories) are JSON so the
 same models run on Postgres and on SQLite in tests.
@@ -318,3 +319,26 @@ class PayoutAccount(Base):
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), primary_key=True)
     paypal_email: Mapped[str] = mapped_column(String(254))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class CategoryGift(Base):
+    """The donor's split rule and exclusions for a category donation, chosen at checkout."""
+
+    __tablename__ = "category_gifts"
+
+    donation_id: Mapped[int] = mapped_column(ForeignKey("donations.id"), primary_key=True)
+    rule: Mapped[str] = mapped_column(String(20), default="crowd")
+    excluded_tags: Mapped[list] = mapped_column(JSON, default=list)
+
+
+class CategoryAllocation(Base):
+    """Where a captured category donation went: written once at capture, by the donor's rule.
+    Counts toward each project's raised total while the donation stays captured."""
+
+    __tablename__ = "category_allocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    donation_id: Mapped[int] = mapped_column(ForeignKey("donations.id"))
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    amount: Mapped[int] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

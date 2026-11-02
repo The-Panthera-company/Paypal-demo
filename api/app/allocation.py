@@ -10,8 +10,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.matching import closest_to_goal_split, crowd_split, quadratic_score, split
-from app.models import Donation, DonationStatus, Donor, Project, Round, RoundStatus, TargetType
-from app.routers.catalogue import LISTED
+from app.models import (
+    CategoryAllocation,
+    CategoryGift,
+    Donation,
+    DonationStatus,
+    Donor,
+    Project,
+    Round,
+    RoundStatus,
+    TargetType,
+)
+from app.routers.catalogue import LISTED, project_gifts
 
 GUEST_WEIGHT = 0.5
 DEFAULT_FLOOR_PCT = 20.0
@@ -51,13 +61,28 @@ def project_scores(db: Session, project_ids: list[int], round_: Round | None) ->
 
 def raised(db: Session, project_ids: list[int]) -> dict[int, int]:
     totals = dict.fromkeys(project_ids, 0)
-    for pid, amount in db.execute(
-        select(Donation.project_id, Donation.amount).where(
-            Donation.project_id.in_(project_ids), Donation.status == DonationStatus.captured
-        )
-    ):
+    for pid, _, amount, _ in project_gifts(db, project_ids):
         totals[pid] += amount
     return totals
+
+
+def allocate_category_donation(db: Session, donation: Donation) -> int:
+    """Split a just-captured category donation onto projects with the donor's rule and exclusions.
+    Done once; returns the cents allocated (0 if no project was eligible: reconciliation flags it)."""
+    if db.scalar(select(CategoryAllocation.id).where(CategoryAllocation.donation_id == donation.id)):
+        return 0
+    choice = db.get(CategoryGift, donation.id)
+    result = category_split(
+        db,
+        donation.category_id,
+        donation.amount,
+        choice.rule if choice else "crowd",
+        choice.excluded_tags if choice else [],
+    )
+    for project_id, cents in result.allocations.items():
+        if cents > 0:
+            db.add(CategoryAllocation(donation_id=donation.id, project_id=project_id, amount=cents))
+    return sum(result.allocations.values())
 
 
 def category_split(
