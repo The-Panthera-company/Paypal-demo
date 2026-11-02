@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # Routes not built yet return their spec example (header X-Stub) instead of 501.
     stub_examples: bool = True
 
+    # How often the open round's projected match is recomputed; 0 turns the background loop off.
+    projection_interval_seconds: int = 300
+
     @property
     def db_url(self) -> str:
         url = self.database_url or "sqlite:///./giving.db"

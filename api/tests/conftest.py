@@ -137,6 +137,7 @@ def client(fake_paypal, db_session_factory):
         internal_token="internal-test-token",
         admin_token="admin-test-token",
         paypal_webhook_id="WH-TEST",
+        projection_interval_seconds=0,
     )
     paypal = PayPalClient(settings, transport=httpx.MockTransport(fake_paypal.handler))
 

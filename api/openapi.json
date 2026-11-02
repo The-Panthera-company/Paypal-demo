@@ -1115,7 +1115,7 @@
           "rounds"
         ],
         "summary": "Leaderboard",
-        "description": "Projected match while the round is open (recomputed every 5 minutes); final after close.",
+        "description": "Projected match while the round is open (recomputed every 5 minutes); final once the round closes.\n\nProjects whose matching the Watchdog froze are listed with a match of 0 and `matching_frozen: true`.",
         "operationId": "leaderboard",
         "parameters": [
           {
@@ -1139,15 +1139,15 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
                 }
               }
-            }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
