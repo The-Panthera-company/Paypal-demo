@@ -19,6 +19,13 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000"
 
+    # Bearer tokens: agents call /internal/*, the admin console calls /admin/*.
+    internal_token: str = ""
+    admin_token: str = ""
+
+    # Routes not built yet return their spec example (header X-Stub) instead of 501.
+    stub_examples: bool = True
+
     @property
     def db_url(self) -> str:
         url = self.database_url or "sqlite:///./giving.db"

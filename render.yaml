@@ -1,0 +1,44 @@
+# Render Blueprint: the core API (FastAPI) and its Postgres database.
+# Render dashboard > New > Blueprint > pick this repo. Values marked sync: false are asked for once
+# in the dashboard and never stored here.
+services:
+  - type: web
+    name: giving-api
+    runtime: python
+    plan: free
+    rootDir: api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.9
+      - key: DATABASE_URL
+        fromDatabase:
+          name: giving-db
+          property: connectionString
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: INTERNAL_TOKEN
+        generateValue: true
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: CURRENCY
+        value: USD
+      - key: STUB_EXAMPLES
+        value: "true"
+      # Add P2's deployed frontend URL here, comma-separated.
+      - key: CORS_ORIGINS
+        value: http://localhost:3000
+
+databases:
+  - name: giving-db
+    plan: free
+    databaseName: giving
+    user: giving

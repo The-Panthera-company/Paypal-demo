@@ -123,6 +123,26 @@ def test_amount_mismatch_is_rejected(client, fake_paypal, db_session_factory):
     assert r.json()["detail"]["error"] == "AMOUNT_MISMATCH"
 
 
+def test_create_rejects_projects_not_open(client):
+    assert _create(client, project_id=3).json()["detail"]["error"] == "PROJECT_NOT_OPEN"  # pending_review
+    assert _create(client, project_id=999).json()["detail"]["error"] == "PROJECT_NOT_OPEN"
+    r = client.post("/donations/orders", json={"target_type": "CATEGORY", "category_id": 99, "amount_cents": 2000})
+    assert r.json()["detail"]["error"] == "CATEGORY_NOT_FOUND"
+
+
+def test_order_description_uses_project_title(client, fake_paypal):
+    out = _create(client).json()
+    assert fake_paypal.orders[out["order_id"]]["purchase_units"][0]["description"] == "Donation to Lanet Library"
+
+
+def test_get_donation(client):
+    out = _create(client).json()
+    r = client.get(f"/donations/{out['donation_id']}")
+    assert r.status_code == 200
+    assert r.json()["status"] == "created"
+    assert client.get("/donations/999").status_code == 404
+
+
 def test_unknown_order_404(client):
     assert client.post("/donations/orders/NOPE/capture").status_code == 404
 
