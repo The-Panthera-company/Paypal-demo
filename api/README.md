@@ -37,7 +37,7 @@ A test fails if the file is out of date. Conventions:
 | Catalogue | `GET /categories`, `GET /projects` (filters: category, cause, beneficiary group, region, `exclude_tags`, `q`, sort), `GET /projects/{id}`, `GET /projects/{id}/funding-history` | stories, project application, document upload |
 | Donations | create order, capture, `GET /donations/{id}`, `POST /donations/category-preview` | |
 | Donors | `GET`/`PATCH /donors/{id}` (interests, leaderboard opt-in) | report, mandate, mandate runs, pending approvals |
-| Rounds | `GET /rounds/current` | leaderboard |
+| Rounds | `GET /rounds/current`, `GET /rounds/{id}/leaderboard` | |
 | Admin | review queue, cases list, payouts list, audit log, webhook events | verify, resolve case, milestone holds, round close |
 | Internal (agents) | `POST /internal/audit` | active mandates, mandate runs, checked donations, payout requests, Watchdog cases |
 | Webhooks | `POST /webhooks/paypal` (capture completed, pending, denied, refunded, reversed) | |
@@ -119,7 +119,16 @@ Tests fake PayPal at the HTTP level; no keys or network needed.
 4. **Floor + crowd:** `floor_pct` (20%) equally, the rest by score; nobody scored yet → all equally.
 5. **Caps:** `project_cap_pct` (30%) of the category pool and the project's remaining goal; the excess goes to the others in proportion to what they have, repeated. If every project is capped, the rest stays in the pool.
 
-Cents always add up; ties break by id. Not wired to anything yet: the 5-minute projection run and `GET /rounds/{id}/leaderboard` are the next task, round close after that.
+Cents always add up; ties break by id.
+
+### Projections and the leaderboard
+
+While a round is open its projected match is recomputed every `PROJECTION_INTERVAL_SECONDS` (300) and saved as `is_final=False` rows ([`app/projections.py`](app/projections.py)). Render's free plan has no cron and sleeps when idle, so this runs two ways: a background loop inside the API while it's awake, and `GET /rounds/{id}/leaderboard` recomputing when the saved projection is older than the interval (the first read after a sleep).
+
+- `GET /rounds/{id}/leaderboard`: projects ranked by match, with score, floor, crowd, capped, backers and raised. `is_final` is true once round close has written final rows; those always win and are never recomputed. A closed round without final rows returns no rows.
+- Projects whose matching is frozen are listed with a match of 0 and `matching_frozen: true`.
+- `projected_match_cents` on `GET /projects` reads the same rows.
+- If the pool is bigger than what projects still need, every project hits its goal cap and the rest stays in the pool.
 
 ## PayPal webhooks
 

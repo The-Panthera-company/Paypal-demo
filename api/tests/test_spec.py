@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.main import app
-from app.schemas import LeaderboardOut, StoryOut
+from app.schemas import DonorReport, StoryOut
 
 ADMIN = {"Authorization": "Bearer admin-test-token"}
 INTERNAL = {"Authorization": "Bearer internal-test-token"}
@@ -83,10 +83,10 @@ def test_unset_token_fails_closed(client):
 
 
 def test_stub_returns_spec_example(client):
-    r = client.get("/rounds/1/leaderboard")
+    r = client.get("/donors/1/report")
     assert r.status_code == 200
-    assert r.headers["X-Stub"] == "match projections"
-    assert r.json() == LeaderboardOut.model_config["json_schema_extra"]["example"]
+    assert r.headers["X-Stub"] == "donor report"
+    assert r.json() == DonorReport.model_config["json_schema_extra"]["example"]
     # List responses wrap the item example.
     assert client.get("/projects/1/stories").json() == [StoryOut.model_config["json_schema_extra"]["example"]]
     # Stubs behind a token still need the token.
@@ -95,9 +95,9 @@ def test_stub_returns_spec_example(client):
 
 def test_stub_returns_501_when_examples_off(client):
     app.dependency_overrides[get_settings]().stub_examples = False
-    r = client.get("/rounds/1/leaderboard")
+    r = client.get("/donors/1/report")
     assert r.status_code == 501
-    assert r.json()["detail"] == {"error": "NOT_IMPLEMENTED", "message": "Planned: match projections"}
+    assert r.json()["detail"] == {"error": "NOT_IMPLEMENTED", "message": "Planned: donor report"}
     assert "X-Stub" not in r.headers
 
 
