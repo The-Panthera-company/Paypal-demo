@@ -5,7 +5,6 @@ create stores a pending donation first, and capture checks PayPal's answer again
 """
 
 from datetime import datetime, timezone
-from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, model_validator
@@ -25,7 +24,8 @@ router = APIRouter(prefix="/donations", tags=["donations"])
 
 
 class CreateOrderIn(BaseModel):
-    target_type: Literal[TargetType.PROJECT, TargetType.CATEGORY]
+    # AGENT with no project or category tops up the payer's Giving Agent budget.
+    target_type: TargetType
     project_id: int | None = None
     category_id: int | None = None
     amount_cents: int
@@ -36,6 +36,8 @@ class CreateOrderIn(BaseModel):
             raise ValueError("PROJECT donations need project_id only")
         if self.target_type == TargetType.CATEGORY and (self.category_id is None or self.project_id is not None):
             raise ValueError("CATEGORY donations need category_id only")
+        if self.target_type == TargetType.AGENT and (self.project_id is not None or self.category_id is not None):
+            raise ValueError("AGENT top-ups take no project_id or category_id")
         return self
 
 
@@ -84,11 +86,13 @@ def create_order(
         if project is None or project.status not in LISTED:
             raise _error(422, "PROJECT_NOT_OPEN", "Project does not exist or is not accepting donations")
         target = project.title
-    else:
+    elif body.category_id is not None:
         category = db.get(Category, body.category_id)
         if category is None:
             raise _error(422, "CATEGORY_NOT_FOUND", "No such category")
         target = f"{category.name} projects"
+    else:
+        target = "your Giving Agent budget"
 
     donation = Donation(
         target_type=body.target_type,
@@ -105,7 +109,7 @@ def create_order(
             amount=to_paypal(donation.amount, donation.currency),
             currency=donation.currency,
             custom_id=custom_id_for(donation),
-            description=f"Donation to {target}",
+            description=f"Top-up of {target}" if body.target_type == TargetType.AGENT else f"Donation to {target}",
             request_id=f"create-{custom_id_for(donation)}",
         )
     except PayPalError as e:
@@ -198,7 +202,7 @@ def apply_capture(db: Session, donation: Donation, order: dict) -> None:
 
     status = capture["status"]
     if status == "COMPLETED":
-        _mark_captured(db, donation, capture)
+        mark_captured(db, donation, capture)
     elif status == "PENDING":
         # Does not count for matching until PAYMENT.CAPTURE.COMPLETED arrives.
         donation.status = DonationStatus.pending
@@ -206,7 +210,7 @@ def apply_capture(db: Session, donation: Donation, order: dict) -> None:
         donation.status = DonationStatus.failed
 
 
-def _mark_captured(db: Session, donation: Donation, capture: dict) -> None:
+def mark_captured(db: Session, donation: Donation, capture: dict) -> None:
     if donation.status == DonationStatus.captured:
         return
     donation.status = DonationStatus.captured

@@ -817,15 +817,15 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
                 }
               }
-            }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -844,7 +844,7 @@
           "donors"
         ],
         "summary": "Set Mandate",
-        "description": "Create or replace the Giving Agent's rules. The budget is funded separately through PayPal.",
+        "description": "Create or replace the Giving Agent's rules. The budget is funded separately through PayPal:\n`POST /donations/orders` with `target_type: AGENT` and no project tops it up.",
         "operationId": "set_mandate",
         "parameters": [
           {
@@ -878,25 +878,25 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
                 }
               }
-            }
+            },
+            "description": "Not Found"
           },
           "422": {
-            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
-            }
+            },
+            "description": "Unprocessable Entity"
           }
         }
       }
@@ -907,6 +907,7 @@
           "donors"
         ],
         "summary": "Mandate Runs",
+        "description": "The agent's runs for this donor, newest first: candidates, scores, choices and the report.",
         "operationId": "mandate_runs",
         "parameters": [
           {
@@ -930,16 +931,6 @@
                     "$ref": "#/components/schemas/MandateRunOut"
                   },
                   "title": "Response Mandate Runs"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "In the spec, not built yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -991,16 +982,6 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1020,6 +1001,7 @@
           "donors"
         ],
         "summary": "Decide Approval",
+        "description": "Yes records the gift after re-checking the mandate (it may have changed since); no cancels it.",
         "operationId": "decide_approval",
         "parameters": [
           {
@@ -1062,15 +1044,25 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
                 }
               }
-            }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "description": "Validation Error",
@@ -1219,6 +1211,7 @@
           "admin"
         ],
         "summary": "Verify Project",
+        "description": "Approve lists the project (verified); reject sends it back to the applicant (draft).",
         "operationId": "verify_project",
         "security": [
           {
@@ -1257,15 +1250,25 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
                 }
               }
-            }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "description": "Validation Error",
@@ -1345,6 +1348,7 @@
           "admin"
         ],
         "summary": "Resolve Case",
+        "description": "clear: a false alarm, matching resumes. confirm: the evidence's donor_ids count as one person\nin matching, and matching resumes. confirm + remove_project: the project is delisted and its\nmatching stays frozen; refund its donations in PayPal and the refund webhooks update the totals.",
         "operationId": "resolve_case",
         "security": [
           {
@@ -1383,15 +1387,25 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
                 }
               }
-            }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "description": "Validation Error",
@@ -1412,7 +1426,7 @@
           "admin"
         ],
         "summary": "Held Milestones",
-        "description": "Tranche requests the Milestone Agent sent to a human (failed check or above threshold).",
+        "description": "Tranche requests the Milestone Agent sent to a human (failed check, open case or above threshold).\nThe agent's summary and the failed checks are in the audit log (actor milestone-agent).",
         "operationId": "held_milestones",
         "responses": {
           "200": {
@@ -1425,16 +1439,6 @@
                   },
                   "type": "array",
                   "title": "Response Held Milestones"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "In the spec, not built yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
                 }
               }
             }
@@ -1453,6 +1457,7 @@
           "admin"
         ],
         "summary": "Review Milestone",
+        "description": "Approve releases the tranche; reject sends it back so the project can submit better evidence.",
         "operationId": "review_milestone",
         "security": [
           {
@@ -1491,15 +1496,25 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
                 }
               }
-            }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
             "description": "Validation Error",
@@ -1752,16 +1767,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "In the spec, not built yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            }
           }
         },
         "security": [
@@ -1800,8 +1805,8 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1834,7 +1839,7 @@
           "internal (agents)"
         ],
         "summary": "Checked Donation",
-        "description": "Re-checks budget, per-project max, exclusions and project status, then records the gift\n(target_type AGENT) or parks it for the donor's approval. Never calls PayPal.",
+        "description": "Re-checks budget, per-project max, exclusions and project status, then records the gift\n(target_type AGENT) or parks it for the donor's approval. Never calls PayPal.\n\nAsking twice for the same run and project returns the first answer, so agent retries are safe.",
         "operationId": "checked_donation",
         "requestBody": {
           "content": {
@@ -1857,65 +1862,8 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/internal/payout-requests": {
-      "post": {
-        "tags": [
-          "internal (agents)"
-        ],
-        "summary": "Payout Request",
-        "description": "Milestone Agent: all checks pass and below threshold -> PayPal payout; otherwise held for an admin.",
-        "operationId": "payout_request",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PayoutRequestIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PayoutRequestOut"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -1948,7 +1896,7 @@
           "internal (agents)"
         ],
         "summary": "Open Case",
-        "description": "Watchdog rule hit: opens a case and freezes the project's matching (not its donations).",
+        "description": "Watchdog rule hit: opens a case and freezes the project's matching (not its donations).\n\nThe same rule firing again on a project with an open case returns that case instead of a new one.",
         "operationId": "open_case",
         "requestBody": {
           "content": {
@@ -1971,8 +1919,75 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/internal/payout-requests": {
+      "post": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Payout Request",
+        "description": "Milestone Agent: all checks pass, no open Watchdog case and the tranche (including its match)\nis at most MILESTONE_AUTO_RELEASE_CENTS -> released; otherwise held for an admin.",
+        "operationId": "payout_request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayoutRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutRequestOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -2811,12 +2826,7 @@
       "CreateOrderIn": {
         "properties": {
           "target_type": {
-            "type": "string",
-            "enum": [
-              "PROJECT",
-              "CATEGORY"
-            ],
-            "title": "Target Type"
+            "$ref": "#/components/schemas/TargetType"
           },
           "project_id": {
             "anyOf": [

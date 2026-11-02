@@ -36,10 +36,10 @@ A test fails if the file is out of date. Conventions:
 |---|---|---|
 | Catalogue | `GET /categories`, `GET /projects` (filters: category, cause, beneficiary group, region, `exclude_tags`, `q`, sort), `GET /projects/{id}`, `GET /projects/{id}/funding-history` | stories, project application, document upload |
 | Donations | create order, capture, `GET /donations/{id}`, `POST /donations/category-preview` | |
-| Donors | `GET`/`PATCH /donors/{id}` (interests, leaderboard opt-in) | report, mandate, mandate runs, pending approvals |
+| Donors | `GET`/`PATCH /donors/{id}`, mandate (`GET`/`PUT`), mandate runs, pending approvals and the yes/no | report |
 | Rounds | `GET /rounds/current`, `GET /rounds/{id}/leaderboard` | |
-| Admin | review queue, cases list, payouts list, audit log, webhook events | verify, resolve case, milestone holds, round close |
-| Internal (agents) | `POST /internal/audit` | active mandates, mandate runs, checked donations, payout requests, Watchdog cases |
+| Admin | review queue, verify, cases list, resolve case, held milestones, milestone review, payouts list, audit log, webhook events | round close |
+| Internal (agents) | active mandates, mandate runs, checked donations, payout requests, Watchdog cases, audit | |
 | Webhooks | `POST /webhooks/paypal` (capture completed, pending, denied, refunded, reversed) | |
 
 ### Building against it (P2, P3)
@@ -129,6 +129,34 @@ While a round is open its projected match is recomputed every `PROJECTION_INTERV
 - Projects whose matching is frozen are listed with a match of 0 and `matching_frozen: true`.
 - `projected_match_cents` on `GET /projects` reads the same rows.
 - If the pool is bigger than what projects still need, every project hits its goal cap and the rest stays in the pool.
+
+## Giving Agent mandates
+
+The agent never moves money itself: it asks `POST /internal/checked-donations`, and the API re-checks the mandate every time.
+
+- **Mandate:** `PUT /donors/{id}/mandate` sets monthly budget, categories, excluded tags, per-project max, approval threshold and optional `weight_overrides` (keys `few_backers`, `progress`, `urgency`, `evidence`, `days_since_funded`; each within 20 of its default 35/25/20/10/10).
+- **Funding:** the donor tops up through PayPal with `POST /donations/orders` and `{"target_type": "AGENT", "amount_cents": ...}` (no project), then the normal capture. The top-up is credited to the payer's donor record, so they must pay with the same PayPal account as the mandate's donor. `funded_balance_cents` = top-ups − gifts given − gifts waiting for approval.
+- **A run:** the agent reads `GET /internal/mandates/active`, records its candidates and scores with `POST /internal/mandate-runs`, then asks for each gift with `POST /internal/checked-donations` (`mandate_run_id`, `project_id`, `amount_cents`, `reason`).
+- **The checks, in order** (`rule_result` names the one that blocked): `mandate_inactive`, `project_not_open`, `project_frozen` (Watchdog), `category_not_in_mandate`, `excluded_tag`, `over_per_project_max` (this calendar month), `over_monthly_budget` (this calendar month), `insufficient_balance`.
+- **Outcome:** passes and at most the approval threshold → `recorded`: a captured AGENT donation for that donor, counting for matching like any project gift, with no PayPal call. Above the threshold → `awaiting_donor_approval`; the donor sees it in `GET /donors/{id}/pending-approvals` and answers `POST /donors/{id}/pending-approvals/{donation_id}` `{"approve": true|false}`. A yes re-checks the mandate first (409 with the rule if it no longer fits).
+- Asking twice for the same run and project returns the first answer (`rule_result: duplicate`), so agent retries are safe. Every request is in the audit log with the agent's reason.
+
+Ledger note for reconciliation: a top-up is a `donation` entry with no project; each agent gift is another `donation` entry with its project. The same money appears twice, so count top-ups (AGENT, no project) as budget, not as giving.
+
+## Watchdog cases
+
+- `POST /internal/watchdog/cases` (`project_id`, `rule`, `evidence`): opens a case and sets the project's `matching_frozen` (donations still work). The same rule on a project with an open case returns that case. Put the suspected donors in `evidence.donor_ids`.
+- `POST /admin/cases/{id}/resolve` with `action`:
+  - `clear`: false alarm; matching resumes once no other case is open for the project.
+  - `confirm`: those `donor_ids` count as one person in matching from now on; matching resumes the same way.
+  - `confirm` + `remove_project: true`: the project is delisted (`frozen`) and its matching stays frozen. Refunds aren't automatic: refund its donations in the PayPal sandbox and the refund webhooks update totals and matching.
+
+## Milestone tranches
+
+- `POST /internal/payout-requests` (`milestone_id`, the four `checks`, `summary`): released when every check passes, the project has no open Watchdog case, and the tranche plus its match is at most `MILESTONE_AUTO_RELEASE_CENTS` (50,000). Otherwise `held_for_admin` with the reasons; the agent's summary is in the audit log.
+- Admin: `GET /admin/milestones/held`, then `POST /admin/milestones/{id}/review` `{"approve": true}` releases it, `false` sends it back to `open` for new evidence.
+- Released = milestone `released` plus a `tranche` ledger entry (amount + match). `payout_id` is null for now: sending released tranches to PayPal Payouts is the next task.
+- `POST /admin/projects/{id}/verify` `{"approve": true}` lists a project under review (`verified`); `false` sends it back to `draft`.
 
 ## PayPal webhooks
 
