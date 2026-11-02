@@ -93,24 +93,29 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
     project = db.get(Project, project_id)
     if project is None or project.status not in LISTED + (ProjectStatus.completed,):
         raise HTTPException(404, detail={"error": "PROJECT_NOT_FOUND", "message": "No such project"})
-    milestones = db.scalars(select(Milestone).where(Milestone.project_id == project_id).order_by(Milestone.seq))
+    return project_detail(db, project)
+
+
+def milestone_out(m: Milestone) -> MilestoneOut:
+    return MilestoneOut(
+        id=m.id,
+        seq=m.seq,
+        title=m.title,
+        amount_cents=m.amount,
+        match_amount_cents=m.match_amount,
+        currency=m.currency,
+        due_date=m.due_date,
+        status=m.status,
+    )
+
+
+def project_detail(db: Session, project: Project) -> ProjectDetail:
+    milestones = db.scalars(select(Milestone).where(Milestone.project_id == project.id).order_by(Milestone.seq))
     return ProjectDetail(
         **_summaries(db, [project])[0].model_dump(),
         summary=project.summary,
         verified_at=project.verified_at,
-        milestones=[
-            MilestoneOut(
-                id=m.id,
-                seq=m.seq,
-                title=m.title,
-                amount_cents=m.amount,
-                match_amount_cents=m.match_amount,
-                currency=m.currency,
-                due_date=m.due_date,
-                status=m.status,
-            )
-            for m in milestones
-        ],
+        milestones=[milestone_out(m) for m in milestones],
     )
 
 

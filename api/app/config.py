@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # How often the open round's projected match is recomputed; 0 turns the background loop off.
     projection_interval_seconds: int = 300
 
+    # Milestone tranches (including their match) up to this many cents release without an admin.
+    milestone_auto_release_cents: int = 50_000
+
     @property
     def db_url(self) -> str:
         url = self.database_url or "sqlite:///./giving.db"
