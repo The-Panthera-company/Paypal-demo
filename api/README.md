@@ -12,7 +12,7 @@ cp .env.example .env    # fill in PayPal sandbox keys
 .venv/Scripts/python -m uvicorn app.main:app --reload
 ```
 
-Without `DATABASE_URL` it uses a local SQLite file (`giving.db`). Docs at http://localhost:8000/docs, spec at `/openapi.json`.
+Without `DATABASE_URL` it uses a local SQLite file (`giving.db`). Keep it unset locally: set to the Render database, your local server writes to the live data. Tests always use an in-memory database whatever `.env` says. Docs at http://localhost:8000/docs, spec at `/openapi.json`.
 
 For local data before P3's seed JSON: `.venv/Scripts/python -m scripts.seed_dev` (4 categories, the 4 worked-example Education projects, an open round).
 
@@ -35,7 +35,7 @@ A test fails if the file is out of date. Conventions:
 | Area | Real now | Stubbed (example + `X-Stub`) |
 |---|---|---|
 | Catalogue | `GET /categories`, `GET /projects` (filters: category, cause, beneficiary group, region, `exclude_tags`, `q`, sort), `GET /projects/{id}`, `GET /projects/{id}/funding-history` | stories, project application, document upload |
-| Donations | create order, capture, `GET /donations/{id}` | `POST /donations/category-preview` |
+| Donations | create order, capture, `GET /donations/{id}`, `POST /donations/category-preview` | |
 | Donors | `GET`/`PATCH /donors/{id}` (interests, leaderboard opt-in) | report, mandate, mandate runs, pending approvals |
 | Rounds | `GET /rounds/current` | leaderboard |
 | Admin | review queue, cases list, payouts list, audit log, webhook events | verify, resolve case, milestone holds, round close |
@@ -93,6 +93,21 @@ Tests fake PayPal at the HTTP level; no keys or network needed.
    The page logs each API call and response. Success ends with `✅ Donation captured.`
 3. **Check it landed:** the donation should be `captured` with a capture ID, and the ledger should have a `donation` and a `fee` row. Both payments also show in the sandbox business account's activity at sandbox.paypal.com.
 4. **Failure cases worth trying:** close the popup (cancel), click capture twice (idempotent), and a declined card. In sandbox, PayPal fakes errors when the request carries a `PayPal-Mock-Response` header, e.g. `{"mock_application_codes": "INSTRUMENT_DECLINED"}` on the capture call. Try it from Postman.
+
+## Category split preview
+
+`POST /donations/category-preview` with `{"category_id", "amount_cents", "rule", "excluded_tags"}` shows where a category gift would go before the donor pays. The cents always add up to `amount_cents`.
+
+| `rule` | How it splits |
+|---|---|
+| `crowd` (default) | 20% equally across the eligible projects, 80% by each project's crowd score; no scores yet → all equally |
+| `equal` | Equally |
+| `closest_to_goal` | Fills the project nearest its goal first, then the next; anything left once all are full is shared equally |
+
+- Eligible = the category's verified or active projects, minus any whose tags match `excluded_tags` (case-insensitive; returned in `excluded` with the tag that matched), minus projects whose matching the Watchdog froze. None left → 422 `NO_ELIGIBLE_PROJECTS`.
+- Crowd score (design Step 2): `(Σ√d)² − Σd` over people, from project donations only, captured within the open round. One PayPal payer = one person, guests count half, refunds are gone, and only a person's first 50 USD per project counts. Many small backers beat one big one; one backer alone scores 0.
+- The math lives in `app/matching.py` (pure, tested against the design's worked example) so the matching engine reuses it.
+- Not yet: the chosen rule and exclusions aren't stored with the donation, and category money isn't allocated to projects after capture. That comes with the matching engine.
 
 ## PayPal webhooks
 

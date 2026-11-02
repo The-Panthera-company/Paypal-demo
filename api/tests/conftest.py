@@ -1,4 +1,8 @@
 import json
+import os
+
+# Before any app import: tests never touch the database named in .env (it may be the live one).
+os.environ["DATABASE_URL"] = "sqlite://"
 
 import httpx
 import pytest
