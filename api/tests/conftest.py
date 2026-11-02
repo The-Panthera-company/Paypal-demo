@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.config import Settings, get_settings
 from app.db import Base, get_db
 from app.main import app
+from app.models import Category, Project, ProjectStatus
 from app.paypal import PayPalClient, get_paypal
 
 
@@ -76,12 +77,53 @@ def fake_paypal():
 def db_session_factory():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
-    return sessionmaker(bind=engine, expire_on_commit=False)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    with factory() as db:
+        db.add_all(
+            [
+                Category(id=1, name="Education"),
+                Category(id=2, name="Health"),
+                Project(
+                    id=1,
+                    category_id=1,
+                    title="Lanet Library",
+                    tags=["books", "literacy"],
+                    status=ProjectStatus.active,
+                    goal_amount=120000,
+                    currency="USD",
+                    urgency=4,
+                    cause="literacy",
+                    beneficiary_group="children",
+                    region="Nakuru",
+                ),
+                Project(
+                    id=2,
+                    category_id=1,
+                    title="Faith School Desks",
+                    tags=["faith-based", "furniture"],
+                    status=ProjectStatus.active,
+                    goal_amount=50000,
+                    currency="USD",
+                    urgency=2,
+                    region="Kisumu",
+                    hide_location=True,
+                ),
+                Project(id=3, category_id=2, title="Clinic Roof", status=ProjectStatus.pending_review, goal_amount=80000, currency="USD"),
+            ]
+        )
+        db.commit()
+    return factory
 
 
 @pytest.fixture
 def client(fake_paypal, db_session_factory):
-    settings = Settings(paypal_client_id="id", paypal_client_secret="secret", currency="USD")
+    settings = Settings(
+        paypal_client_id="id",
+        paypal_client_secret="secret",
+        currency="USD",
+        internal_token="internal-test-token",
+        admin_token="admin-test-token",
+    )
     paypal = PayPalClient(settings, transport=httpx.MockTransport(fake_paypal.handler))
 
     def _db():

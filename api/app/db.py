@@ -14,6 +14,8 @@ _url = get_settings().db_url
 engine = create_engine(
     _url,
     connect_args={"check_same_thread": False} if _url.startswith("sqlite") else {},
+    # Render's Postgres closes idle connections; test each one before use.
+    pool_pre_ping=True,
 )
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 

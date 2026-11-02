@@ -14,9 +14,12 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.models import Donation, DonationStatus, Donor, LedgerEntry, LedgerType, TargetType
+from app.models import Category, Donation, DonationStatus, Donor, LedgerEntry, LedgerType, Project, TargetType
 from app.money import from_paypal, to_paypal
 from app.paypal import PayPalClient, PayPalError, get_paypal
+from app.routers.catalogue import LISTED
+from app.schemas import CategoryPreviewIn, CategoryPreviewOut, DonationOut
+from app.stubs import PLANNED, planned
 
 router = APIRouter(prefix="/donations", tags=["donations"])
 
@@ -41,30 +44,18 @@ class CreateOrderOut(BaseModel):
     donation_id: int
 
 
-class DonationOut(BaseModel):
-    id: int
-    status: DonationStatus
-    target_type: TargetType
-    project_id: int | None
-    category_id: int | None
-    amount_cents: int
-    currency: str
-    paypal_order_id: str | None
-    paypal_capture_id: str | None
-
-    @classmethod
-    def of(cls, d: Donation) -> "DonationOut":
-        return cls(
-            id=d.id,
-            status=d.status,
-            target_type=d.target_type,
-            project_id=d.project_id,
-            category_id=d.category_id,
-            amount_cents=d.amount,
-            currency=d.currency,
-            paypal_order_id=d.paypal_order_id,
-            paypal_capture_id=d.paypal_capture_id,
-        )
+def donation_out(d: Donation) -> DonationOut:
+    return DonationOut(
+        id=d.id,
+        status=d.status,
+        target_type=d.target_type,
+        project_id=d.project_id,
+        category_id=d.category_id,
+        amount_cents=d.amount,
+        currency=d.currency,
+        paypal_order_id=d.paypal_order_id,
+        paypal_capture_id=d.paypal_capture_id,
+    )
 
 
 def _error(status: int, code: str, message: str, **extra) -> HTTPException:
@@ -88,7 +79,16 @@ def create_order(
             "AMOUNT_OUT_OF_RANGE",
             f"Amount must be between {settings.min_donation_cents} and {settings.max_donation_cents} cents",
         )
-    # TODO: once the projects table lands, reject unverified or frozen targets here.
+    if body.project_id is not None:
+        project = db.get(Project, body.project_id)
+        if project is None or project.status not in LISTED:
+            raise _error(422, "PROJECT_NOT_OPEN", "Project does not exist or is not accepting donations")
+        target = project.title
+    else:
+        category = db.get(Category, body.category_id)
+        if category is None:
+            raise _error(422, "CATEGORY_NOT_FOUND", "No such category")
+        target = f"{category.name} projects"
 
     donation = Donation(
         target_type=body.target_type,
@@ -100,7 +100,6 @@ def create_order(
     db.add(donation)
     db.flush()  # assigns donation.id for custom_id
 
-    target = f"project {body.project_id}" if body.project_id else f"category {body.category_id}"
     try:
         order = paypal.create_order(
             amount=to_paypal(donation.amount, donation.currency),
@@ -125,7 +124,7 @@ def capture_order(order_id: str, db: Session = Depends(get_db), paypal: PayPalCl
         raise _error(404, "ORDER_NOT_FOUND", "No donation for this order")
     # Already settled (double click, retry, or the webhook got there first).
     if donation.status in (DonationStatus.captured, DonationStatus.refunded):
-        return DonationOut.of(donation)
+        return donation_out(donation)
 
     try:
         order = paypal.capture_order(order_id, request_id=f"capture-{order_id}")
@@ -140,7 +139,21 @@ def capture_order(order_id: str, db: Session = Depends(get_db), paypal: PayPalCl
 
     apply_capture(db, donation, order)
     db.commit()
-    return DonationOut.of(donation)
+    return donation_out(donation)
+
+
+@router.get("/{donation_id}", response_model=DonationOut, responses={404: {}})
+def get_donation(donation_id: int, db: Session = Depends(get_db)):
+    donation = db.get(Donation, donation_id)
+    if donation is None:
+        raise _error(404, "DONATION_NOT_FOUND", "No such donation")
+    return donation_out(donation)
+
+
+@router.post("/category-preview", response_model=CategoryPreviewOut, responses=PLANNED)
+def category_preview(body: CategoryPreviewIn):
+    """Where a category gift would go before the donor pays, after their exclusions."""
+    planned("category split preview")
 
 
 def apply_capture(db: Session, donation: Donation, order: dict) -> None:
