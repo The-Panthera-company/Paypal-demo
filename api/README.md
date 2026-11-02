@@ -107,7 +107,19 @@ Tests fake PayPal at the HTTP level; no keys or network needed.
 - Eligible = the category's verified or active projects, minus any whose tags match `excluded_tags` (case-insensitive; returned in `excluded` with the tag that matched), minus projects whose matching the Watchdog froze. None left → 422 `NO_ELIGIBLE_PROJECTS`.
 - Crowd score (design Step 2): `(Σ√d)² − Σd` over people, from project donations only, captured within the open round. One PayPal payer = one person, guests count half, refunds are gone, and only a person's first 50 USD per project counts. Many small backers beat one big one; one backer alone scores 0.
 - The math lives in `app/matching.py` (pure, tested against the design's worked example) so the matching engine reuses it.
-- Not yet: the chosen rule and exclusions aren't stored with the donation, and category money isn't allocated to projects after capture. That comes with the matching engine.
+- Not yet: the chosen rule and exclusions aren't stored with the donation, and category money isn't allocated to projects after capture.
+
+## Matching engine
+
+[`app/engine.py`](app/engine.py) shares a round's matching pool, following the System Design's Steps 0–4. `compute()` is pure (same inputs, same result, tested against the design's worked example); `run_round(db, round)` gathers the inputs and replaces that round's `match_results` rows (`is_final=False` for projections, `True` at close).
+
+1. **Clean inputs:** captured donations inside the round's window (refunded ones are no longer captured). One PayPal payer = one person; guest cards count half; donors listed in a **confirmed** Watchdog case's `evidence.donor_ids` count as one person; only a person's first `per_person_cap` (50 USD) per project counts. Gifts to projects that aren't listed or whose matching is frozen are left out.
+2. **Category pools:** by each category's score over people's whole contribution to it (project + category gifts).
+3. **Project scores:** project gifts only (agent gifts count as project gifts).
+4. **Floor + crowd:** `floor_pct` (20%) equally, the rest by score; nobody scored yet → all equally.
+5. **Caps:** `project_cap_pct` (30%) of the category pool and the project's remaining goal; the excess goes to the others in proportion to what they have, repeated. If every project is capped, the rest stays in the pool.
+
+Cents always add up; ties break by id. Not wired to anything yet: the 5-minute projection run and `GET /rounds/{id}/leaderboard` are the next task, round close after that.
 
 ## PayPal webhooks
 

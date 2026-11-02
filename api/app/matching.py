@@ -59,3 +59,34 @@ def closest_to_goal_split(amount: int, remaining: Mapping[int, int]) -> dict[int
     for i, extra in split(left, {i: 1 for i in remaining}).items():
         out[i] += extra
     return out
+
+
+def apply_caps(amounts: Mapping[int, float], caps: Mapping[int, float]) -> tuple[dict[int, float], set[int]]:
+    """Design Step 4: cut each amount to its cap and share the excess among the uncapped
+    in proportion to what they already have, repeating until nothing is over a cap.
+
+    Returns the new amounts and the ids that hit their cap. If every project is capped,
+    the leftover stays unallocated (it remains in the pool).
+    """
+    out = dict(amounts)
+    capped: set[int] = set()
+    while True:
+        over = {i for i in out if i not in capped and out[i] > caps[i] + 1e-9}
+        if not over:
+            return out, capped
+        excess = sum(out[i] - caps[i] for i in over)
+        for i in over:
+            out[i] = caps[i]
+        capped |= over
+        free = [i for i in sorted(out) if i not in capped]
+        if not free:
+            return out, capped
+        base = sum(out[i] for i in free)
+        for i in free:
+            out[i] += excess * (out[i] / base if base > 0 else 1 / len(free))
+
+
+def to_cents(amounts: Mapping[int, float]) -> dict[int, int]:
+    """Round float shares to whole cents that add up to the rounded total."""
+    total = math.floor(sum(amounts.values()) + 1e-6)
+    return split(total, amounts) if total > 0 else {i: 0 for i in amounts}

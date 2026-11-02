@@ -2451,7 +2451,8 @@
           "evidence": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Evidence"
+            "title": "Evidence",
+            "description": "Include \"donor_ids\": [..] for the suspected cluster; if an admin confirms the case, the matching engine counts those donors as one person."
           }
         },
         "type": "object",
