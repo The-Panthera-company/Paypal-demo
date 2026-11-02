@@ -507,7 +507,10 @@ class CaseOut(BaseModel):
 class CaseIn(BaseModel):
     project_id: int
     rule: Literal["new_payer_burst", "reciprocal_backing", "owner_donation", "refund_spike"]
-    evidence: dict
+    evidence: dict = Field(
+        description='Include "donor_ids": [..] for the suspected cluster; if an admin confirms the case, '
+        "the matching engine counts those donors as one person."
+    )
 
 
 class CaseResolveIn(BaseModel):
