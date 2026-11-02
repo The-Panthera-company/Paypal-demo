@@ -1,0 +1,175 @@
+{
+  "info": {
+    "name": "PayPal sandbox + Giving API",
+    "description": "Set collection variables paypal_client_id and paypal_client_secret (as secret type, never commit filled values). Run 1 -> 2, approve the order in the browser using approve_url with a sandbox personal account, then run 3. Folder 'Giving API' runs the same flow through our FastAPI endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "paypal_base", "value": "https://api-m.sandbox.paypal.com" },
+    { "key": "paypal_client_id", "value": "" },
+    { "key": "paypal_client_secret", "value": "" },
+    { "key": "access_token", "value": "" },
+    { "key": "order_id", "value": "" },
+    { "key": "approve_url", "value": "" },
+    { "key": "capture_id", "value": "" },
+    { "key": "api_base", "value": "http://localhost:8000" }
+  ],
+  "item": [
+    {
+      "name": "PayPal direct",
+      "item": [
+        {
+          "name": "1. Get access token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('access_token', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{paypal_client_id}}" },
+                { "key": "password", "value": "{{paypal_client_secret}}" }
+              ]
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [{ "key": "grant_type", "value": "client_credentials" }]
+            },
+            "url": "{{paypal_base}}/v1/oauth2/token"
+          }
+        },
+        {
+          "name": "2. Create order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const o = pm.response.json();",
+                  "pm.collectionVariables.set('order_id', o.id);",
+                  "const link = (o.links || []).find(l => l.rel === 'approve' || l.rel === 'payer-action');",
+                  "if (link) { pm.collectionVariables.set('approve_url', link.href); console.log('Approve here:', link.href); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "PayPal-Request-Id", "value": "{{$guid}}" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"intent\": \"CAPTURE\",\n  \"purchase_units\": [{\n    \"reference_id\": \"donation:postman\",\n    \"custom_id\": \"donation:postman\",\n    \"description\": \"Donation to project 1\",\n    \"amount\": { \"currency_code\": \"USD\", \"value\": \"20.00\" }\n  }],\n  \"payment_source\": { \"paypal\": { \"experience_context\": {\n    \"shipping_preference\": \"NO_SHIPPING\",\n    \"user_action\": \"PAY_NOW\",\n    \"return_url\": \"https://example.com/return\",\n    \"cancel_url\": \"https://example.com/cancel\"\n  } } }\n}"
+            },
+            "url": "{{paypal_base}}/v2/checkout/orders"
+          }
+        },
+        {
+          "name": "3. Capture order (after approving in browser)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const cap = pm.response.json().purchase_units[0].payments.captures[0];",
+                  "pm.test('capture COMPLETED', () => pm.expect(cap.status).to.eql('COMPLETED'));",
+                  "pm.test('payer_id present', () => pm.expect(pm.response.json().payer.payer_id).to.be.a('string'));",
+                  "pm.collectionVariables.set('capture_id', cap.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "PayPal-Request-Id", "value": "capture-{{order_id}}" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{paypal_base}}/v2/checkout/orders/{{order_id}}/capture"
+          }
+        },
+        {
+          "name": "4. Get order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": "{{paypal_base}}/v2/checkout/orders/{{order_id}}"
+          }
+        },
+        {
+          "name": "5. Get capture",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": "{{paypal_base}}/v2/payments/captures/{{capture_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Giving API",
+      "item": [
+        {
+          "name": "Create donation order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('order_id', pm.response.json().order_id);",
+                  "console.log('Approve at https://www.sandbox.paypal.com/checkoutnow?token=' + pm.response.json().order_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_type\": \"PROJECT\",\n  \"project_id\": 1,\n  \"amount_cents\": 2000\n}"
+            },
+            "url": "{{api_base}}/donations/orders"
+          }
+        },
+        {
+          "name": "Capture donation order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('captured', () => pm.expect(pm.response.json().status).to.eql('captured'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{api_base}}/donations/orders/{{order_id}}/capture"
+          }
+        }
+      ]
+    }
+  ]
+}
