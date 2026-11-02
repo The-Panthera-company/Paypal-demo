@@ -80,6 +80,23 @@ class PayPalClient:
     def get_order(self, order_id: str) -> dict:
         return self._request("GET", f"/v2/checkout/orders/{order_id}")
 
+    def verify_webhook_signature(self, *, headers: dict[str, str], event: dict, webhook_id: str) -> bool:
+        """Ask PayPal whether this delivery really came from it, for our webhook.
+
+        Events sent from the dashboard's Webhooks simulator always fail this check.
+        """
+        body = {
+            "auth_algo": headers.get("paypal-auth-algo"),
+            "cert_url": headers.get("paypal-cert-url"),
+            "transmission_id": headers.get("paypal-transmission-id"),
+            "transmission_sig": headers.get("paypal-transmission-sig"),
+            "transmission_time": headers.get("paypal-transmission-time"),
+            "webhook_id": webhook_id,
+            "webhook_event": event,
+        }
+        result = self._request("POST", "/v1/notifications/verify-webhook-signature", json=body)
+        return result.get("verification_status") == "SUCCESS"
+
 
 def _json(r: httpx.Response) -> dict:
     try:

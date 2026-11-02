@@ -101,10 +101,6 @@ def test_stub_returns_501_when_examples_off(client):
     assert "X-Stub" not in r.headers
 
 
-def test_stub_without_response_model_returns_501(client):
-    assert client.post("/webhooks/paypal", json={}).status_code == 501
-
-
 def test_exported_spec_is_current():
     """Fails when routes change without re-running scripts/export_openapi.py."""
     exported = json.loads((Path(__file__).parent.parent / "openapi.json").read_text(encoding="utf-8"))

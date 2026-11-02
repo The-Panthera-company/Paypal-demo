@@ -629,3 +629,30 @@ class AuditOut(AuditIn):
 
 class ActiveMandate(MandateOut):
     pass
+
+
+# --- Webhooks ----------------------------------------------------------------------------
+
+
+class WebhookAck(BaseModel):
+    model_config = _example({"event_id": "WH-2WR32451HC0233532-67976317FL4543714", "status": "processed"})
+    event_id: str
+    # duplicate = already handled; unmatched = not one of our donations; mismatch = amount or id disagreed
+    status: Literal["processed", "duplicate", "ignored", "unmatched", "mismatch"]
+
+
+class WebhookEventOut(BaseModel):
+    model_config = _example(
+        {
+            "id": "WH-2WR32451HC0233532-67976317FL4543714",
+            "event_type": "PAYMENT.CAPTURE.REFUNDED",
+            "resource_id": "1JU08902781691411",
+            "result": "processed",
+            "received_at": "2026-11-06T09:00:02Z",
+        }
+    )
+    id: str
+    event_type: str
+    resource_id: str | None
+    result: str
+    received_at: datetime
