@@ -141,10 +141,15 @@ def funding_history(project_id: int, db: Session = Depends(get_db)):
     return points
 
 
-@router.get("/projects/{project_id}/stories", response_model=list[StoryOut], responses=PLANNED)
-def project_stories(project_id: int):
-    """Impact updates: released milestones with their evidence, newest first."""
-    planned("impact stories from released milestones")
+@router.get("/projects/{project_id}/stories", response_model=list[StoryOut], responses={404: {}})
+def project_stories(project_id: int, db: Session = Depends(get_db)):
+    """Impact updates: released milestones with their evidence (receipts, photos), newest first."""
+    from app.reports import stories  # app.reports imports this module
+
+    project = db.get(Project, project_id)
+    if project is None or project.status not in LISTED + (ProjectStatus.completed,):
+        raise HTTPException(404, detail={"error": "PROJECT_NOT_FOUND", "message": "No such project"})
+    return stories(db, [project_id])
 
 
 @router.post("/projects", response_model=ProjectDetail, status_code=201, responses=PLANNED)

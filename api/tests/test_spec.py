@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.main import app
-from app.schemas import DonorReport, StoryOut
+from app.schemas import DocumentOut
 
 ADMIN = {"Authorization": "Bearer admin-test-token"}
 INTERNAL = {"Authorization": "Bearer internal-test-token"}
@@ -82,22 +82,21 @@ def test_unset_token_fails_closed(client):
     assert client.get("/admin/projects", headers=ADMIN).status_code == 503
 
 
+DOCUMENT = {"kind": "receipt", "file_url": "https://files.example.com/receipt.jpg"}
+
+
 def test_stub_returns_spec_example(client):
-    r = client.get("/donors/1/report")
-    assert r.status_code == 200
-    assert r.headers["X-Stub"] == "donor report"
-    assert r.json() == DonorReport.model_config["json_schema_extra"]["example"]
-    # List responses wrap the item example.
-    assert client.get("/projects/1/stories").json() == [StoryOut.model_config["json_schema_extra"]["example"]]
-    # Stubs behind a token still need the token.
-    assert client.get("/admin/milestones/held").status_code == 401
+    r = client.post("/projects/1/documents", json=DOCUMENT)
+    assert r.status_code == 201  # the route's own status code
+    assert r.headers["X-Stub"] == "document uploads"
+    assert r.json() == DocumentOut.model_config["json_schema_extra"]["example"]
 
 
 def test_stub_returns_501_when_examples_off(client):
     app.dependency_overrides[get_settings]().stub_examples = False
-    r = client.get("/donors/1/report")
+    r = client.post("/projects/1/documents", json=DOCUMENT)
     assert r.status_code == 501
-    assert r.json()["detail"] == {"error": "NOT_IMPLEMENTED", "message": "Planned: donor report"}
+    assert r.json()["detail"] == {"error": "NOT_IMPLEMENTED", "message": "Planned: document uploads"}
     assert "X-Stub" not in r.headers
 
 
