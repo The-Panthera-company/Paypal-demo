@@ -4,7 +4,7 @@
 // turn the API's snake_case / *_cents fields into the shapes in ./types, so pages never change.
 import { cache } from "react";
 import { backerStories, categories, impactUpdates, projects, sponsors } from "./mock-data";
-import type { BackerStory, Category, ImpactUpdate, Leaderboard, LeaderboardRow, Project, ProjectFilters, Sponsor } from "./types";
+import type { BackerStory, Category, DonorReport, ImpactUpdate, Leaderboard, LeaderboardRow, Project, ProjectFilters, Sponsor } from "./types";
 
 // In Docker the website's server reaches the API by its service name (API_INTERNAL_URL, e.g. http://api:8000),
 // while the browser uses the public address (NEXT_PUBLIC_API_URL). Elsewhere both are the same.
@@ -306,4 +306,71 @@ export async function getRound(): Promise<{ name: string; endsAt: string }> {
   if (!API_URL) return { name: "Sample round", endsAt: projects[0]?.endsAt ?? new Date(Date.now() + 7 * 86_400_000).toISOString() };
   const r = await get<ApiRound>("/rounds/current");
   return { name: r.name, endsAt: r.ends_at };
+}
+
+type ApiReport = {
+  donor_id: number;
+  currency: string;
+  total_given_cents: number;
+  match_unlocked_cents: number;
+  gifts: { donation_id: number; project_id: number | null; project_title: string | null; via: "PROJECT" | "CATEGORY" | "AGENT"; amount_cents: number; status: string; match_unlocked_cents: number }[];
+  updates: ApiStory[];
+  agent_report: string | null;
+};
+
+/** The donor's report. Never cached: it is personal and changes with every gift. */
+export async function getDonorReport(donorId: string): Promise<DonorReport | null> {
+  if (!API_URL) return sampleReport();
+  const [r, d] = await Promise.all([
+    fetch(`${API_URL}/donors/${donorId}/report`, { cache: "no-store" }),
+    fetch(`${API_URL}/donors/${donorId}`, { cache: "no-store" }),
+  ]);
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`GET /donors/${donorId}/report failed: ${r.status}`);
+  const rep = (await r.json()) as ApiReport;
+  const donor = d.ok ? ((await d.json()) as { show_on_leaderboard: boolean }) : { show_on_leaderboard: false };
+  const c = rep.currency;
+  return {
+    donorId: String(rep.donor_id),
+    totalGiven: money(rep.total_given_cents, c),
+    matchUnlocked: money(rep.match_unlocked_cents, c),
+    gifts: rep.gifts.map((g) => ({
+      donationId: String(g.donation_id),
+      projectId: g.project_id === null ? null : String(g.project_id),
+      projectTitle: g.project_title,
+      via: g.via,
+      amount: money(g.amount_cents, c),
+      matchUnlocked: money(g.match_unlocked_cents, c),
+      status: g.status,
+    })),
+    updates: rep.updates.map((s) => ({
+      id: String(s.id),
+      projectId: String(s.project_id),
+      title: s.title,
+      caption: s.body,
+      kind: /receipt/i.test(s.title + s.body) ? ("receipt" as const) : ("photo" as const),
+      date: s.created_at,
+    })),
+    agentReport: rep.agent_report,
+    showOnLeaderboard: donor.show_on_leaderboard,
+    sample: false,
+  };
+}
+
+function sampleReport(): DonorReport {
+  const m = (a: number) => money(a, "USD");
+  const gift = (id: string, p: Project, amount: number, match: number, via: "PROJECT" | "AGENT" = "PROJECT") => ({
+    donationId: id, projectId: p.id, projectTitle: p.title, via, amount: m(amount), matchUnlocked: m(match), status: "captured",
+  });
+  const [a, b, c] = projects;
+  return {
+    donorId: "sample",
+    totalGiven: m(4_500),
+    matchUnlocked: m(11_200),
+    gifts: [gift("101", a, 2_000, 5_750), gift("102", b, 1_500, 4_150), gift("103", c, 1_000, 1_300, "AGENT")],
+    updates: impactUpdates.filter((u) => [a.id, b.id, c.id].includes(u.projectId)),
+    agentReport: `$10 to ${c.title}: 4 backers, 13% funded, receipts uploaded. Skipped a health project: outside your chosen causes.`,
+    showOnLeaderboard: false,
+    sample: true,
+  };
 }

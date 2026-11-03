@@ -102,3 +102,24 @@ export type Leaderboard = {
   /** true when built from local sample data, not the API */
   sample: boolean;
 };
+
+/** A donor's "where my money went" report (GET /donors/{id}/report) */
+export type DonorReport = {
+  donorId: string;
+  totalGiven: Money;
+  matchUnlocked: Money;
+  gifts: {
+    donationId: string;
+    projectId: string | null;
+    projectTitle: string | null;
+    via: "PROJECT" | "CATEGORY" | "AGENT";
+    amount: Money;
+    matchUnlocked: Money;
+    status: string;
+  }[];
+  updates: ImpactUpdate[];
+  agentReport: string | null;
+  showOnLeaderboard: boolean;
+  /** true when built from local sample data, not the API */
+  sample: boolean;
+};
