@@ -61,6 +61,15 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
             </form>
           </details>
 
+          {filters.category && (
+            <div className="mb-8 flex flex-wrap items-center justify-between gap-4 bg-ink p-5 text-white">
+              <p>Can&apos;t choose? Give to every {filters.category} project at once and see where it goes before you pay.</p>
+              <Link href={`/give/${filters.category}`} className="btn">
+                Give to all {filters.category}
+              </Link>
+            </div>
+          )}
+
           {projects.length === 0 ? (
             <EmptyState
               title="No projects match"
