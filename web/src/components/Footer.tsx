@@ -54,7 +54,7 @@ export function Footer() {
           <label htmlFor="newsletter-email" className="block text-sm">
             Email address
           </label>
-          <div className="flex border border-[#312e42]">
+          <div className="flex border border-[#1d4248]">
             <input
               id="newsletter-email"
               type="email"

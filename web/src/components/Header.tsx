@@ -115,7 +115,7 @@ export function Header() {
             </li>
           ))}
         </ul>
-        <Link href="/projects" className="btn mt-6 w-full" tabIndex={open ? 0 : -1}>
+        <Link href="/projects" className="btn btn-2 mt-6 w-full" tabIndex={open ? 0 : -1}>
           Back a project
         </Link>
       </aside>

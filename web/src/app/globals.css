@@ -2,30 +2,35 @@
 
 /* Design tokens modelled on Krowd "Home 2", with contrast fixes:
    body text darkened to #5F6270 (6:1); mint is a fill behind navy text, never text on white. */
-/* Colour roles generated from the brand seed #674DF0 (Material 3 tonal method, from UI Design
-   Council round 2): each role has a matching "on" colour, so every pair passes WCAG AA.
-   Krowd structure kept; mint stays a fill behind navy text only. */
+/* Palette W2 from Sanzo Wada, "A Dictionary of Color Combinations", combination #281:
+   Antwarp Blue #007190 · Benzol Green #00978D · Cobalt Green #96D1AA · Pale Lemon Yellow #FFEFAE.
+   Teal and green read as trust, healing and growth; pale lemon is the optimistic action colour.
+   Contrast rules (checked): lemon only on dark backgrounds (12.5:1 with ink, 1.15:1 on white, so
+   never on light sections); benzol green only as a fill (3.6:1 with white text); white on Antwerp 5.6:1. */
 @theme {
-  /* primary: buttons, links, tags (tone 40, 6.4:1 with white) */
-  --color-primary: #5a3fe4;
+  --color-primary: #007190;
   --color-on-primary: #ffffff;
-  --color-primary-container: #e5deff;
-  --color-on-primary-container: #1a0064;
-  --color-primary-dark: #4319cc;
-  --color-primary-line: #735cff;
-  --color-primary-on-dark: #c8bfff;
-  /* secondary / surfaces */
-  --color-secondary: #5f5c72;
-  --color-surface: #fdf8fd;
-  --color-surface-variant: #f3eeff;
-  --color-on-surface: #1c1b1f;
-  --color-on-surface-variant: #48454f;
-  --color-outline: #797680;
-  --color-outline-variant: #e5e0ec;
-  --color-inverse-surface: #1b192c;
-  --color-error: #ba1a1a;
-  /* accent fill (behind dark text only) */
-  --color-accent: #29f0b4;
+  --color-primary-container: #d7ece6;
+  --color-on-primary-container: #0b2e33;
+  --color-primary-dark: #005a73;
+  --color-primary-line: #3b8ea6;
+  --color-primary-on-dark: #96d1aa;
+  --color-growth: #00978d;
+  --color-cobalt-green: #96d1aa;
+  --color-lemon: #ffefae;
+
+  --color-secondary: #3d4648;
+  --color-surface: #f9faf8;
+  --color-surface-variant: #eef6f1;
+  --color-on-surface: #0b2e33;
+  --color-on-surface-variant: #3d4648;
+  --color-outline: #6f7d7a;
+  --color-outline-variant: #d9e8df;
+  --color-inverse-surface: #0b2e33;
+  --color-error: #b3261e;
+
+  /* action fill: pale lemon behind ink text, on dark backgrounds only */
+  --color-accent: #ffefae;
 
   /* names used by the components, mapped onto the roles */
   --color-brand: var(--color-primary);
@@ -37,14 +42,14 @@
   --color-text: var(--color-on-surface-variant);
   --color-surface-alt: var(--color-surface-variant);
   --color-line: var(--color-outline-variant);
-  --color-footer-text: #c8c3dc;
-  --color-footer-line: #312e42;
+  --color-footer-text: #c9ddd6;
+  --color-footer-line: #1d4248;
   --color-danger: var(--color-error);
 
-  --color-cat-health: #c2410c;
-  --color-cat-education: #5a3fe4;
-  --color-cat-environment: #15803d;
-  --color-cat-water: #0e7490;
+  --color-cat-health: #b4533a;
+  --color-cat-education: #7a5c2e;
+  --color-cat-environment: #2f7d4f;
+  --color-cat-water: #007190;
 
   --font-sans: var(--font-roboto), system-ui, sans-serif;
   --font-display: var(--font-abril), Georgia, serif;
@@ -100,7 +105,7 @@ body {
     width: 6px;
     height: 6px;
     margin-top: -3px;
-    background: var(--color-accent);
+    background: var(--color-growth);
   }
 
   /* Signature decoration: a small square in one corner of a block */
@@ -114,7 +119,7 @@ body {
     right: 0;
     width: var(--corner-size, 18px);
     height: var(--corner-size, 18px);
-    background: var(--corner-colour, var(--color-accent));
+    background: var(--corner-colour, var(--color-growth));
   }
 
   /* Main button: mint fill, navy text; the navy corner square grows to fill on hover */
@@ -158,11 +163,12 @@ body {
     background: var(--color-ink);
     color: #fff;
   }
+  /* On dark backgrounds the white square fills on hover; on light ones use .btn-2 as is (teal fill) */
   .btn-2::before {
-    background: #fff;
+    background: var(--color-primary);
   }
   .btn-2:hover {
-    color: var(--color-ink);
+    color: #fff;
   }
   .btn:disabled {
     opacity: 0.6;

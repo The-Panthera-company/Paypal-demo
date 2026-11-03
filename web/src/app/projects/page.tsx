@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GivingAssistant } from "@/components/GivingAssistant";
 import { PageTitle } from "@/components/PageTitle";
 import { ProjectCard } from "@/components/ProjectCard";
 import { EmptyState } from "@/components/ui";
@@ -47,7 +48,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                 </label>
               ))}
               <div className="flex flex-wrap items-center gap-4 sm:col-span-2 lg:col-span-6">
-                <button className="btn">Apply filters</button>
+                <button className="btn btn-2">Apply filters</button>
                 {active && (
                   <Link href="/projects" className="text-sm font-medium text-brand underline-offset-4 hover:underline">
                     Clear all
@@ -75,6 +76,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
           )}
         </div>
       </section>
+      <GivingAssistant projects={await getProjects()} />
     </>
   );
 }

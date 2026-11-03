@@ -18,15 +18,15 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 
 // Grid theme from the site's tokens: square corners, violet accents, Roboto.
 const theme = themeQuartz.withParams({
-  accentColor: "#5a3fe4",
+  accentColor: "#007190",
   backgroundColor: "#ffffff",
-  foregroundColor: "#1b192c",
-  borderColor: "#e5e0ec",
-  headerBackgroundColor: "#f3eeff",
-  headerTextColor: "#1b192c",
+  foregroundColor: "#0b2e33",
+  borderColor: "#d9e8df",
+  headerBackgroundColor: "#eef6f1",
+  headerTextColor: "#0b2e33",
   headerFontWeight: 600,
-  oddRowBackgroundColor: "#fdf8fd",
-  rowHoverColor: "#e5deff",
+  oddRowBackgroundColor: "#f9faf8",
+  rowHoverColor: "#d7ece6",
   fontFamily: "inherit",
   fontSize: 14,
   borderRadius: 0,
@@ -69,7 +69,7 @@ function MatchCell({ data, context }: ICellRendererParams<LeaderboardRow, unknow
     <div className="flex h-full flex-col justify-center gap-1.5 leading-5">
       <div className="flex items-center gap-2">
         <span className="tabular font-bold text-ink">{fmt(data.match.amount, data.match.currency)}</span>
-        {data.capped && <span className="bg-accent px-1.5 text-[11px] font-bold uppercase tracking-wider text-ink">Capped</span>}
+        {data.capped && <span className="bg-cobalt-green px-1.5 text-[11px] font-bold uppercase tracking-wider text-ink">Capped</span>}
         {data.frozen && <span className="bg-danger px-1.5 text-[11px] font-bold uppercase tracking-wider text-white">Frozen</span>}
       </div>
       <div className="flex h-2 bg-line" style={{ width: `${width}%` }} aria-hidden>

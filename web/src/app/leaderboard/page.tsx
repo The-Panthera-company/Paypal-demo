@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Countdown } from "@/components/Countdown";
 import { LeaderboardGrid } from "@/components/LeaderboardGrid";
 import { PageTitle } from "@/components/PageTitle";
 import { EmptyState, Eyebrow, StatBox } from "@/components/ui";
@@ -28,12 +29,17 @@ export default async function LeaderboardPage() {
               </p>
             </div>
             <div className="text-right" aria-live="polite">
-              <span className={`inline-block px-3 text-xs font-bold uppercase leading-7 tracking-[2px] ${lb.isFinal ? "bg-ink text-white" : "bg-accent text-ink"}`}>
+              <span className={`inline-block px-3 text-xs font-bold uppercase leading-7 tracking-[2px] ${lb.isFinal ? "bg-ink text-white" : "bg-cobalt-green text-ink"}`}>
                 {lb.isFinal ? "Final results" : "Projected"}
               </span>
               <p className="mt-2 text-sm">
                 {lb.isFinal ? "Round closed." : "Recalculated every 5 minutes."} Updated {updated}.
               </p>
+              {!lb.isFinal && (
+                <div className="mt-4 flex justify-end">
+                  <Countdown small endsAt={lb.endsAt} label="Round closes in" />
+                </div>
+              )}
             </div>
           </div>
 
