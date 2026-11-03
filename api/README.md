@@ -14,7 +14,7 @@ cp .env.example .env    # fill in PayPal sandbox keys
 
 Without `DATABASE_URL` it uses a local SQLite file (`giving.db`). Keep it unset locally: set to the Render database, your local server writes to the live data. Tests always use an in-memory database whatever `.env` says. Docs at http://localhost:8000/docs, spec at `/openapi.json`.
 
-Demo data: `.venv/Scripts/python -m scripts.seed_dev` (safe to run again). It adds 11 tagged projects across all 4 categories, the System Design worked example in Education with its seeded backers, a 40% cap and 10,000 USD pool (so the leaderboard shows Lanet Library capped at 4,000 and its excess shared: 3,024 / 2,256 / 720), a 30 USD milestone for Lanet Library, and a demo donor (id 1 on a fresh database) for the Giving Agent page. Seeded backers are database rows, not PayPal payments. Against Render, set `DATABASE_URL` to the External Database URL for that one command.
+Demo data: `.venv/Scripts/python -m scripts.seed_dev` (safe to run again). It adds 11 tagged projects across all 4 categories, the System Design worked example in Education with its seeded backers, a 40% cap and 10,000 USD pool (so the leaderboard shows Lanet Library capped at 4,000 and its excess shared: 3,024 / 2,256 / 720), 3 or 4 dated milestones per project (for the timeline and the admin's held tranches: two released, on Kaptembwo Desks and Girls' STEM Club so they have stories, one with evidence being checked, one held; Lanet Library's first, 30 USD, stays open to try a payout), and a demo donor (id 1 on a fresh database) for the Giving Agent page. Seeded backers are database rows, not PayPal payments, and seeded releases are paid in the database only (their payout batches stay PENDING under a `SEED-` batch id; refreshing one from the admin console gets a PayPal error). Against Render, set `DATABASE_URL` to the External Database URL for that one command.
 
 ## API spec (for P2 and P3)
 
@@ -204,7 +204,7 @@ Every released tranche (auto-released or approved by an admin) is sent through P
 
 ## Impact stories and the donor report
 
-- `GET /projects/{id}/stories`: one story per **released** milestone, newest first: its title, a line on what was released (including matching), and `evidence_urls` from the milestone's receipt and photo documents. Dated by its payout (the release). Nothing is released yet → `[]`. Release Lanet Library's seeded milestone to see one.
+- `GET /projects/{id}/stories`: one story per **released** milestone, newest first: its title, a line on what was released (including matching), and `evidence_urls` from the milestone's receipt and photo documents. Dated by its payout (the release). None released → `[]`. The seed releases one tranche each on Kaptembwo Desks and Girls' STEM Club; release Lanet Library's first milestone to see a real one.
 - `GET /donors/{id}/report` ("My Impact"): the donor's gifts, newest first (project, category and agent gifts; agent budget top-ups left out), each with `match_unlocked_cents`; `total_given_cents` (captured only; refunded gifts are listed but not counted); `updates` (stories from every project the donor backed, including through a category gift); and `agent_report` (the Giving Agent's latest run report).
 - **Matching unlocked:** within each round, a project's match (final once closed, projected before) is shared among its backers in proportion to the square root of what each counted for (per-person cap applied, guests at half weight), the way each person moved its score. Category gifts don't move project scores, so they unlock 0.
 

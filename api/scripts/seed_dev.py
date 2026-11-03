@@ -6,7 +6,12 @@ re-applied. Adds:
 - the System Design worked example in Education: the four projects with goals big enough that
   the 40% category cap binds, and their seeded backers (16 x 12.50, 9 x 12.50, 4 x 50 USD), so the
   leaderboard shows Lanet Library capped and its excess shared out
-- a first milestone for Lanet Library (to try a payout)
+- 3 or 4 dated milestones per project (the timeline and the admin's held tranches): Lanet Library's
+  first, a 30 USD tranche, stays open to try a real payout; Kaptembwo Desks and Girls' STEM Club
+  each have a released tranche (a story on the website), Girls' STEM Club one with evidence being
+  checked, Kaptembwo Desks one held for an admin. Released tranches are booked like a real release
+  but paid in the database only: their payout batch stays PENDING under a SEED- batch id, so nothing
+  goes to PayPal and reconciliation stays clean (there is no PayPal money behind seeded backers).
 - a demo donor for the Giving Agent page (there is no route that creates donors), id 1 on a fresh database
 - an open round: 10,000 USD pool, 40% cap
 
@@ -18,18 +23,27 @@ The SQLite file is relative to where the API starts, so run this from the same f
 Against Render: set DATABASE_URL to the External Database URL for that one command.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.db import Base, SessionLocal, engine
 from app.models import (
+    AuditLog,
     Category,
     Donation,
     DonationStatus,
     Donor,
+    DocumentKind,
+    LedgerEntry,
+    LedgerType,
     Milestone,
+    MilestoneStatus,
+    Payout,
+    PayoutStatus,
     Project,
+    ProjectDocument,
     ProjectStatus,
     Round,
     RoundStatus,
@@ -68,6 +82,74 @@ PROJECTS = [
 BACKERS = [("Lanet Library", 16, 1250), ("Kaptembwo Desks", 9, 1250), ("Girls' STEM Club", 4, 5000)]
 SEED_BACKER = "Seed backer"
 
+# project: [(title, cents, due in days from today, status)], in order; each project's tranches add up to its goal.
+# Released tranches stay within what the seeded backers gave.
+OPEN, EVIDENCE, HELD, RELEASED = (MilestoneStatus.open, MilestoneStatus.evidence_submitted,
+                                  MilestoneStatus.held, MilestoneStatus.released)
+MILESTONES = {
+    "Lanet Library": [("Buy 40 books", 3000, 7, OPEN), ("Shelves for three schools", 197_000, 30, OPEN),
+                      ("Librarian, first term", 200_000, 60, OPEN), ("300 more books", 200_000, 90, OPEN)],
+    "Kaptembwo Desks": [("First 10 desks delivered", 10_000, -25, RELEASED), ("Next 15 desks", 150_000, -3, HELD),
+                        ("Final 15 desks", 240_000, 40, OPEN)],
+    "Girls' STEM Club": [("Science kits for 30 girls", 15_000, -30, RELEASED), ("Two coding laptops", 120_000, -2, EVIDENCE),
+                         ("Mentor stipend, term one", 90_000, 35, OPEN), ("End-of-year science fair", 75_000, 80, OPEN)],
+    "New Reading Corner": [("Mats and shelves", 50_000, 14, OPEN), ("150 picture books", 70_000, 40, OPEN),
+                           ("Storytime volunteer training", 30_000, 70, OPEN)],
+    "Mobile Eye Clinic": [("Screening kit and trial lenses", 150_000, 21, OPEN), ("First two village visits", 150_000, 50, OPEN),
+                          ("Reading glasses for 400 people", 200_000, 85, OPEN)],
+    "St. Mary's Mission Maternity Ward": [("Two delivery beds", 180_000, 25, OPEN), ("Solar fridge for vaccines", 270_000, 60, OPEN)],
+    "Lupus Patient Support Fund": [("First quarter of medicine", 300_000, 20, OPEN), ("Clinic transport for 25 people", 200_000, 45, OPEN),
+                                   ("Second quarter of medicine", 300_000, 110, OPEN)],
+    "Lake Shoreline Trees": [("Seedlings and nursery beds", 150_000, 18, OPEN), ("Plant the first 1,000 trees", 200_000, 50, OPEN),
+                             ("Plant 1,000 more and fence them", 150_000, 95, OPEN)],
+    "Plastic-Free Market": [("Four collection points", 100_000, 15, OPEN), ("2,000 reusable bags", 100_000, 40, OPEN),
+                            ("Trader workshops", 50_000, 70, OPEN)],
+    "Village Borehole Repair": [("New pump and parts", 200_000, 10, OPEN), ("Install and test the water", 100_000, 30, OPEN),
+                                ("Train two local mechanics", 50_000, 60, OPEN)],
+    "School Rainwater Tanks": [("First 10,000-litre tank", 90_000, 20, OPEN), ("Second tank", 90_000, 45, OPEN),
+                               ("Gutters and taps", 20_000, 60, OPEN)],
+}
+EVIDENCE_URL = "https://files.example.com/seed/milestone-{id}-{kind}.jpg"
+SEED_PAYEE = "seed-payee@example.com"
+
+
+def seed_milestones(db: Session, project: Project, today: date) -> None:
+    """Adds the project's missing milestones; an existing one only gets a due date if it has none."""
+    for seq, (title, cents, due_in, status) in enumerate(MILESTONES.get(project.title, []), start=1):
+        due = today + timedelta(days=due_in)
+        milestone = db.scalar(select(Milestone).where(Milestone.project_id == project.id, Milestone.seq == seq))
+        if milestone is not None:
+            milestone.due_date = milestone.due_date or due
+            continue
+        milestone = Milestone(project_id=project.id, seq=seq, title=title, amount=cents, currency="USD",
+                              due_date=due, status=status)
+        db.add(milestone)
+        db.flush()
+        if status == OPEN:
+            continue
+
+        kinds = [DocumentKind.receipt, DocumentKind.photo] if status == RELEASED else [DocumentKind.receipt]
+        for kind in kinds:
+            db.add(ProjectDocument(project_id=project.id, milestone_id=milestone.id, kind=kind,
+                                   file_url=EVIDENCE_URL.format(id=milestone.id, kind=kind.value)))
+        if status == HELD:
+            db.add(AuditLog(
+                actor="milestone-agent", action="payout_request",
+                inputs={"milestone_id": milestone.id, "amount_cents": cents},
+                rule_result="held_for_admin",
+                reason=f"Held: above_threshold ({cents} > 50000). Summary: delivery note for 15 desks matches the receipt.",
+            ))
+        if status == RELEASED:
+            released_at = datetime.combine(due, datetime.min.time(), timezone.utc)
+            db.add(LedgerEntry(type=LedgerType.tranche, amount=cents, currency="USD", project_id=project.id,
+                               created_at=released_at))
+            db.add(Payout(
+                sender_batch_id=f"seed-milestone-{milestone.id}-USD", currency="USD", status=PayoutStatus.processing,
+                paypal_batch_id=f"SEED-{milestone.id}", created_at=released_at,
+                items=[{"project_id": project.id, "milestone_id": milestone.id, "amount_cents": cents,
+                        "receiver": SEED_PAYEE, "status": "PENDING", "sender_item_id": f"milestone-{milestone.id}"}],
+            ))
+
 
 def main() -> None:
     Base.metadata.create_all(engine)
@@ -93,9 +175,8 @@ def main() -> None:
             project.summary = project.summary or summary
         db.flush()
 
-        library = db.scalar(select(Project).where(Project.title == "Lanet Library"))
-        if not db.scalar(select(Milestone).where(Milestone.project_id == library.id)):
-            db.add(Milestone(project_id=library.id, seq=1, title="Buy 40 books", amount=3000, currency="USD"))
+        for project in db.scalars(select(Project).where(Project.title.in_(list(MILESTONES)))):
+            seed_milestones(db, project, now.date())
 
         round_ = db.scalar(select(Round).where(Round.status == RoundStatus.open))
         if round_ is None:
