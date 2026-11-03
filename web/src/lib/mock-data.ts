@@ -28,6 +28,11 @@ export const projects: Project[] = [
     urgency: 2,
     status: "active",
     endsAt: inDays(20),
+    milestones: [
+      { id: "m1", seq: 1, title: "Buy 120 books", amount: usd(1_500), match: usd(400), dueDate: inDays(-20), status: "released" },
+      { id: "m2", seq: 2, title: "Build shelving", amount: usd(2_000), match: usd(500), dueDate: inDays(5), status: "evidence_submitted" },
+      { id: "m3", seq: 3, title: "Reading programme, first term", amount: usd(2_500), match: usd(600), dueDate: inDays(40), status: "open" },
+    ],
   },
   {
     id: "kaptembwo-desks",

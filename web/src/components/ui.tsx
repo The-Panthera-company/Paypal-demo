@@ -9,7 +9,7 @@ const art: Record<string, { from: string; to: string; label: string }> = {
 
 // Free Unsplash photos (Unsplash licence), loaded by the visitor's browser. Placeholders until
 // projects upload their own photos. Several per category so cards don't repeat.
-const u = (id: string) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=900&q=60`;
+const u = (id: string) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=640&q=55`;
 export const PHOTOS: Record<string, string[]> = {
   health: [u("1576091160550-2173dba999ef"), u("1584515933487-779824d29309"), u("1579684385127-1ef15d508118")],
   education: [u("1503676260728-1c00da094a0b"), u("1497633762265-9d179a990aa6"), u("1509062522246-3755977927d7")],

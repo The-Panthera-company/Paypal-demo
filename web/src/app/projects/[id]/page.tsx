@@ -3,6 +3,7 @@ import { PageTitle } from "@/components/PageTitle";
 import { CategoryArt, ProgressBar, StatBox } from "@/components/ui";
 import Link from "next/link";
 import { DonatePanel } from "@/components/DonatePanel";
+import { MilestoneTimeline } from "@/components/MilestoneTimeline";
 import { ProjectCard } from "@/components/ProjectCard";
 import { daysLeft, formatDate, formatMoney, getImpactUpdates, getProject, getSimilarProjects } from "@/lib/api";
 
@@ -104,6 +105,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               </Link>{" "}
               and an admin will review it.
             </p>
+          </div>
+          <div className="mt-12">
+            <MilestoneTimeline milestones={p.milestones ?? []} />
           </div>
         </div>
       </section>

@@ -2,6 +2,7 @@
 // With NEXT_PUBLIC_API_URL unset, the app uses local mock data. Set it to the API URL
 // (http://localhost:8000 locally, the Render URL when deployed) and the adapters below
 // turn the API's snake_case / *_cents fields into the shapes in ./types, so pages never change.
+import { cache } from "react";
 import { backerStories, categories, impactUpdates, projects, sponsors } from "./mock-data";
 import type { BackerStory, Category, ImpactUpdate, Leaderboard, LeaderboardRow, Project, ProjectFilters, Sponsor } from "./types";
 
@@ -10,15 +11,17 @@ import type { BackerStory, Category, ImpactUpdate, Leaderboard, LeaderboardRow, 
 const PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 const API_URL = (typeof window === "undefined" ? process.env.API_INTERNAL_URL : undefined)?.replace(/\/$/, "") || PUBLIC_API_URL;
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
+/** Catalogue reads are shared for `revalidate` seconds (projects change rarely; the matching projection
+ *  every 5 minutes), so a page view usually needs no API call at all. Admin and donor data use no-store. */
+async function get<T>(path: string, revalidate = 30): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { next: { revalidate } });
   if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
   return res.json() as Promise<T>;
 }
 
 /** Like get(), but routes Person 1 hasn't built yet (X-Stub header = example data) count as empty */
 async function getBuilt<T>(path: string, empty: T): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
+  const res = await fetch(`${API_URL}${path}`, { next: { revalidate: 30 } });
   if (!res.ok || res.headers.has("x-stub")) return empty;
   return res.json() as Promise<T>;
 }
@@ -42,6 +45,7 @@ type ApiProject = {
   currency: string;
   summary?: string;
   facilitator?: string;
+  milestones?: { id: number; seq: number; title: string; amount_cents: number; match_amount_cents: number; currency: string; due_date: string | null; status: string }[];
 };
 type ApiRound = { id: number; name: string; ends_at: string; matching_pool_cents: number; currency: string };
 type ApiLeaderboard = {
@@ -72,13 +76,11 @@ const money = (cents: number, currency: string) => ({ amount: cents, currency })
 /** The API stores facet values in lowercase ("literacy"); show "Literacy" */
 const label = (v: string | null, fallback: string) => (v ? v.charAt(0).toUpperCase() + v.slice(1) : fallback);
 
-let roundEnd: Promise<string> | undefined;
-function currentRoundEnd() {
-  roundEnd ??= get<ApiRound>("/rounds/current")
+const currentRoundEnd = cache(() =>
+  get<ApiRound>("/rounds/current")
     .then((r) => r.ends_at)
-    .catch(() => new Date(Date.now() + 30 * 86_400_000).toISOString());
-  return roundEnd;
-}
+    .catch(() => new Date(Date.now() + 30 * 86_400_000).toISOString()),
+);
 
 function toProject(p: ApiProject, endsAt: string): Project {
   return {
@@ -95,12 +97,21 @@ function toProject(p: ApiProject, endsAt: string): Project {
     urgency: Math.min(5, Math.max(1, p.urgency)) as Project["urgency"],
     status: (["verified", "active", "frozen", "completed"].includes(p.status) ? p.status : "active") as Project["status"],
     endsAt,
+    milestones: p.milestones?.map((m) => ({
+      id: String(m.id),
+      seq: m.seq,
+      title: m.title,
+      amount: money(m.amount_cents, m.currency),
+      match: money(m.match_amount_cents, m.currency),
+      dueDate: m.due_date,
+      status: (["open", "evidence_submitted", "released", "held"].includes(m.status) ? m.status : "open") as "open",
+    })),
   };
 }
 
-async function apiCategories(): Promise<ApiCategory[]> {
-  return get<ApiCategory[]>("/categories");
-}
+// cache(): within one page view, repeated calls share one answer
+const apiCategories = cache((): Promise<ApiCategory[]> => get<ApiCategory[]>("/categories"));
+const apiProjects = cache((query: string): Promise<ApiProject[]> => get<ApiProject[]>(`/projects?${query}`));
 
 // ---- Public functions used by the pages ----
 
@@ -130,7 +141,7 @@ export async function getProjects(filters: ProjectFilters = {}): Promise<Project
     if (filters.group) params.set("beneficiary_group", filters.group.toLowerCase());
     if (filters.region) params.set("region", filters.region);
     if (filters.q) params.set("q", filters.q);
-    const [rows, endsAt] = await Promise.all([get<ApiProject[]>(`/projects?${params}`), currentRoundEnd()]);
+    const [rows, endsAt] = await Promise.all([apiProjects(params.toString()), currentRoundEnd()]);
     return rows.map((p) => toProject(p, endsAt));
   }
   const q = filters.q?.toLowerCase();
@@ -146,7 +157,7 @@ export async function getProjects(filters: ProjectFilters = {}): Promise<Project
 
 export async function getProject(id: string): Promise<Project | undefined> {
   if (!API_URL) return projects.find((p) => p.id === id);
-  const res = await fetch(`${API_URL}/projects/${id}`, { cache: "no-store" });
+  const res = await fetch(`${API_URL}/projects/${id}`, { next: { revalidate: 30 } });
   if (res.status === 404) return undefined;
   if (!res.ok) throw new Error(`GET /projects/${id} failed: ${res.status}`);
   return toProject((await res.json()) as ApiProject, await currentRoundEnd());
@@ -172,7 +183,8 @@ export function daysLeft(p: Project) {
 /** Milestone evidence. The API calls these "stories" (written when a tranche is released). */
 export async function getImpactUpdates(projectId?: string): Promise<ImpactUpdate[]> {
   if (!API_URL) return impactUpdates.filter((u) => !projectId || u.projectId === projectId);
-  const ids = projectId ? [projectId] : (await getProjects()).map((p) => p.id);
+  // Only projects with backers can have released a milestone, so skip the rest (one call per project)
+  const ids = projectId ? [projectId] : (await getProjects()).filter((p) => p.backerCount > 0).map((p) => p.id);
   const lists = await Promise.all(
     ids.map((id) => getBuilt<ApiStory[]>(`/projects/${id}/stories`, []).catch(() => [] as ApiStory[])),
   );
@@ -211,7 +223,7 @@ export function formatDate(iso: string) {
 export async function getLeaderboard(): Promise<Leaderboard> {
   if (!API_URL) return sampleLeaderboard();
   const round = await get<ApiRound>("/rounds/current");
-  const lb = await get<ApiLeaderboard>(`/rounds/${round.id}/leaderboard`);
+  const lb = await get<ApiLeaderboard>(`/rounds/${round.id}/leaderboard`, 60);
   const c = lb.currency;
   return {
     roundId: String(round.id),

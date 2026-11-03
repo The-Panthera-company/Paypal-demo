@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@bryntum/gantt": "npm:@bryntum/gantt-trial@7.3.8",
+    "@bryntum/gantt-react": "7.3.8",
     "@paypal/react-paypal-js": "8.9.2",
     "ag-grid-community": "34.3.1",
     "ag-grid-react": "34.3.1",
