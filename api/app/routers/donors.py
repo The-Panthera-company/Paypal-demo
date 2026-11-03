@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import reports
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.mandates import check_gift, funded_balance, weight_problems
@@ -25,7 +26,6 @@ from app.schemas import (
     MandateRunOut,
     PendingApproval,
 )
-from app.stubs import PLANNED, planned
 
 router = APIRouter(prefix="/donors", tags=["donors"])
 
@@ -62,10 +62,12 @@ def update_donor(donor_id: int, body: DonorUpdate, db: Session = Depends(get_db)
     return _out(donor)
 
 
-@router.get("/{donor_id}/report", response_model=DonorReport, responses=PLANNED)
-def donor_report(donor_id: int):
-    """"Where your money went": gifts, match unlocked, impact updates and the agent's report."""
-    planned("donor report")
+@router.get("/{donor_id}/report", response_model=DonorReport, responses={404: {"model": ErrorOut}})
+def donor_report(donor_id: int, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+    """"Where your money went": gifts (newest first; agent budget top-ups left out), the matching
+    each project gift unlocked, impact updates from projects the donor backed, and the agent's
+    latest report. Matching is final once the round closes, projected before that."""
+    return reports.donor_report(db, _donor_or_404(db, donor_id), settings.currency)
 
 
 def mandate_out(db: Session, m: Mandate) -> MandateOut:

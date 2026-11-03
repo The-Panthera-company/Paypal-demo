@@ -352,7 +352,7 @@
           "catalogue"
         ],
         "summary": "Project Stories",
-        "description": "Impact updates: released milestones with their evidence, newest first.",
+        "description": "Impact updates: released milestones with their evidence (receipts, photos), newest first.",
         "operationId": "project_stories",
         "parameters": [
           {
@@ -380,15 +380,8 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                }
-              }
-            }
+          "404": {
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",
@@ -741,7 +734,7 @@
           "donors"
         ],
         "summary": "Donor Report",
-        "description": "\"Where your money went\": gifts, match unlocked, impact updates and the agent's report.",
+        "description": "\"Where your money went\": gifts (newest first; agent budget top-ups left out), the matching\neach project gift unlocked, impact updates from projects the donor backed, and the agent's\nlatest report. Matching is final once the round closes, projected before that.",
         "operationId": "donor_report",
         "parameters": [
           {
@@ -765,15 +758,15 @@
               }
             }
           },
-          "501": {
-            "description": "In the spec, not built yet",
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
                 }
               }
-            }
+            },
+            "description": "Not Found"
           },
           "422": {
             "description": "Validation Error",

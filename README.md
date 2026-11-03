@@ -121,6 +121,7 @@ Both must pass. **Do not run `npm audit fix --force`**: it upgrades major versio
 | Port 3000 in use | `npx next dev -p 3001` |
 | Page has no styling | Stop the server, delete `web/.next`, start again |
 | Errors after `git pull` | Run `npm install` again |
+| `Module not found: Can't resolve 'ag-grid-community'` (or any package) | You switched to a branch with new packages: stop the server, `npm install`, start again. `start-web.bat` does this for you |
 | `EBADENGINE` when updating npm | Ignore; you don't need a newer npm |
 
 ## Put the website online (Render)
