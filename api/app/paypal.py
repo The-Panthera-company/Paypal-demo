@@ -51,7 +51,7 @@ class PayPalClient:
         r = self._http.request(method, path, json=json, headers=headers)
         if r.status_code >= 400:
             raise PayPalError(r.status_code, _json(r))
-        return r.json()
+        return r.json() if r.content else {}  # some calls (cancel) answer 204 with no body
 
     def create_order(self, *, amount: str, currency: str, custom_id: str, description: str, request_id: str) -> dict:
         # No payment_source here: with the JS SDK buttons, setting payment_source.paypal left the
@@ -106,6 +106,52 @@ class PayPalClient:
 
     def get_payout(self, payout_batch_id: str) -> dict:
         return self._request("GET", f"/v1/payments/payouts/{payout_batch_id}")
+
+    def create_product(self, *, name: str, request_id: str) -> dict:
+        return self._request("POST", "/v1/catalogs/products", request_id=request_id,
+                             json={"name": name, "type": "SERVICE"})
+
+    def create_monthly_plan(self, *, product_id: str, name: str, unit_price: str, currency: str, request_id: str) -> dict:
+        """A monthly plan priced per unit, with quantity allowed: a subscription for N units bills N x unit_price."""
+        body = {
+            "product_id": product_id,
+            "name": name,
+            "status": "ACTIVE",
+            "quantity_supported": True,
+            "billing_cycles": [
+                {
+                    "frequency": {"interval_unit": "MONTH", "interval_count": 1},
+                    "tenure_type": "REGULAR",
+                    "sequence": 1,
+                    "total_cycles": 0,  # until cancelled
+                    "pricing_scheme": {"fixed_price": {"value": unit_price, "currency_code": currency}},
+                }
+            ],
+            "payment_preferences": {"auto_bill_outstanding": True, "payment_failure_threshold": 1},
+        }
+        return self._request("POST", "/v1/billing/plans", request_id=request_id, json=body)
+
+    def create_subscription(self, *, plan_id: str, quantity: int, custom_id: str, return_url: str,
+                            cancel_url: str, request_id: str) -> dict:
+        body = {
+            "plan_id": plan_id,
+            "quantity": str(quantity),
+            "custom_id": custom_id,
+            "application_context": {
+                "brand_name": "Community Giving",
+                "shipping_preference": "NO_SHIPPING",
+                "user_action": "SUBSCRIBE_NOW",
+                "return_url": return_url,
+                "cancel_url": cancel_url,
+            },
+        }
+        return self._request("POST", "/v1/billing/subscriptions", request_id=request_id, json=body)
+
+    def get_subscription(self, subscription_id: str) -> dict:
+        return self._request("GET", f"/v1/billing/subscriptions/{subscription_id}")
+
+    def cancel_subscription(self, subscription_id: str, reason: str) -> None:
+        self._request("POST", f"/v1/billing/subscriptions/{subscription_id}/cancel", json={"reason": reason[:128]})
 
     def verify_webhook_signature(self, *, headers: dict[str, str], event: dict, webhook_id: str) -> bool:
         """Ask PayPal whether this delivery really came from it, for our webhook.

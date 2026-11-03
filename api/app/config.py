@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # Milestone tranches (including their match) up to this many cents release without an admin.
     milestone_auto_release_cents: int = 50_000
 
+    # The website, for PayPal's return and cancel links after a donor approves a subscription.
+    web_url: str = "https://giving-web.onrender.com"
+
     @property
     def db_url(self) -> str:
         url = self.database_url or "sqlite:///./giving.db"

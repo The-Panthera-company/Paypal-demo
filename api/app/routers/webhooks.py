@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_db
-from app import payouts
+from app import payouts, subscriptions
 from app.models import AuditLog, Donation, DonationStatus, LedgerEntry, LedgerType, Payout, WebhookEvent
 from app.money import from_paypal
 from app.paypal import PayPalClient, PayPalError, get_paypal
@@ -45,8 +45,9 @@ def paypal_webhook(
     settings: Settings = Depends(get_settings),
 ):
     """Verifies the signature, skips repeats by event id, then handles PAYMENT.CAPTURE.COMPLETED,
-    .PENDING, .DENIED, .REFUNDED and .REVERSED, and the PAYMENT.PAYOUTSBATCH.* and
-    PAYMENT.PAYOUTS-ITEM.* events. Other types are recorded as ignored."""
+    .PENDING, .DENIED, .REFUNDED and .REVERSED, the PAYMENT.PAYOUTSBATCH.* and
+    PAYMENT.PAYOUTS-ITEM.* events, and the Giving Agent subscription events (PAYMENT.SALE.COMPLETED,
+    BILLING.SUBSCRIPTION.*). Other types are recorded as ignored."""
     if not settings.paypal_webhook_id:
         raise _error(503, "WEBHOOK_NOT_CONFIGURED", "PAYPAL_WEBHOOK_ID is not set")
     event_id = event.get("id")
@@ -73,6 +74,10 @@ def paypal_webhook(
             result = _deny(db, resource)
         elif event_type in REFUND:
             result = _refund(db, resource, reversed_=event_type.endswith("REVERSED"))
+        elif event_type == "PAYMENT.SALE.COMPLETED":
+            result = subscriptions.credit_sale(db, resource)
+        elif event_type in subscriptions.STATUS_EVENTS or event_type == "BILLING.SUBSCRIPTION.PAYMENT.FAILED":
+            result = subscriptions.apply_status(db, event_type, resource)
         elif event_type.startswith("PAYMENT.PAYOUTSBATCH."):
             result = _payout_batch(db, resource)
         elif event_type.startswith("PAYMENT.PAYOUTS-ITEM."):

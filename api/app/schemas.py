@@ -681,7 +681,7 @@ class ReconciliationIssue(BaseModel):
     check: str
     severity: Literal["error", "warning"]
     detail: str
-    refs: list = Field(description="Ids of the rows involved (donations, payouts, milestones, ...)")
+    refs: list[int] = Field(description="Ids of the rows involved (donations, payouts, milestones, ...)")
 
 
 class ReconciliationOut(BaseModel):
@@ -720,3 +720,29 @@ class SweepOut(BaseModel):
     failed: list[int] = Field(description="Voided, declined or abandoned (never approved)")
     unchanged: list[int]
     errors: list[str]
+
+
+# --- Giving Agent subscriptions ------------------------------------------------------------
+
+
+class SubscriptionIn(BaseModel):
+    monthly_amount_cents: int = Field(ge=100, description="Whole dollars (multiples of 100), billed monthly")
+
+
+class SubscriptionOut(BaseModel):
+    model_config = _example(
+        {
+            "subscription_id": "I-BW452GLLEP1G",
+            "donor_id": 1,
+            "monthly_amount_cents": 2500,
+            "currency": "USD",
+            "status": "APPROVAL_PENDING",
+            "approve_url": "https://www.sandbox.paypal.com/webapps/billing/subscriptions?ba_token=BA-2M539689T3856352J",
+        }
+    )
+    subscription_id: str
+    donor_id: int
+    monthly_amount_cents: int
+    currency: str
+    status: str
+    approve_url: str | None = Field(None, description="Send the donor here to approve (only while APPROVAL_PENDING)")
