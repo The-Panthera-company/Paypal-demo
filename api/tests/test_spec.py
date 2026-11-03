@@ -104,3 +104,9 @@ def test_exported_spec_is_current():
     """Fails when routes change without re-running scripts/export_openapi.py."""
     exported = json.loads((Path(__file__).parent.parent / "openapi.json").read_text(encoding="utf-8"))
     assert exported == json.loads(json.dumps(app.openapi()))
+
+
+def test_spec_wording_does_not_depend_on_python_version():
+    """Python 3.13 renamed status 422 ("Unprocessable Entity" -> "Unprocessable Content"). A response
+    without its own description would make openapi.json differ between machines."""
+    assert "Unprocessable" not in json.dumps(app.openapi())

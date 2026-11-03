@@ -104,7 +104,9 @@ def get_mandate(donor_id: int, db: Session = Depends(get_db)):
 
 
 @router.put(
-    "/{donor_id}/mandate", response_model=MandateOut, responses={404: {"model": ErrorOut}, 422: {"model": ErrorOut}}
+    "/{donor_id}/mandate",
+    response_model=MandateOut,
+    responses={404: {"model": ErrorOut}, 422: {"model": ErrorOut, "description": "Invalid mandate"}},
 )
 def set_mandate(
     donor_id: int, body: MandateIn, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)
