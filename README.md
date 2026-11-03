@@ -45,6 +45,36 @@ Open **http://localhost:3000**. Stop it with `Ctrl + C`.
 
 > On some Windows machines `npm run dev` exits silently; `npx next dev -p 3000` (what `start-web.bat` uses) works.
 
+### Or run it in Docker
+
+Needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) (running). No Node or Python needed on your PC.
+
+**Website only, using the API on Render** (most of the time). Put your settings in `web/.env.local`
+(`NEXT_PUBLIC_API_URL=https://<api>.onrender.com`, `ADMIN_TOKEN`, `ADMIN_UI_PASSWORD`, `NEXT_PUBLIC_DEMO_DONOR_ID=1`), then from the repo root:
+
+```powershell
+docker compose up web
+```
+
+**Website + API both in Docker** (works offline from Render; the API keeps its own local database). Put the API's settings
+(PayPal sandbox keys, `ADMIN_TOKEN`) in `api/.env`, and in `web/.env.local` use:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000
+API_INTERNAL_URL=http://api:8000
+ADMIN_TOKEN=<same value as in api/.env>
+```
+
+```powershell
+docker compose --profile local-api up
+docker compose exec api python -m scripts.seed_dev     # first time: sample projects and a round
+```
+
+Open http://localhost:3000 (website) and http://localhost:8000/docs (API). Stop with `Ctrl + C`.
+The first start takes a few minutes (downloads images, installs packages); later starts are quick.
+After changing `.env.local`, stop and start again. If something looks stale: `docker compose down -v` resets the
+containers and the website's package cache (it also deletes the local API database).
+
 ### Working on a branch
 
 ```bash
