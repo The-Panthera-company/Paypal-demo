@@ -108,6 +108,7 @@ export async function getCategories(): Promise<Category[]> {
     const mine = all.filter((p) => p.categoryId === slug(c.name));
     return {
       id: slug(c.name),
+      apiId: c.id,
       name: c.name,
       projectCount: c.project_count,
       raised: money(mine.reduce((s, p) => s + p.raised.amount, 0), mine[0]?.raised.currency ?? "USD"),

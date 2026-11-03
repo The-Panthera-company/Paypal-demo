@@ -9,6 +9,8 @@ export type Category = {
   name: string;
   projectCount: number;
   raised: Money;
+  /** The core API's numeric id (absent in sample-data mode) */
+  apiId?: number;
 };
 
 export type ProjectStatus = "verified" | "active" | "frozen" | "completed";
