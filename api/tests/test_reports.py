@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app import projections
+from app import projections, reconciliation, reports
 from app.db import Base
 from app.engine import run_round
 from app.models import (
@@ -177,3 +177,14 @@ def test_seed_reproduces_the_worked_example_and_is_rerunnable(monkeypatch):
         "Girls' STEM Club": (225_600, False),
         "New Reading Corner": (72_000, False),
     }
+
+    with factory() as db:
+        milestones = list(db.scalars(select(Milestone)))
+        per_project = {p.id: [m for m in milestones if m.project_id == p.id] for p in projects}
+        assert all(2 <= len(ms) <= 4 for ms in per_project.values()) and all(m.due_date for m in milestones)
+        assert sorted(m.status.value for m in milestones if m.status.value != "open") == [
+            "evidence_submitted", "held", "released", "released"]
+        # Seeded releases are paid in the database only: nothing to send, nothing wrong.
+        assert reconciliation.report(db)["issues"] == []
+        backed = [p.id for p in projects if p.title in ("Kaptembwo Desks", "Girls' STEM Club")]
+        assert [s.title for s in reports.stories(db, backed)] == ["First 10 desks delivered", "Science kits for 30 girls"]
