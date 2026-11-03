@@ -9,9 +9,9 @@ export function BackerStories({ stories, projects }: { stories: BackerStory[]; p
   if (stories.length === 0) return null;
   return (
     <section className="bg-surface-alt pb-16 lg:pb-[120px]">
-      <div className="relative bg-accent py-10 text-center">
+      <div className="relative bg-cobalt-green py-10 text-center">
         <h2 className="section-title">What backers are saying</h2>
-        <span className="absolute left-1/2 top-full -ml-3 border-x-[12px] border-t-[12px] border-x-transparent border-t-accent" aria-hidden />
+        <span className="absolute left-1/2 top-full -ml-3 border-x-[12px] border-t-[12px] border-x-transparent border-t-cobalt-green" aria-hidden />
       </div>
       <div className="container-k pt-16">
         <ul className="-mx-4 flex snap-x gap-[30px] overflow-x-auto px-4 pb-12 md:grid md:grid-cols-3 md:overflow-visible">
@@ -21,7 +21,7 @@ export function BackerStories({ stories, projects }: { stories: BackerStory[]; p
               <li
                 key={s.id}
                 className={`relative min-w-[85%] snap-center bg-white px-8 pb-16 pt-10 text-center md:min-w-0 ${
-                  i === 1 ? "corner shadow-[0_15px_35px_rgba(27,25,44,0.08)] ring-2 ring-inset ring-accent" : ""
+                  i === 1 ? "corner shadow-[0_15px_35px_rgba(11,46,51,0.08)] ring-2 ring-inset ring-growth" : ""
                 }`}
                 style={{ ["--corner-size" as string]: "29px" }}
               >

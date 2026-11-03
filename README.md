@@ -62,6 +62,15 @@ NEXT_PUBLIC_API_URL=https://<postman-mock-or-api-url>
 NEXT_PUBLIC_PAYPAL_CLIENT_ID=<sandbox client id>
 ```
 
+For the admin console (`/admin`) also add:
+
+```
+ADMIN_TOKEN=<the API's ADMIN_TOKEN>        # stays on the server, never sent to the browser
+ADMIN_UI_PASSWORD=<choose one>              # browser asks for it on /admin (any user name)
+```
+
+Without `ADMIN_TOKEN` the console shows sample data and its buttons change nothing.
+
 Restart the dev server after changing it. Never commit `.env.local` or any secret.
 
 ### Checks before a pull request

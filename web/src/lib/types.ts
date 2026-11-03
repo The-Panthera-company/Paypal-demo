@@ -59,3 +59,31 @@ export type BackerStory = {
 };
 
 export type Sponsor = { id: string; name: string; pool: Money };
+
+/** One row of the matching leaderboard (GET /rounds/{id}/leaderboard) */
+export type LeaderboardRow = {
+  rank: number;
+  projectId: string;
+  title: string;
+  categoryId: string;
+  backerCount: number;
+  raised: Money;
+  score: number;
+  floor: Money;
+  crowd: Money;
+  match: Money;
+  capped: boolean;
+  frozen: boolean;
+};
+
+export type Leaderboard = {
+  roundId: string;
+  roundName: string;
+  endsAt: string;
+  pool: Money;
+  isFinal: boolean;
+  computedAt: string;
+  rows: LeaderboardRow[];
+  /** true when built from local sample data, not the API */
+  sample: boolean;
+};

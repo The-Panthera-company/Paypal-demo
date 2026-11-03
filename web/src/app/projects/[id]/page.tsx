@@ -2,10 +2,11 @@ import { notFound } from "next/navigation";
 import { PageTitle } from "@/components/PageTitle";
 import { CategoryArt, ProgressBar, StatBox } from "@/components/ui";
 import Link from "next/link";
+import { DonatePanel } from "@/components/DonatePanel";
 import { ProjectCard } from "@/components/ProjectCard";
 import { daysLeft, formatDate, formatMoney, getImpactUpdates, getProject, getSimilarProjects } from "@/lib/api";
 
-// Krowd single-project layout. Story/Updates tabs content: issue #11; PayPal button: #14.
+// Krowd single-project layout, with the PayPal donate panel (#14).
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const p = await getProject(id);
@@ -19,7 +20,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <section className="bg-surface-alt pb-24 pt-12 lg:pb-32 lg:pt-[120px]">
         <div className="container-k grid gap-10 lg:grid-cols-2">
           <div className="aspect-[4/3]">
-            <CategoryArt id={p.categoryId} />
+            <CategoryArt id={p.categoryId} seed={p.id} label={`Photo for ${p.title}`} />
           </div>
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -48,9 +49,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             <p className="tabular mb-8 mt-4 font-bold text-ink">
               Goal: <span className="text-brand">{formatMoney(p.goal)}</span>
             </p>
-            <button disabled className="btn w-full sm:w-auto" title="PayPal button arrives in issue #14">
-              Back this project
-            </button>
+            <h2 className="mb-3 text-2xl">Back this project</h2>
+            <DonatePanel projectId={p.id} projectTitle={p.title} />
             <p className="mt-4 text-sm">Your name stays private unless you opt in to the leaderboard.</p>
           </div>
         </div>
@@ -85,7 +85,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               <ol className="space-y-6 border-l-2 border-line pl-6">
                 {updates.map((u) => (
                   <li key={u.id} className="relative">
-                    <span className="absolute -left-[31px] top-1.5 size-3 bg-accent" aria-hidden />
+                    <span className="absolute -left-[31px] top-1.5 size-3 bg-growth" aria-hidden />
                     <p className="text-sm">
                       {formatDate(u.date)} · {u.kind === "receipt" ? "Receipt" : "Photo"}
                       {u.tranche && <> · {formatMoney(u.tranche)} released</>}
@@ -128,9 +128,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           <div className="tabular font-bold text-ink">{formatMoney(p.raised)}</div>
           <div>{pct}% of {formatMoney(p.goal)}</div>
         </div>
-        <button disabled className="btn !min-h-12 !px-6">
+        <a href="#donate" className="btn !min-h-12 !px-6">
           Back this
-        </button>
+        </a>
       </div>
     </>
   );
