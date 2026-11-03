@@ -33,6 +33,9 @@ class FakePayPal:
         self.payouts: dict[str, dict] = {}  # payout_batch_id -> request body
         self.payout_error: tuple[int, dict] | None = None
         self.payout_item_status = "SUCCESS"
+        self.plans: dict[str, dict] = {}  # plan id -> request body
+        self.subscriptions: dict[str, dict] = {}  # subscription id -> request body
+        self.cancelled: list[str] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -64,6 +67,21 @@ class FakePayPal:
                                                               "sender_batch_header": body["sender_batch_header"]}})
         if path.startswith("/v1/payments/payouts/") and request.method == "GET":
             return httpx.Response(200, json=self.payout_batch(path.split("/")[-1]))
+        if path == "/v1/catalogs/products" and request.method == "POST":
+            return httpx.Response(201, json={"id": "PROD-1", **json.loads(request.content)})
+        if path == "/v1/billing/plans" and request.method == "POST":
+            plan_id = f"P-{len(self.plans) + 1}"
+            self.plans[plan_id] = json.loads(request.content)
+            return httpx.Response(201, json={"id": plan_id, "status": "ACTIVE"})
+        if path == "/v1/billing/subscriptions" and request.method == "POST":
+            sub_id = f"I-SUB{len(self.subscriptions) + 1}"
+            self.subscriptions[sub_id] = json.loads(request.content)
+            approve = f"https://www.sandbox.paypal.com/webapps/billing/subscriptions?ba_token=BA-{sub_id}"
+            return httpx.Response(201, json={"id": sub_id, "status": "APPROVAL_PENDING",
+                                             "links": [{"rel": "approve", "href": approve}]})
+        if path.startswith("/v1/billing/subscriptions/") and path.endswith("/cancel"):
+            self.cancelled.append(path.split("/")[-2])
+            return httpx.Response(204)
         if path == "/v1/notifications/verify-webhook-signature":
             return httpx.Response(200, json={"verification_status": self.verification_status})
         if path.startswith("/v2/checkout/orders/") and request.method == "GET":

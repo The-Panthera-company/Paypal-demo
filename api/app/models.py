@@ -1,5 +1,5 @@
 """The fourteen tables from the System Design data model, plus webhook_events, payout_accounts,
-category_gifts and category_allocations.
+category_gifts, category_allocations, paypal_plans and agent_subscriptions.
 
 Amounts are integers in minor units. List fields (tags, categories) are JSON so the
 same models run on Postgres and on SQLite in tests.
@@ -341,4 +341,28 @@ class CategoryAllocation(Base):
     donation_id: Mapped[int] = mapped_column(ForeignKey("donations.id"))
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
     amount: Mapped[int] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PaypalPlan(Base):
+    """The PayPal billing plan behind monthly Giving Agent budgets, created once per currency."""
+
+    __tablename__ = "paypal_plans"
+
+    currency: Mapped[str] = mapped_column(String(3), primary_key=True)
+    product_id: Mapped[str] = mapped_column(String(64))
+    plan_id: Mapped[str] = mapped_column(String(64))
+
+
+class AgentSubscription(Base):
+    """A donor's monthly PayPal subscription that tops up their Giving Agent budget."""
+
+    __tablename__ = "agent_subscriptions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # PayPal's subscription id, I-...
+    donor_id: Mapped[int] = mapped_column(ForeignKey("donors.id"))
+    amount: Mapped[int] = mapped_column(BigInteger)  # cents per month
+    currency: Mapped[str] = mapped_column(String(3))
+    # APPROVAL_PENDING until the donor approves in PayPal, then ACTIVE, SUSPENDED, CANCELLED or EXPIRED
+    status: Mapped[str] = mapped_column(String(30), default="APPROVAL_PENDING")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

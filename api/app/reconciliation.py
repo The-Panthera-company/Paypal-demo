@@ -51,8 +51,10 @@ def report(db: Session, now: datetime | None = None) -> dict:
         if refs:
             issues.append({"check": check, "severity": severity, "detail": detail, "refs": refs})
 
+    # Orders, plus subscription charges (no order; the sale id is stored as the capture id).
     paid_via_paypal = select(Donation).where(
-        Donation.paypal_order_id.is_not(None), Donation.status.in_((DonationStatus.captured, DonationStatus.refunded))
+        Donation.paypal_order_id.is_not(None) | Donation.paypal_capture_id.is_not(None),
+        Donation.status.in_((DonationStatus.captured, DonationStatus.refunded)),
     )
     paypal_paid = list(db.scalars(paid_via_paypal))
     booked = set(db.scalars(select(LedgerEntry.donation_id).where(LedgerEntry.type == LedgerType.donation)))
@@ -104,9 +106,9 @@ def report(db: Session, now: datetime | None = None) -> dict:
     issue("payout_not_sent", "warning", "Payout batches waiting to be sent (see each item's error)",
           [p.id for p in payouts if not p.paypal_batch_id])
     paid_items = set(db.scalars(select(LedgerEntry.payout_item_id).where(LedgerEntry.type == LedgerType.payout)))
-    issue("payout_success_not_booked", "error", "Successful payout items with no payout ledger entry",
-          [i.get("payout_item_id") for p in payouts for i in p.items or []
-           if i.get("status") == "SUCCESS" and i.get("payout_item_id") not in paid_items])
+    issue("payout_success_not_booked", "error", "Payout batches with a successful item that has no payout ledger entry",
+          [p.id for p in payouts if any(i.get("status") == "SUCCESS" and i.get("payout_item_id") not in paid_items
+                                         for i in p.items or [])])
     issue("payout_unclaimed", "warning", "Payouts sent to an email with no PayPal account yet (returned after 30 days)",
           [p.id for p in payouts if any(i.get("status") == "UNCLAIMED" for i in p.items or [])])
     issue("payout_failed", "warning", "Payout items that failed, were returned or blocked: retry them",

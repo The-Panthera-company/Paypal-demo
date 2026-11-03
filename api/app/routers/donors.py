@@ -3,16 +3,19 @@
 There is no login yet, so routes take the donor id; demo logins decide who is who.
 """
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import reports
+from app import reports, subscriptions
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.mandates import check_gift, funded_balance, weight_problems
-from app.models import AuditLog, Category, Donation, DonationStatus, Donor, Mandate, MandateRun, Project, TargetType
+from app.models import AgentSubscription, AuditLog, Category, Donation, DonationStatus, Donor, Mandate, MandateRun, Project, TargetType
 from app.money import to_paypal
+from app.paypal import PayPalClient, PayPalError, get_paypal
 from app.routers.donations import donation_out, mark_captured
 from app.schemas import (
     ApprovalIn,
@@ -25,6 +28,8 @@ from app.schemas import (
     MandateOut,
     MandateRunOut,
     PendingApproval,
+    SubscriptionIn,
+    SubscriptionOut,
 )
 
 router = APIRouter(prefix="/donors", tags=["donors"])
@@ -133,6 +138,95 @@ def set_mandate(
     db.add(m)
     db.commit()
     return mandate_out(db, m)
+
+
+def subscription_out(sub: AgentSubscription, approve: str | None = None) -> SubscriptionOut:
+    return SubscriptionOut(
+        subscription_id=sub.id,
+        donor_id=sub.donor_id,
+        monthly_amount_cents=sub.amount,
+        currency=sub.currency,
+        status=sub.status,
+        approve_url=approve,
+    )
+
+
+@router.post(
+    "/{donor_id}/mandate/subscription",
+    response_model=SubscriptionOut,
+    status_code=201,
+    responses={404: {"model": ErrorOut}, 409: {"model": ErrorOut}, 422: {"model": ErrorOut, "description": "Invalid amount"},
+               502: {"model": ErrorOut}},
+)
+def start_subscription(
+    donor_id: int,
+    body: SubscriptionIn,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    paypal: PayPalClient = Depends(get_paypal),
+):
+    """Fund the Giving Agent monthly through PayPal. Returns the subscription id (for the JS SDK's
+    createSubscription) and an approve_url. Each monthly charge is credited to the funded balance."""
+    _donor_or_404(db, donor_id)
+    if body.monthly_amount_cents % 100:
+        raise _error(422, "WHOLE_DOLLARS_ONLY", "Monthly amounts are whole dollars (multiples of 100 cents)")
+    if (existing := subscriptions.current(db, donor_id)) is not None and existing.status != "APPROVAL_PENDING":
+        raise _error(409, "ALREADY_SUBSCRIBED", f"Subscription {existing.id} is {existing.status}; cancel it first")
+    try:
+        plan_id = subscriptions.plan_for(db, paypal, settings.currency)
+        db.commit()
+        created = paypal.create_subscription(
+            plan_id=plan_id,
+            quantity=body.monthly_amount_cents // 100,
+            custom_id=f"donor:{donor_id}",
+            return_url=f"{settings.web_url.rstrip('/')}/mandate?subscription=approved",
+            cancel_url=f"{settings.web_url.rstrip('/')}/mandate?subscription=cancelled",
+            request_id=f"agent-subscription-{donor_id}-{body.monthly_amount_cents}-{datetime.now(timezone.utc):%Y%m%d%H%M}",
+        )
+    except PayPalError as e:
+        db.rollback()
+        raise _error(502, e.issue, "PayPal could not start the subscription")
+    if existing is not None:  # an unapproved earlier attempt is replaced
+        existing.status = "CANCELLED"
+    sub = AgentSubscription(id=created["id"], donor_id=donor_id, amount=body.monthly_amount_cents,
+                            currency=settings.currency, status=created.get("status", "APPROVAL_PENDING"))
+    db.add(sub)
+    db.add(AuditLog(actor="donor", action="subscription_started", inputs={"donor_id": donor_id, "subscription_id": sub.id},
+                    rule_result=sub.status, reason=f"{body.monthly_amount_cents} cents a month to the Giving Agent"))
+    db.commit()
+    return subscription_out(sub, subscriptions.approve_url(created))
+
+
+@router.get("/{donor_id}/mandate/subscription", response_model=SubscriptionOut, responses={404: {"model": ErrorOut}})
+def get_subscription(donor_id: int, db: Session = Depends(get_db)):
+    _donor_or_404(db, donor_id)
+    sub = subscriptions.current(db, donor_id)
+    if sub is None:
+        raise _error(404, "NO_SUBSCRIPTION", "No monthly Giving Agent subscription")
+    return subscription_out(sub)
+
+
+@router.post(
+    "/{donor_id}/mandate/subscription/cancel",
+    response_model=SubscriptionOut,
+    responses={404: {"model": ErrorOut}, 502: {"model": ErrorOut}},
+)
+def cancel_subscription(donor_id: int, db: Session = Depends(get_db), paypal: PayPalClient = Depends(get_paypal)):
+    """Stop the monthly charge. Money already credited stays in the funded balance."""
+    _donor_or_404(db, donor_id)
+    sub = subscriptions.current(db, donor_id)
+    if sub is None:
+        raise _error(404, "NO_SUBSCRIPTION", "No monthly Giving Agent subscription")
+    if sub.status != "APPROVAL_PENDING":  # never approved: nothing to cancel at PayPal
+        try:
+            paypal.cancel_subscription(sub.id, reason="Donor cancelled the Giving Agent monthly budget")
+        except PayPalError as e:
+            raise _error(502, e.issue, "PayPal could not cancel the subscription")
+    sub.status = "CANCELLED"
+    db.add(AuditLog(actor="donor", action="subscription_cancelled", inputs={"donor_id": donor_id, "subscription_id": sub.id},
+                    rule_result="cancelled", reason=None))
+    db.commit()
+    return subscription_out(sub)
 
 
 @router.get("/{donor_id}/mandate/runs", response_model=list[MandateRunOut])

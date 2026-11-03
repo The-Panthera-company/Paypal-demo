@@ -102,11 +102,68 @@ def test_stub_returns_501_when_examples_off(client):
 
 def test_exported_spec_is_current():
     """Fails when routes change without re-running scripts/export_openapi.py."""
+    from scripts.export_openapi import exported_spec
+
     exported = json.loads((Path(__file__).parent.parent / "openapi.json").read_text(encoding="utf-8"))
-    assert exported == json.loads(json.dumps(app.openapi()))
+    assert exported == json.loads(json.dumps(exported_spec()))
+    assert exported["servers"][0]["url"] == "https://giving-api.onrender.com"  # SDKs call Render by default
 
 
 def test_spec_wording_does_not_depend_on_python_version():
     """Python 3.13 renamed status 422 ("Unprocessable Entity" -> "Unprocessable Content"). A response
     without its own description would make openapi.json differ between machines."""
     assert "Unprocessable" not in json.dumps(app.openapi())
+
+
+def test_spec_is_fully_documented():
+    """Every schema, field and parameter has a description (APIMatic scores the spec on this)."""
+    spec = app.openapi()
+    schemas = spec["components"]["schemas"]
+    assert [n for n, s in schemas.items() if not s.get("description")] == []
+    assert [f"{n}.{p}" for n, s in schemas.items() for p, d in s.get("properties", {}).items()
+            if not d.get("description") and "$ref" not in d] == []  # a $ref's target has the description
+    assert [f"{m.upper()} {path} {q['name']}" for path, item in spec["paths"].items() for m, op in item.items()
+            for q in op.get("parameters", []) if not q.get("description")] == []
+    assert [f"{m.upper()} {path} {code}" for path, item in spec["paths"].items() for m, op in item.items()
+            for code, r in op["responses"].items() if code != "204" and "content" not in r] == []
+    assert spec["info"]["contact"] and spec["info"]["license"] and spec["tags"]
+    assert spec["components"]["securitySchemes"]["HTTPBearer"]["description"]
+
+
+def test_request_examples_are_valid():
+    """Each request body's example in the spec is accepted by the model the route really uses."""
+    from fastapi.routing import APIRoute
+
+    schemas = app.openapi()["components"]["schemas"]
+    checked = 0
+    for route in app.routes:
+        if isinstance(route, APIRoute) and route.body_field is not None:
+            model = route.body_field.type_
+            example = schemas.get(model.__name__, {}).get("example")
+            if hasattr(model, "model_validate") and example is not None:
+                model.model_validate(example)
+                checked += 1
+    assert checked >= 15
+
+
+def test_no_duplicate_schema_titles():
+    """APIMatic rule L663: only named schemas keep a title, and those are unique."""
+    spec = app.openapi()
+    titles = []
+
+    def walk(node, in_example=False):
+        if isinstance(node, dict):
+            if not in_example and isinstance(node.get("title"), str):
+                titles.append(node["title"])
+            for key, value in node.items():
+                walk(value, in_example or key in ("example", "examples"))
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, in_example)
+
+    walk(spec["paths"])
+    for schema in spec["components"]["schemas"].values():
+        walk({k: v for k, v in schema.items() if k != "title"})
+    assert titles == []
+    named = [s["title"] for s in spec["components"]["schemas"].values() if "title" in s]
+    assert len(named) == len(set(named))

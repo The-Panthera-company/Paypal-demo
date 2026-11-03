@@ -24,7 +24,7 @@ The spec is [`api/openapi.json`](openapi.json), generated from the code. After c
 .venv/Scripts/python -m scripts.export_openapi
 ```
 
-A test fails if the file is out of date. Conventions:
+A test fails if the file is out of date. Descriptions and examples that the models don't carry themselves live in [`app/openapi_docs.py`](app/openapi_docs.py); a test fails if a new field, schema or parameter has none, or if a request example wouldn't pass validation. Conventions:
 
 - Money: integers in minor units in fields ending `_cents`, plus `currency` (USD).
 - Errors: `{"detail": {"error": "CODE", "message": "..."}}`.
@@ -36,7 +36,7 @@ A test fails if the file is out of date. Conventions:
 |---|---|---|
 | Catalogue | `GET /categories`, `GET /projects` (filters: category, cause, beneficiary group, region, `exclude_tags`, `q`, sort), `GET /projects/{id}`, `GET /projects/{id}/funding-history`, `GET /projects/{id}/stories` | project application, document upload |
 | Donations | create order, capture, `GET /donations/{id}`, `POST /donations/category-preview` | |
-| Donors | `GET`/`PATCH /donors/{id}`, `GET /donors/{id}/report`, mandate (`GET`/`PUT`), mandate runs, pending approvals and the yes/no | |
+| Donors | `GET`/`PATCH /donors/{id}`, `GET /donors/{id}/report`, mandate (`GET`/`PUT`), monthly subscription (start, status, cancel), mandate runs, pending approvals and the yes/no | |
 | Rounds | `GET /rounds/current`, `GET /rounds/{id}/leaderboard` | |
 | Admin | review queue, verify, payout account, cases list, resolve case, held milestones, milestone review, payouts (list, send, refresh, retry), round close, reconciliation and sweep, audit log, webhook events | |
 | Internal (agents) | active mandates, mandate runs, checked donations, payout requests, Watchdog cases, audit | |
@@ -64,6 +64,16 @@ For a ready-made request list, import `api/openapi.json` into Postman (**Import*
 7. When P2's frontend is deployed, add its URL to `CORS_ORIGINS` (comma-separated) in the **Environment** tab.
 
 Notes: tables are created on first start. The free web service sleeps after ~15 min idle, so the first request after that takes ~1 min; open `/health` before a demo. The free database expires after 30 days, enough for the hackathon. Each push to the deployed branch redeploys.
+
+## SDKs with APIMatic
+
+`openapi.json` is valid OpenAPI 3.1 (50 operations, each with a unique `operationId` and a description) and lists the Render and local servers, so it can be turned into SDKs as is.
+
+1. apimatic.io → sign in → **Import API** → upload `api/openapi.json`.
+2. **Generate SDK** → Python (for P3's agents) and/or TypeScript (for the website) → download.
+3. Admin and internal routes take the bearer token in the SDK's configuration (`ADMIN_TOKEN` or `INTERNAL_TOKEN`).
+
+Regenerate after changing the API (re-export the spec first).
 
 ## Tests
 
@@ -151,6 +161,20 @@ The agent never moves money itself: it asks `POST /internal/checked-donations`, 
 - Asking twice for the same run and project returns the first answer (`rule_result: duplicate`), so agent retries are safe. Every request is in the audit log with the agent's reason.
 
 Ledger note for reconciliation: a top-up is a `donation` entry with no project; each agent gift is another `donation` entry with its project. The same money appears twice, so count top-ups (AGENT, no project) as budget, not as giving.
+
+### Monthly budget through PayPal Subscriptions
+
+Instead of one-off top-ups, a donor can fund the agent monthly ([`app/subscriptions.py`](app/subscriptions.py)).
+
+- `POST /donors/{id}/mandate/subscription` `{"monthly_amount_cents": 2500}` (whole dollars) → `subscription_id` and `approve_url`. With the JS SDK (`vault=true&intent=subscription`), return `subscription_id` from `createSubscription`; or send the donor to `approve_url`. PayPal sends them back to `WEB_URL/mandate?subscription=approved` (or `=cancelled`).
+- One PayPal plan per currency at 1.00 a month with quantity allowed: 25 USD a month is quantity 25. Created on first use and stored in `paypal_plans`.
+- Each monthly charge arrives as `PAYMENT.SALE.COMPLETED` and is credited to the funded balance once (keyed by the sale id), with its ledger and fee entries. `BILLING.SUBSCRIPTION.*` webhooks keep `status` current (`APPROVAL_PENDING`, `ACTIVE`, `SUSPENDED`, `CANCELLED`, `EXPIRED`).
+- `GET /donors/{id}/mandate/subscription`; `POST /donors/{id}/mandate/subscription/cancel` stops future charges (money already credited stays). One active subscription per donor.
+- **PayPal dashboard:** add these to the webhook's events: *Payment sale completed*, *Billing subscription activated*, *re-activated*, *suspended*, *cancelled*, *expired* and *payment failed*. Render: set `WEB_URL` to the website's URL.
+
+### MCP tools for the agents
+
+[`mcp-server/`](../mcp-server/README.md) wraps the `/internal/*` routes (and the project and leaderboard reads) as MCP tools for P3's agents. Each tool is one call to this API with the internal token, so every rule is still checked here.
 
 ## Watchdog cases
 
