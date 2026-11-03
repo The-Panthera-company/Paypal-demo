@@ -1,0 +1,5567 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Community Giving API",
+    "description": "\nCore API for the Community Giving Platform. Owns all money logic; the only service with PayPal credentials.\n\n* Money is integer minor units in fields ending in `_cents`, with a currency code (USD).\n* Errors are `{\"detail\": {\"error\": CODE, \"message\": text}}`.\n* Routes not built yet return their example response with an `X-Stub` header (or **501 NOT_IMPLEMENTED** when `STUB_EXAMPLES=false`). Don't treat their data as real.\n* `/admin/*` needs `Authorization: Bearer <ADMIN_TOKEN>`; `/internal/*` (agents) needs `Bearer <INTERNAL_TOKEN>`.\n",
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/categories": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "List Categories",
+        "operationId": "list_categories",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Categories"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "List Projects",
+        "operationId": "list_projects",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "name": "cause",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cause"
+            }
+          },
+          {
+            "name": "beneficiary_group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "children, adults or elderly",
+              "title": "Beneficiary Group"
+            },
+            "description": "children, adults or elderly"
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Region"
+            }
+          },
+          {
+            "name": "exclude_tags",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated tags to leave out",
+              "title": "Exclude Tags"
+            },
+            "description": "Comma-separated tags to leave out"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Case-insensitive title search",
+              "title": "Q"
+            },
+            "description": "Case-insensitive title search"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(urgency|newest|fewest_backers)$",
+              "default": "urgency",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectSummary"
+                  },
+                  "title": "Response List Projects"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Apply Project",
+        "description": "A project owner applies; the project starts as pending_review until an admin verifies it.",
+        "operationId": "apply_project",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectApplicationIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "In the spec, not built yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Get Project",
+        "operationId": "get_project",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/funding-history": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Funding History",
+        "description": "Cumulative amount raised and backers per day, from captured donations (category shares included).",
+        "operationId": "funding_history",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FundingPoint"
+                  },
+                  "title": "Response Funding History"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/stories": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Project Stories",
+        "description": "Impact updates: released milestones with their evidence, newest first.",
+        "operationId": "project_stories",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StoryOut"
+                  },
+                  "title": "Response Project Stories"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "In the spec, not built yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{project_id}/documents": {
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Add Document",
+        "description": "Registration, plan, receipt or photo. Receipts and photos with a milestone_id are milestone evidence.",
+        "operationId": "add_document",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOut"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "In the spec, not built yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/donations/orders": {
+      "post": {
+        "tags": [
+          "donations"
+        ],
+        "summary": "Create Order",
+        "operationId": "create_order",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrderIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateOrderOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/donations/orders/{order_id}/capture": {
+      "post": {
+        "tags": [
+          "donations"
+        ],
+        "summary": "Capture Order",
+        "operationId": "capture_order",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DonationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/donations/{donation_id}": {
+      "get": {
+        "tags": [
+          "donations"
+        ],
+        "summary": "Get Donation",
+        "operationId": "get_donation",
+        "parameters": [
+          {
+            "name": "donation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Donation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DonationOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/donations/category-preview": {
+      "post": {
+        "tags": [
+          "donations"
+        ],
+        "summary": "Category Preview",
+        "description": "Where a category gift would go before the donor pays, after their exclusions.\n\nRules: crowd (default) = 20% equally + 80% by how many people backed each project;\nequal; closest_to_goal = fills the projects nearest their goal first.",
+        "operationId": "category_preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryPreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryPreviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/donors/{donor_id}": {
+      "get": {
+        "tags": [
+          "donors"
+        ],
+        "summary": "Get Donor",
+        "operationId": "get_donor",
+        "parameters": [
+          {
+            "name": "donor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Donor Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DonorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "donors"
+        ],
+        "summary": "Update Donor",
+        "description": "Interests step at sign-up and the leaderboard opt-in.",
+        "operationId": "update_donor",
+        "parameters": [
+          {
+            "name": "donor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Donor Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DonorUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DonorOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/donors/{donor_id}/report": {
+      "get": {
+        "tags": [
+          "donors"
+        ],
+        "summary": "Donor Report",
+        "description": "\"Where your money went\": gifts, match unlocked, impact updates and the agent's report.",
+        "operationId": "donor_report",
+        "parameters": [
+          {
+            "name": "donor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Donor Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DonorReport"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "In the spec, not built yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/donors/{donor_id}/mandate": {
+      "get": {
+        "tags": [
+          "donors"
+        ],
+        "summary": "Get Mandate",
+        "operationId": "get_mandate",
+        "parameters": [
+          {
+            "name": "donor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Donor Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "donors"
+        ],
+        "summary": "Set Mandate",
+        "description": "Create or replace the Giving Agent's rules. The budget is funded separately through PayPal:\n`POST /donations/orders` with `target_type: AGENT` and no project tops it up.",
+        "operationId": "set_mandate",
+        "parameters": [
+          {
+            "name": "donor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Donor Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MandateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/donors/{donor_id}/mandate/runs": {
+      "get": {
+        "tags": [
+          "donors"
+        ],
+        "summary": "Mandate Runs",
+        "description": "The agent's runs for this donor, newest first: candidates, scores, choices and the report.",
+        "operationId": "mandate_runs",
+        "parameters": [
+          {
+            "name": "donor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Donor Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MandateRunOut"
+                  },
+                  "title": "Response Mandate Runs"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/donors/{donor_id}/pending-approvals": {
+      "get": {
+        "tags": [
+          "donors"
+        ],
+        "summary": "Pending Approvals",
+        "description": "Agent gifts above the donor's approval threshold.",
+        "operationId": "pending_approvals",
+        "parameters": [
+          {
+            "name": "donor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Donor Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PendingApproval"
+                  },
+                  "title": "Response Pending Approvals"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/donors/{donor_id}/pending-approvals/{donation_id}": {
+      "post": {
+        "tags": [
+          "donors"
+        ],
+        "summary": "Decide Approval",
+        "description": "Yes records the gift after re-checking the mandate (it may have changed since); no cancels it.",
+        "operationId": "decide_approval",
+        "parameters": [
+          {
+            "name": "donor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Donor Id"
+            }
+          },
+          {
+            "name": "donation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Donation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DonationOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rounds/current": {
+      "get": {
+        "tags": [
+          "rounds"
+        ],
+        "summary": "Current Round",
+        "operationId": "current_round",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/rounds/{round_id}/leaderboard": {
+      "get": {
+        "tags": [
+          "rounds"
+        ],
+        "summary": "Leaderboard",
+        "description": "Projected match while the round is open (recomputed every 5 minutes); final once the round closes.\n\nProjects whose matching the Watchdog froze are listed with a match of 0 and `matching_frozen: true`.",
+        "operationId": "leaderboard",
+        "parameters": [
+          {
+            "name": "round_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Round Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/projects": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Review Queue",
+        "operationId": "review_queue",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ProjectStatus",
+              "default": "pending_review"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectSummary"
+                  },
+                  "title": "Response Review Queue"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/projects/{project_id}/verify": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Verify Project",
+        "description": "Approve lists the project (verified); reject sends it back to the applicant (draft).",
+        "operationId": "verify_project",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/cases": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Cases",
+        "operationId": "list_cases",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/CaseStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "open",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CaseOut"
+                  },
+                  "title": "Response List Cases"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/cases/{case_id}/resolve": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Resolve Case",
+        "description": "clear: a false alarm, matching resumes. confirm: the evidence's donor_ids count as one person\nin matching, and matching resumes. confirm + remove_project: the project is delisted and its\nmatching stays frozen; refund its donations in PayPal and the refund webhooks update the totals.",
+        "operationId": "resolve_case",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseResolveIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/milestones/held": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Held Milestones",
+        "description": "Tranche requests the Milestone Agent sent to a human (failed check, open case or above threshold).\nThe agent's summary and the failed checks are in the audit log (actor milestone-agent).",
+        "operationId": "held_milestones",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MilestoneOut"
+                  },
+                  "type": "array",
+                  "title": "Response Held Milestones"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/milestones/{milestone_id}/review": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Review Milestone",
+        "description": "Approve releases the tranche; reject sends it back so the project can submit better evidence.",
+        "operationId": "review_milestone",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "milestone_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Milestone Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MilestoneReviewIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/payouts": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Payouts",
+        "operationId": "list_payouts",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PayoutOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Payouts"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/payouts/{payout_id}/send": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Send Payout",
+        "description": "Send a batch that is still pending (no payout account at release, or PayPal refused it).\nSame sender_batch_id, so it can never pay twice.",
+        "operationId": "send_payout",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "payout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Payout Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/payouts/{payout_id}/refresh": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Refresh Payout",
+        "description": "Ask PayPal for the batch's current status, in case a webhook was missed.",
+        "operationId": "refresh_payout",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "payout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Payout Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/payouts/{payout_id}/retry": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Retry Payout",
+        "description": "Failed, returned or blocked items go out again in a new batch with a new sender_batch_id.",
+        "operationId": "retry_payout",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "payout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Payout Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/projects/{project_id}/payout-account": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Payout Account",
+        "operationId": "get_payout_account",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutAccountOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Set Payout Account",
+        "description": "The PayPal email the project's tranches are paid to.",
+        "operationId": "set_payout_account",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayoutAccountIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutAccountOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/reconciliation": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Reconciliation Report",
+        "description": "Money in and out, and every check that our records add up. `ok` is false when any issue is an error.",
+        "operationId": "reconciliation_report",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/reconciliation/sweep": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Sweep Orders",
+        "description": "Settle PayPal orders our capture route never finished: asks PayPal for each order still open\nafter 30 minutes and captures, records or closes it.",
+        "operationId": "sweep_orders",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SweepOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/audit-log": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Audit Log",
+        "description": "The agent log view: every action with its inputs, rule result and reason.",
+        "operationId": "audit_log",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "e.g. giving-agent, milestone-agent, watchdog-agent",
+              "title": "Actor"
+            },
+            "description": "e.g. giving-agent, milestone-agent, watchdog-agent"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditOut"
+                  },
+                  "title": "Response Audit Log"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/webhook-events": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Webhook Events",
+        "description": "Recent PayPal webhook deliveries and what we did with each; for checking the live setup.",
+        "operationId": "webhook_events",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WebhookEventOut"
+                  },
+                  "title": "Response Webhook Events"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/rounds/{round_id}/close": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Close Round",
+        "description": "Computes final results and adds each project's match to its next milestone tranche.\n\nWaits while any Watchdog case is open: the round moves to `closing`, the answer is 409\nWAITING_FOR_CASES, and it closes on its own (background loop) once the cases are resolved.\nRounds also close on their own at their end time; this route is for closing now.",
+        "operationId": "close_round",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "round_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Round Id"
+            }
+          },
+          {
+            "name": "early",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Close before the round's end time (e.g. for the demo)",
+              "default": false,
+              "title": "Early"
+            },
+            "description": "Close before the round's end time (e.g. for the demo)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/mandates/active": {
+      "get": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Active Mandates",
+        "description": "Mandates for the Giving Agent's run, with each donor's remaining funded balance.",
+        "operationId": "active_mandates",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveMandate"
+                  },
+                  "type": "array",
+                  "title": "Response Active Mandates"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/internal/mandate-runs": {
+      "post": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Record Mandate Run",
+        "description": "The Giving Agent records its candidates, scores and choices before requesting donations.",
+        "operationId": "record_mandate_run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MandateRunIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateRunOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/internal/checked-donations": {
+      "post": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Checked Donation",
+        "description": "Re-checks budget, per-project max, exclusions and project status, then records the gift\n(target_type AGENT) or parks it for the donor's approval. Never calls PayPal.\n\nAsking twice for the same run and project returns the first answer, so agent retries are safe.",
+        "operationId": "checked_donation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckedDonationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckedDonationOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/internal/watchdog/cases": {
+      "post": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Open Case",
+        "description": "Watchdog rule hit: opens a case and freezes the project's matching (not its donations).\n\nThe same rule firing again on a project with an open case returns that case instead of a new one.",
+        "operationId": "open_case",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/internal/payout-requests": {
+      "post": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Payout Request",
+        "description": "Milestone Agent: all checks pass, no open Watchdog case and the tranche (including its match)\nis at most MILESTONE_AUTO_RELEASE_CENTS -> released and sent through PayPal Payouts;\notherwise held for an admin.",
+        "operationId": "payout_request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PayoutRequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutRequestOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/internal/audit": {
+      "post": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Write Audit",
+        "description": "Agents log decisions that don't go through another endpoint (e.g. a skipped project).",
+        "operationId": "write_audit",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuditIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/webhooks/paypal": {
+      "post": {
+        "tags": [
+          "webhooks"
+        ],
+        "summary": "Paypal Webhook",
+        "description": "Verifies the signature, skips repeats by event id, then handles PAYMENT.CAPTURE.COMPLETED,\n.PENDING, .DENIED, .REFUNDED and .REVERSED, and the PAYMENT.PAYOUTSBATCH.* and\nPAYMENT.PAYOUTS-ITEM.* events. Other types are recorded as ignored.",
+        "operationId": "paypal_webhook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Event"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAck"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/config/paypal": {
+      "get": {
+        "tags": [
+          "paypal"
+        ],
+        "summary": "Paypal Config",
+        "operationId": "paypal_config",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Paypal Config"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActiveMandate": {
+        "properties": {
+          "monthly_budget_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Monthly Budget Cents"
+          },
+          "categories": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Categories",
+            "description": "Category ids the agent may give to"
+          },
+          "excluded_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Tags",
+            "default": []
+          },
+          "per_project_max_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Per Project Max Cents"
+          },
+          "approval_threshold_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Approval Threshold Cents",
+            "description": "Single gifts above this wait for the donor"
+          },
+          "weight_overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Overrides",
+            "description": "Adjust score weights within limits, e.g. {'few_backers': 45}"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": true
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "donor_id": {
+            "type": "integer",
+            "title": "Donor Id"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "funded_balance_cents": {
+            "type": "integer",
+            "title": "Funded Balance Cents",
+            "description": "Budget topped up through PayPal and not yet given"
+          }
+        },
+        "type": "object",
+        "required": [
+          "monthly_budget_cents",
+          "categories",
+          "per_project_max_cents",
+          "approval_threshold_cents",
+          "id",
+          "donor_id",
+          "currency",
+          "funded_balance_cents"
+        ],
+        "title": "ActiveMandate",
+        "example": {
+          "active": true,
+          "approval_threshold_cents": 500,
+          "categories": [
+            2
+          ],
+          "currency": "USD",
+          "donor_id": 1,
+          "excluded_tags": [],
+          "funded_balance_cents": 1000,
+          "id": 1,
+          "monthly_budget_cents": 1000,
+          "per_project_max_cents": 400,
+          "weight_overrides": {
+            "few_backers": 45
+          }
+        }
+      },
+      "Allocation": {
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "title": "Amount Cents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "title",
+          "amount_cents"
+        ],
+        "title": "Allocation"
+      },
+      "ApprovalIn": {
+        "properties": {
+          "approve": {
+            "type": "boolean",
+            "title": "Approve"
+          }
+        },
+        "type": "object",
+        "required": [
+          "approve"
+        ],
+        "title": "ApprovalIn"
+      },
+      "AuditIn": {
+        "properties": {
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "inputs": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputs"
+          },
+          "rule_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Result"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "actor",
+          "action"
+        ],
+        "title": "AuditIn"
+      },
+      "AuditOut": {
+        "properties": {
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "inputs": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputs"
+          },
+          "rule_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Result"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "actor",
+          "action",
+          "id",
+          "created_at"
+        ],
+        "title": "AuditOut",
+        "example": {
+          "action": "checked_donation",
+          "actor": "giving-agent",
+          "created_at": "2026-11-06T09:00:02Z",
+          "id": 40,
+          "inputs": {
+            "amount_cents": 300,
+            "mandate_run_id": 5,
+            "project_id": 2
+          },
+          "reason": "Few backers (4), 60% funded, receipts uploaded",
+          "rule_result": "ok"
+        }
+      },
+      "CaseIn": {
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          },
+          "rule": {
+            "type": "string",
+            "enum": [
+              "new_payer_burst",
+              "reciprocal_backing",
+              "owner_donation",
+              "refund_spike"
+            ],
+            "title": "Rule"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Evidence",
+            "description": "Include \"donor_ids\": [..] for the suspected cluster; if an admin confirms the case, the matching engine counts those donors as one person."
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "rule",
+          "evidence"
+        ],
+        "title": "CaseIn"
+      },
+      "CaseOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          },
+          "rule": {
+            "type": "string",
+            "title": "Rule"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CaseStatus"
+          },
+          "frozen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frozen At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "rule",
+          "evidence",
+          "status",
+          "frozen_at",
+          "resolved_by",
+          "created_at"
+        ],
+        "title": "CaseOut",
+        "example": {
+          "created_at": "2026-11-08T14:02:00Z",
+          "evidence": {
+            "median_amount_cents": 100,
+            "new_payer_ids": 20,
+            "window_minutes": 15
+          },
+          "frozen_at": "2026-11-08T14:02:00Z",
+          "id": 2,
+          "project_id": 6,
+          "rule": "new_payer_burst",
+          "status": "open"
+        }
+      },
+      "CaseResolveIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "clear",
+              "confirm"
+            ],
+            "title": "Action",
+            "description": "clear = resume matching; confirm = merge flagged donors into one cluster"
+          },
+          "remove_project": {
+            "type": "boolean",
+            "title": "Remove Project",
+            "description": "With confirm: remove the project and refund its donations",
+            "default": false
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "CaseResolveIn"
+      },
+      "CaseStatus": {
+        "type": "string",
+        "enum": [
+          "open",
+          "cleared",
+          "confirmed"
+        ],
+        "title": "CaseStatus"
+      },
+      "CategoryOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "project_count": {
+            "type": "integer",
+            "title": "Project Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "project_count"
+        ],
+        "title": "CategoryOut",
+        "example": {
+          "id": 2,
+          "name": "Education",
+          "project_count": 4
+        }
+      },
+      "CategoryPreviewIn": {
+        "properties": {
+          "rule": {
+            "type": "string",
+            "enum": [
+              "crowd",
+              "equal",
+              "closest_to_goal"
+            ],
+            "title": "Rule",
+            "description": "crowd = 80% by project scores + 20% equally (default)",
+            "default": "crowd"
+          },
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Cents"
+          },
+          "excluded_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Tags",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "category_id",
+          "amount_cents"
+        ],
+        "title": "CategoryPreviewIn"
+      },
+      "CategoryPreviewOut": {
+        "properties": {
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "title": "Amount Cents"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "rule": {
+            "type": "string",
+            "title": "Rule"
+          },
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/Allocation"
+            },
+            "type": "array",
+            "title": "Allocations"
+          },
+          "excluded": {
+            "items": {
+              "$ref": "#/components/schemas/ExcludedProject"
+            },
+            "type": "array",
+            "title": "Excluded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category_id",
+          "amount_cents",
+          "currency",
+          "rule",
+          "allocations",
+          "excluded"
+        ],
+        "title": "CategoryPreviewOut",
+        "example": {
+          "allocations": [
+            {
+              "amount_cents": 1100,
+              "project_id": 1,
+              "title": "Lanet Library"
+            },
+            {
+              "amount_cents": 600,
+              "project_id": 2,
+              "title": "Kaptembwo Desks"
+            },
+            {
+              "amount_cents": 300,
+              "project_id": 4,
+              "title": "New Reading Corner"
+            }
+          ],
+          "amount_cents": 2000,
+          "category_id": 2,
+          "currency": "USD",
+          "excluded": [
+            {
+              "matched_tag": "faith-based",
+              "project_id": 3,
+              "title": "Girls' STEM Club"
+            }
+          ],
+          "rule": "crowd"
+        }
+      },
+      "CheckedDonationIn": {
+        "properties": {
+          "mandate_run_id": {
+            "type": "integer",
+            "title": "Mandate Run Id"
+          },
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Cents"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "description": "Why the agent chose this project; stored in the audit log"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mandate_run_id",
+          "project_id",
+          "amount_cents",
+          "reason"
+        ],
+        "title": "CheckedDonationIn"
+      },
+      "CheckedDonationOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "recorded",
+              "awaiting_donor_approval",
+              "rejected"
+            ],
+            "title": "Status"
+          },
+          "donation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Donation Id"
+          },
+          "rule_result": {
+            "type": "string",
+            "title": "Rule Result",
+            "description": "ok, or the rule that blocked it, e.g. over_per_project_max"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "donation_id",
+          "rule_result",
+          "reason"
+        ],
+        "title": "CheckedDonationOut",
+        "example": {
+          "donation_id": 12,
+          "reason": "Within budget, per-project max and exclusions",
+          "rule_result": "ok",
+          "status": "recorded"
+        }
+      },
+      "CreateOrderIn": {
+        "properties": {
+          "target_type": {
+            "$ref": "#/components/schemas/TargetType"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "title": "Amount Cents"
+          },
+          "rule": {
+            "type": "string",
+            "enum": [
+              "crowd",
+              "equal",
+              "closest_to_goal"
+            ],
+            "title": "Rule",
+            "default": "crowd"
+          },
+          "excluded_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Tags",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_type",
+          "amount_cents"
+        ],
+        "title": "CreateOrderIn"
+      },
+      "CreateOrderOut": {
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "donation_id": {
+            "type": "integer",
+            "title": "Donation Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "donation_id"
+        ],
+        "title": "CreateOrderOut"
+      },
+      "DocumentIn": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/DocumentKind"
+          },
+          "file_url": {
+            "type": "string",
+            "title": "File Url"
+          },
+          "milestone_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Milestone Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "file_url"
+        ],
+        "title": "DocumentIn"
+      },
+      "DocumentKind": {
+        "type": "string",
+        "enum": [
+          "registration",
+          "plan",
+          "receipt",
+          "photo"
+        ],
+        "title": "DocumentKind"
+      },
+      "DocumentOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          },
+          "milestone_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Milestone Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DocumentKind"
+          },
+          "file_url": {
+            "type": "string",
+            "title": "File Url"
+          },
+          "extracted_fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extracted Fields"
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Flags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "milestone_id",
+          "kind",
+          "file_url",
+          "extracted_fields",
+          "flags"
+        ],
+        "title": "DocumentOut",
+        "example": {
+          "extracted_fields": {
+            "date": "2026-11-07",
+            "supplier": "Nakuru Books Ltd",
+            "total_cents": 29500
+          },
+          "file_url": "https://files.example.com/receipt-7.jpg",
+          "flags": [],
+          "id": 11,
+          "kind": "receipt",
+          "milestone_id": 7,
+          "project_id": 1
+        }
+      },
+      "DonationOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DonationStatus"
+          },
+          "target_type": {
+            "$ref": "#/components/schemas/TargetType"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "title": "Amount Cents"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "paypal_order_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paypal Order Id"
+          },
+          "paypal_capture_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paypal Capture Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "target_type",
+          "project_id",
+          "category_id",
+          "amount_cents",
+          "currency",
+          "paypal_order_id",
+          "paypal_capture_id"
+        ],
+        "title": "DonationOut",
+        "example": {
+          "amount_cents": 2000,
+          "currency": "USD",
+          "id": 4,
+          "paypal_capture_id": "09G48096F55227148",
+          "paypal_order_id": "8E825560D88497210",
+          "project_id": 1,
+          "status": "captured",
+          "target_type": "PROJECT"
+        }
+      },
+      "DonationStatus": {
+        "type": "string",
+        "enum": [
+          "created",
+          "pending",
+          "captured",
+          "failed",
+          "refunded"
+        ],
+        "title": "DonationStatus"
+      },
+      "DonorOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "is_guest": {
+            "type": "boolean",
+            "title": "Is Guest"
+          },
+          "show_on_leaderboard": {
+            "type": "boolean",
+            "title": "Show On Leaderboard"
+          },
+          "interests": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interests"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "is_guest",
+          "show_on_leaderboard",
+          "interests"
+        ],
+        "title": "DonorOut",
+        "example": {
+          "display_name": "Wanjiru",
+          "id": 1,
+          "interests": {
+            "categories": [
+              2
+            ],
+            "causes": [
+              "literacy"
+            ],
+            "excluded_tags": []
+          },
+          "is_guest": false,
+          "show_on_leaderboard": false
+        }
+      },
+      "DonorReport": {
+        "properties": {
+          "donor_id": {
+            "type": "integer",
+            "title": "Donor Id"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "total_given_cents": {
+            "type": "integer",
+            "title": "Total Given Cents"
+          },
+          "match_unlocked_cents": {
+            "type": "integer",
+            "title": "Match Unlocked Cents"
+          },
+          "gifts": {
+            "items": {
+              "$ref": "#/components/schemas/ReportGift"
+            },
+            "type": "array",
+            "title": "Gifts"
+          },
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/StoryOut"
+            },
+            "type": "array",
+            "title": "Updates"
+          },
+          "agent_report": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Report"
+          }
+        },
+        "type": "object",
+        "required": [
+          "donor_id",
+          "currency",
+          "total_given_cents",
+          "match_unlocked_cents",
+          "gifts",
+          "updates",
+          "agent_report"
+        ],
+        "title": "DonorReport",
+        "example": {
+          "agent_report": "USD 3.00 to Kaptembwo Desks: 4 backers, 60% funded, receipts uploaded.",
+          "currency": "USD",
+          "donor_id": 1,
+          "gifts": [
+            {
+              "amount_cents": 2000,
+              "donation_id": 4,
+              "match_unlocked_cents": 1150,
+              "project_id": 1,
+              "project_title": "Lanet Library",
+              "status": "captured",
+              "via": "PROJECT"
+            }
+          ],
+          "match_unlocked_cents": 2300,
+          "total_given_cents": 4000,
+          "updates": [
+            {
+              "body": "Receipts checked and the first tranche released.",
+              "created_at": "2026-11-08T12:00:00Z",
+              "evidence_urls": [
+                "https://files.example.com/receipt-7.jpg"
+              ],
+              "id": 3,
+              "milestone_id": 7,
+              "project_id": 1,
+              "title": "40 books delivered"
+            }
+          ]
+        }
+      },
+      "DonorUpdate": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "show_on_leaderboard": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Show On Leaderboard"
+          },
+          "interests": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interests"
+          }
+        },
+        "type": "object",
+        "title": "DonorUpdate"
+      },
+      "ErrorOut": {
+        "properties": {
+          "detail": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorOut",
+        "example": {
+          "detail": {
+            "error": "NOT_IMPLEMENTED",
+            "message": "Planned: matching engine"
+          }
+        }
+      },
+      "ExcludedProject": {
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "matched_tag": {
+            "type": "string",
+            "title": "Matched Tag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "title",
+          "matched_tag"
+        ],
+        "title": "ExcludedProject"
+      },
+      "FundingPoint": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "raised_cents": {
+            "type": "integer",
+            "title": "Raised Cents"
+          },
+          "backer_count": {
+            "type": "integer",
+            "title": "Backer Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "raised_cents",
+          "backer_count"
+        ],
+        "title": "FundingPoint",
+        "example": {
+          "backer_count": 5,
+          "date": "2026-11-03",
+          "raised_cents": 12000
+        }
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LeaderboardOut": {
+        "properties": {
+          "round_id": {
+            "type": "integer",
+            "title": "Round Id"
+          },
+          "is_final": {
+            "type": "boolean",
+            "title": "Is Final",
+            "description": "False while the round is open: amounts are projected"
+          },
+          "computed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Computed At"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "round_id",
+          "is_final",
+          "computed_at",
+          "currency",
+          "rows"
+        ],
+        "title": "LeaderboardOut",
+        "example": {
+          "computed_at": "2026-11-05T10:05:00Z",
+          "currency": "USD",
+          "is_final": false,
+          "round_id": 1,
+          "rows": [
+            {
+              "backer_count": 16,
+              "capped": true,
+              "category": "Education",
+              "crowd_cents": 533300,
+              "floor_cents": 50000,
+              "match_cents": 400000,
+              "matching_frozen": false,
+              "project_id": 1,
+              "raised_cents": 40000,
+              "rank": 1,
+              "score": 6000.0,
+              "title": "Lanet Library"
+            }
+          ]
+        }
+      },
+      "LeaderboardRow": {
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "backer_count": {
+            "type": "integer",
+            "title": "Backer Count"
+          },
+          "raised_cents": {
+            "type": "integer",
+            "title": "Raised Cents"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "floor_cents": {
+            "type": "integer",
+            "title": "Floor Cents"
+          },
+          "crowd_cents": {
+            "type": "integer",
+            "title": "Crowd Cents"
+          },
+          "match_cents": {
+            "type": "integer",
+            "title": "Match Cents"
+          },
+          "capped": {
+            "type": "boolean",
+            "title": "Capped"
+          },
+          "matching_frozen": {
+            "type": "boolean",
+            "title": "Matching Frozen"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rank",
+          "project_id",
+          "title",
+          "category",
+          "backer_count",
+          "raised_cents",
+          "score",
+          "floor_cents",
+          "crowd_cents",
+          "match_cents",
+          "capped",
+          "matching_frozen"
+        ],
+        "title": "LeaderboardRow"
+      },
+      "MandateIn": {
+        "properties": {
+          "monthly_budget_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Monthly Budget Cents"
+          },
+          "categories": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Categories",
+            "description": "Category ids the agent may give to"
+          },
+          "excluded_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Tags",
+            "default": []
+          },
+          "per_project_max_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Per Project Max Cents"
+          },
+          "approval_threshold_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Approval Threshold Cents",
+            "description": "Single gifts above this wait for the donor"
+          },
+          "weight_overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Overrides",
+            "description": "Adjust score weights within limits, e.g. {'few_backers': 45}"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "monthly_budget_cents",
+          "categories",
+          "per_project_max_cents",
+          "approval_threshold_cents"
+        ],
+        "title": "MandateIn"
+      },
+      "MandateOut": {
+        "properties": {
+          "monthly_budget_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Monthly Budget Cents"
+          },
+          "categories": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Categories",
+            "description": "Category ids the agent may give to"
+          },
+          "excluded_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Tags",
+            "default": []
+          },
+          "per_project_max_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Per Project Max Cents"
+          },
+          "approval_threshold_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Approval Threshold Cents",
+            "description": "Single gifts above this wait for the donor"
+          },
+          "weight_overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Overrides",
+            "description": "Adjust score weights within limits, e.g. {'few_backers': 45}"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": true
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "donor_id": {
+            "type": "integer",
+            "title": "Donor Id"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "funded_balance_cents": {
+            "type": "integer",
+            "title": "Funded Balance Cents",
+            "description": "Budget topped up through PayPal and not yet given"
+          }
+        },
+        "type": "object",
+        "required": [
+          "monthly_budget_cents",
+          "categories",
+          "per_project_max_cents",
+          "approval_threshold_cents",
+          "id",
+          "donor_id",
+          "currency",
+          "funded_balance_cents"
+        ],
+        "title": "MandateOut",
+        "example": {
+          "active": true,
+          "approval_threshold_cents": 500,
+          "categories": [
+            2
+          ],
+          "currency": "USD",
+          "donor_id": 1,
+          "excluded_tags": [],
+          "funded_balance_cents": 1000,
+          "id": 1,
+          "monthly_budget_cents": 1000,
+          "per_project_max_cents": 400,
+          "weight_overrides": {
+            "few_backers": 45
+          }
+        }
+      },
+      "MandateRunIn": {
+        "properties": {
+          "mandate_id": {
+            "type": "integer",
+            "title": "Mandate Id"
+          },
+          "decisions": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Decisions"
+          },
+          "report_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mandate_id",
+          "decisions"
+        ],
+        "title": "MandateRunIn"
+      },
+      "MandateRunOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "mandate_id": {
+            "type": "integer",
+            "title": "Mandate Id"
+          },
+          "run_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Run At"
+          },
+          "decisions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decisions"
+          },
+          "report_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "mandate_id",
+          "run_at",
+          "decisions",
+          "report_text"
+        ],
+        "title": "MandateRunOut",
+        "example": {
+          "decisions": {
+            "candidates": [
+              {
+                "project_id": 2,
+                "score": 81.5
+              },
+              {
+                "project_id": 3,
+                "score": 64.0
+              }
+            ],
+            "chosen": [
+              {
+                "amount_cents": 300,
+                "project_id": 2
+              }
+            ],
+            "skipped": [
+              {
+                "project_id": 5,
+                "reason": "excluded tag: gambling-recovery"
+              }
+            ]
+          },
+          "id": 5,
+          "mandate_id": 1,
+          "report_text": "USD 3.00 to Kaptembwo Desks: 4 backers, 60% funded, receipts uploaded.",
+          "run_at": "2026-11-06T09:00:00Z"
+        }
+      },
+      "MilestoneChecks": {
+        "properties": {
+          "receipt_total_within_10pct": {
+            "type": "boolean",
+            "title": "Receipt Total Within 10Pct"
+          },
+          "supplier_matches_plan": {
+            "type": "boolean",
+            "title": "Supplier Matches Plan"
+          },
+          "photo_not_duplicate": {
+            "type": "boolean",
+            "title": "Photo Not Duplicate"
+          },
+          "dated_in_window": {
+            "type": "boolean",
+            "title": "Dated In Window"
+          }
+        },
+        "type": "object",
+        "required": [
+          "receipt_total_within_10pct",
+          "supplier_matches_plan",
+          "photo_not_duplicate",
+          "dated_in_window"
+        ],
+        "title": "MilestoneChecks"
+      },
+      "MilestoneOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "title": "Amount Cents"
+          },
+          "match_amount_cents": {
+            "type": "integer",
+            "title": "Match Amount Cents"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MilestoneStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "title",
+          "amount_cents",
+          "match_amount_cents",
+          "currency",
+          "due_date",
+          "status"
+        ],
+        "title": "MilestoneOut",
+        "example": {
+          "amount_cents": 30000,
+          "currency": "USD",
+          "due_date": "2026-11-30",
+          "id": 7,
+          "match_amount_cents": 0,
+          "seq": 1,
+          "status": "open",
+          "title": "Buy 40 books"
+        }
+      },
+      "MilestoneReviewIn": {
+        "properties": {
+          "approve": {
+            "type": "boolean",
+            "title": "Approve"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "approve"
+        ],
+        "title": "MilestoneReviewIn"
+      },
+      "MilestoneStatus": {
+        "type": "string",
+        "enum": [
+          "open",
+          "evidence_submitted",
+          "released",
+          "held"
+        ],
+        "title": "MilestoneStatus"
+      },
+      "PayoutAccountIn": {
+        "properties": {
+          "paypal_email": {
+            "type": "string",
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "title": "Paypal Email",
+            "description": "In the sandbox, a sandbox personal account's email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paypal_email"
+        ],
+        "title": "PayoutAccountIn"
+      },
+      "PayoutAccountOut": {
+        "properties": {
+          "paypal_email": {
+            "type": "string",
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "title": "Paypal Email",
+            "description": "In the sandbox, a sandbox personal account's email"
+          },
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paypal_email",
+          "project_id"
+        ],
+        "title": "PayoutAccountOut",
+        "example": {
+          "paypal_email": "lanet-library@example.com",
+          "project_id": 1
+        }
+      },
+      "PayoutItem": {
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          },
+          "milestone_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Milestone Id"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "title": "Amount Cents"
+          },
+          "receiver": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receiver",
+            "description": "Null until the project has a payout account"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "NEW before sending, then PayPal's: PENDING, SUCCESS, UNCLAIMED, FAILED, ..."
+          },
+          "payout_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payout Item Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Why it wasn't sent, e.g. NO_PAYOUT_ACCOUNT or a PayPal issue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "milestone_id",
+          "amount_cents",
+          "receiver",
+          "status"
+        ],
+        "title": "PayoutItem"
+      },
+      "PayoutOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "sender_batch_id": {
+            "type": "string",
+            "title": "Sender Batch Id"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PayoutStatus"
+          },
+          "paypal_batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paypal Batch Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PayoutItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "sender_batch_id",
+          "currency",
+          "status",
+          "paypal_batch_id",
+          "items"
+        ],
+        "title": "PayoutOut",
+        "example": {
+          "currency": "USD",
+          "id": 1,
+          "items": [
+            {
+              "amount_cents": 30000,
+              "milestone_id": 7,
+              "project_id": 1,
+              "receiver": "lanet-library@example.com",
+              "status": "SUCCESS"
+            }
+          ],
+          "paypal_batch_id": "5UXD2E8A7EBQJ",
+          "sender_batch_id": "milestone-7-USD",
+          "status": "success"
+        }
+      },
+      "PayoutRequestIn": {
+        "properties": {
+          "milestone_id": {
+            "type": "integer",
+            "title": "Milestone Id"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/MilestoneChecks"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "LLM summary shown to the admin if the request is held"
+          }
+        },
+        "type": "object",
+        "required": [
+          "milestone_id",
+          "checks",
+          "summary"
+        ],
+        "title": "PayoutRequestIn"
+      },
+      "PayoutRequestOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "released",
+              "held_for_admin"
+            ],
+            "title": "Status"
+          },
+          "payout_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payout Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "payout_id",
+          "reason"
+        ],
+        "title": "PayoutRequestOut",
+        "example": {
+          "payout_id": 1,
+          "reason": "All checks passed, below threshold",
+          "status": "released"
+        }
+      },
+      "PayoutStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "processing",
+          "success",
+          "denied"
+        ],
+        "title": "PayoutStatus"
+      },
+      "PendingApproval": {
+        "properties": {
+          "donation_id": {
+            "type": "integer",
+            "title": "Donation Id"
+          },
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          },
+          "project_title": {
+            "type": "string",
+            "title": "Project Title"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "title": "Amount Cents"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "donation_id",
+          "project_id",
+          "project_title",
+          "amount_cents",
+          "reason"
+        ],
+        "title": "PendingApproval",
+        "example": {
+          "amount_cents": 600,
+          "donation_id": 9,
+          "project_id": 2,
+          "project_title": "Kaptembwo Desks",
+          "reason": "Above your 5.00 approval threshold"
+        }
+      },
+      "ProjectApplicationIn": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "default": []
+          },
+          "cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
+          "beneficiary_group": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "children",
+                  "adults",
+                  "elderly"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beneficiary Group"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "hide_location": {
+            "type": "boolean",
+            "title": "Hide Location",
+            "default": false
+          },
+          "goal_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Goal Cents"
+          },
+          "urgency": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Urgency",
+            "default": 3
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "summary",
+          "category_id",
+          "goal_cents"
+        ],
+        "title": "ProjectApplicationIn"
+      },
+      "ProjectDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
+          "beneficiary_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beneficiary Group"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region",
+            "description": "Null when the project hides its location"
+          },
+          "urgency": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Urgency"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "matching_frozen": {
+            "type": "boolean",
+            "title": "Matching Frozen"
+          },
+          "goal_cents": {
+            "type": "integer",
+            "title": "Goal Cents"
+          },
+          "raised_cents": {
+            "type": "integer",
+            "title": "Raised Cents"
+          },
+          "backer_count": {
+            "type": "integer",
+            "title": "Backer Count",
+            "description": "How many people backed it; never who"
+          },
+          "projected_match_cents": {
+            "type": "integer",
+            "title": "Projected Match Cents"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          },
+          "milestones": {
+            "items": {
+              "$ref": "#/components/schemas/MilestoneOut"
+            },
+            "type": "array",
+            "title": "Milestones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "category_id",
+          "category",
+          "tags",
+          "cause",
+          "beneficiary_group",
+          "region",
+          "urgency",
+          "status",
+          "matching_frozen",
+          "goal_cents",
+          "raised_cents",
+          "backer_count",
+          "projected_match_cents",
+          "currency",
+          "summary",
+          "verified_at",
+          "milestones"
+        ],
+        "title": "ProjectDetail",
+        "example": {
+          "backer_count": 16,
+          "beneficiary_group": "children",
+          "category": "Education",
+          "category_id": 2,
+          "cause": "literacy",
+          "currency": "USD",
+          "goal_cents": 120000,
+          "id": 1,
+          "matching_frozen": false,
+          "milestones": [
+            {
+              "amount_cents": 30000,
+              "currency": "USD",
+              "due_date": "2026-11-30",
+              "id": 7,
+              "match_amount_cents": 0,
+              "seq": 1,
+              "status": "open",
+              "title": "Buy 40 books"
+            }
+          ],
+          "projected_match_cents": 4000,
+          "raised_cents": 40000,
+          "region": "Nakuru",
+          "status": "active",
+          "summary": "A community library for 300 pupils in Lanet.",
+          "tags": [
+            "books",
+            "literacy"
+          ],
+          "title": "Lanet Library",
+          "urgency": 4,
+          "verified_at": "2026-11-01T10:00:00Z"
+        }
+      },
+      "ProjectStatus": {
+        "type": "string",
+        "enum": [
+          "draft",
+          "pending_review",
+          "verified",
+          "active",
+          "frozen",
+          "completed"
+        ],
+        "title": "ProjectStatus"
+      },
+      "ProjectSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "category_id": {
+            "type": "integer",
+            "title": "Category Id"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "cause": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
+          "beneficiary_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beneficiary Group"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region",
+            "description": "Null when the project hides its location"
+          },
+          "urgency": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Urgency"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "matching_frozen": {
+            "type": "boolean",
+            "title": "Matching Frozen"
+          },
+          "goal_cents": {
+            "type": "integer",
+            "title": "Goal Cents"
+          },
+          "raised_cents": {
+            "type": "integer",
+            "title": "Raised Cents"
+          },
+          "backer_count": {
+            "type": "integer",
+            "title": "Backer Count",
+            "description": "How many people backed it; never who"
+          },
+          "projected_match_cents": {
+            "type": "integer",
+            "title": "Projected Match Cents"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "category_id",
+          "category",
+          "tags",
+          "cause",
+          "beneficiary_group",
+          "region",
+          "urgency",
+          "status",
+          "matching_frozen",
+          "goal_cents",
+          "raised_cents",
+          "backer_count",
+          "projected_match_cents",
+          "currency"
+        ],
+        "title": "ProjectSummary",
+        "example": {
+          "backer_count": 16,
+          "beneficiary_group": "children",
+          "category": "Education",
+          "category_id": 2,
+          "cause": "literacy",
+          "currency": "USD",
+          "goal_cents": 120000,
+          "id": 1,
+          "matching_frozen": false,
+          "projected_match_cents": 4000,
+          "raised_cents": 40000,
+          "region": "Nakuru",
+          "status": "active",
+          "tags": [
+            "books",
+            "literacy"
+          ],
+          "title": "Lanet Library",
+          "urgency": 4
+        }
+      },
+      "ReconciliationIssue": {
+        "properties": {
+          "check": {
+            "type": "string",
+            "title": "Check"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Severity"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          },
+          "refs": {
+            "items": {},
+            "type": "array",
+            "title": "Refs",
+            "description": "Ids of the rows involved (donations, payouts, milestones, ...)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "check",
+          "severity",
+          "detail",
+          "refs"
+        ],
+        "title": "ReconciliationIssue"
+      },
+      "ReconciliationOut": {
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "description": "False when any issue is an error"
+          },
+          "totals": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Totals"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ReconciliationIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          }
+        },
+        "type": "object",
+        "required": [
+          "generated_at",
+          "ok",
+          "totals",
+          "issues"
+        ],
+        "title": "ReconciliationOut",
+        "example": {
+          "generated_at": "2026-11-10T09:00:00Z",
+          "issues": [
+            {
+              "check": "payout_unclaimed",
+              "detail": "Payouts sent to an email with no PayPal account yet (returned after 30 days)",
+              "refs": [
+                3
+              ],
+              "severity": "warning"
+            }
+          ],
+          "ok": true,
+          "totals": {
+            "agent_budget_unspent_cents": 700,
+            "category_unallocated_cents": 0,
+            "match_booked_cents": 274000,
+            "paid_out_cents": 30000,
+            "paypal_fees_cents": 4100,
+            "platform_balance_cents": 83900,
+            "received_via_paypal_cents": 120000,
+            "refunded_cents": 2000,
+            "released_not_yet_paid_cents": 5000,
+            "tranches_released_cents": 35000
+          }
+        }
+      },
+      "ReportGift": {
+        "properties": {
+          "donation_id": {
+            "type": "integer",
+            "title": "Donation Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "project_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Title"
+          },
+          "via": {
+            "$ref": "#/components/schemas/TargetType"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "title": "Amount Cents"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DonationStatus"
+          },
+          "match_unlocked_cents": {
+            "type": "integer",
+            "title": "Match Unlocked Cents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "donation_id",
+          "project_id",
+          "project_title",
+          "via",
+          "amount_cents",
+          "status",
+          "match_unlocked_cents"
+        ],
+        "title": "ReportGift"
+      },
+      "RoundOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts At"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "matching_pool_cents": {
+            "type": "integer",
+            "title": "Matching Pool Cents"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "project_cap_pct": {
+            "type": "number",
+            "title": "Project Cap Pct"
+          },
+          "floor_pct": {
+            "type": "number",
+            "title": "Floor Pct"
+          },
+          "per_person_cap_cents": {
+            "type": "integer",
+            "title": "Per Person Cap Cents"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RoundStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "starts_at",
+          "ends_at",
+          "matching_pool_cents",
+          "currency",
+          "project_cap_pct",
+          "floor_pct",
+          "per_person_cap_cents",
+          "status"
+        ],
+        "title": "RoundOut",
+        "example": {
+          "currency": "USD",
+          "ends_at": "2026-11-09T18:00:00Z",
+          "floor_pct": 20.0,
+          "id": 1,
+          "matching_pool_cents": 1000000,
+          "name": "November round",
+          "per_person_cap_cents": 5000,
+          "project_cap_pct": 30.0,
+          "starts_at": "2026-11-01T00:00:00Z",
+          "status": "open"
+        }
+      },
+      "RoundStatus": {
+        "type": "string",
+        "enum": [
+          "scheduled",
+          "open",
+          "closing",
+          "closed"
+        ],
+        "title": "RoundStatus"
+      },
+      "StoryOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          },
+          "milestone_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Milestone Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "evidence_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Urls"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "milestone_id",
+          "title",
+          "body",
+          "evidence_urls",
+          "created_at"
+        ],
+        "title": "StoryOut",
+        "example": {
+          "body": "Receipts checked and the first tranche released.",
+          "created_at": "2026-11-08T12:00:00Z",
+          "evidence_urls": [
+            "https://files.example.com/receipt-7.jpg"
+          ],
+          "id": 3,
+          "milestone_id": 7,
+          "project_id": 1,
+          "title": "40 books delivered"
+        }
+      },
+      "SweepOut": {
+        "properties": {
+          "checked": {
+            "type": "integer",
+            "title": "Checked"
+          },
+          "captured": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Captured",
+            "description": "Donation ids captured or recorded now"
+          },
+          "failed": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Failed",
+            "description": "Voided, declined or abandoned (never approved)"
+          },
+          "unchanged": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Unchanged"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "checked",
+          "captured",
+          "failed",
+          "unchanged",
+          "errors"
+        ],
+        "title": "SweepOut",
+        "example": {
+          "captured": [
+            7
+          ],
+          "checked": 2,
+          "errors": [],
+          "failed": [
+            5
+          ],
+          "unchanged": []
+        }
+      },
+      "TargetType": {
+        "type": "string",
+        "enum": [
+          "PROJECT",
+          "CATEGORY",
+          "AGENT"
+        ],
+        "title": "TargetType"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VerifyIn": {
+        "properties": {
+          "approve": {
+            "type": "boolean",
+            "title": "Approve"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "approve"
+        ],
+        "title": "VerifyIn"
+      },
+      "WebhookAck": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "processed",
+              "duplicate",
+              "ignored",
+              "unmatched",
+              "mismatch"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "status"
+        ],
+        "title": "WebhookAck",
+        "example": {
+          "event_id": "WH-2WR32451HC0233532-67976317FL4543714",
+          "status": "processed"
+        }
+      },
+      "WebhookEventOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "result": {
+            "type": "string",
+            "title": "Result"
+          },
+          "received_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Received At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "resource_id",
+          "result",
+          "received_at"
+        ],
+        "title": "WebhookEventOut",
+        "example": {
+          "event_type": "PAYMENT.CAPTURE.REFUNDED",
+          "id": "WH-2WR32451HC0233532-67976317FL4543714",
+          "received_at": "2026-11-06T09:00:02Z",
+          "resource_id": "1JU08902781691411",
+          "result": "processed"
+        }
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
