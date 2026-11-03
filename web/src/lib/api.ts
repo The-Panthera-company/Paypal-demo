@@ -5,7 +5,10 @@
 import { backerStories, categories, impactUpdates, projects, sponsors } from "./mock-data";
 import type { BackerStory, Category, ImpactUpdate, Leaderboard, LeaderboardRow, Project, ProjectFilters, Sponsor } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+// In Docker the website's server reaches the API by its service name (API_INTERNAL_URL, e.g. http://api:8000),
+// while the browser uses the public address (NEXT_PUBLIC_API_URL). Elsewhere both are the same.
+const PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+const API_URL = (typeof window === "undefined" ? process.env.API_INTERNAL_URL : undefined)?.replace(/\/$/, "") || PUBLIC_API_URL;
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
@@ -108,6 +111,7 @@ export async function getCategories(): Promise<Category[]> {
     const mine = all.filter((p) => p.categoryId === slug(c.name));
     return {
       id: slug(c.name),
+      apiId: c.id,
       name: c.name,
       projectCount: c.project_count,
       raised: money(mine.reduce((s, p) => s + p.raised.amount, 0), mine[0]?.raised.currency ?? "USD"),

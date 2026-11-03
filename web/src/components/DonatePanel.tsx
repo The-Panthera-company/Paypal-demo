@@ -40,7 +40,31 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 
-export function DonatePanel({ projectId, projectTitle }: { projectId: string; projectTitle: string }) {
+/** What the gift is for: one project, a whole category (split by the API), or the donor's Giving Agent budget */
+export type DonationTarget =
+  | { kind: "PROJECT"; projectId: string }
+  | { kind: "CATEGORY"; categoryApiId: number; rule: "crowd" | "equal" | "closest_to_goal"; excludedTags: string[] }
+  | { kind: "AGENT" };
+
+function orderBody(target: DonationTarget, amountCents: number) {
+  if (target.kind === "PROJECT") return { target_type: "PROJECT", project_id: Number(target.projectId), amount_cents: amountCents };
+  if (target.kind === "CATEGORY")
+    return { target_type: "CATEGORY", category_id: target.categoryApiId, amount_cents: amountCents, rule: target.rule, excluded_tags: target.excludedTags };
+  return { target_type: "AGENT", amount_cents: amountCents };
+}
+
+export function DonatePanel({
+  projectId,
+  projectTitle,
+  target,
+  onAmountChange,
+}: {
+  projectId?: string;
+  projectTitle: string;
+  target?: DonationTarget;
+  onAmountChange?: (cents: number) => void;
+}) {
+  const what: DonationTarget = target ?? { kind: "PROJECT", projectId: projectId ?? "" };
   const [config, setConfig] = useState<PayPalConfig | null>(null);
   const [configError, setConfigError] = useState(false);
   const [dollars, setDollars] = useState("10");
@@ -55,6 +79,9 @@ export function DonatePanel({ projectId, projectTitle }: { projectId: string; pr
   }, []);
 
   const amountCents = Math.round(Number(dollars) * 100);
+  useEffect(() => {
+    onAmountChange?.(amountCents);
+  }, [amountCents, onAmountChange]);
   const min = config?.min_donation_cents ?? 100;
   const max = config?.max_donation_cents ?? 100_000;
   const amountOk = Number.isFinite(amountCents) && amountCents >= min && amountCents <= max;
@@ -146,14 +173,10 @@ export function DonatePanel({ projectId, projectTitle }: { projectId: string; pr
           <PayPalButtons
             style={{ layout: "vertical", shape: "rect", label: "donate", height: 48 }}
             disabled={!amountOk}
-            forceReRender={[amountCents]}
+            forceReRender={[amountCents, JSON.stringify(what)]}
             createOrder={async () => {
               setStatus({ kind: "idle" });
-              const order = await post<{ order_id: string }>("/donations/orders", {
-                target_type: "PROJECT",
-                project_id: Number(projectId),
-                amount_cents: amountCents,
-              });
+              const order = await post<{ order_id: string }>("/donations/orders", orderBody(what, amountCents));
               return order.order_id;
             }}
             onApprove={async (data, actions) => {

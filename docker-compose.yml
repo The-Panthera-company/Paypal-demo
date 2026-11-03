@@ -1,0 +1,52 @@
+# Run the project in Docker (Docker Desktop on Windows/Mac). From the repo root:
+#
+#   Website only, using the API on Render (settings from web/.env.local):
+#     docker compose up web
+#
+#   Website + API both in Docker (API settings from api/.env, data in a Docker volume):
+#     docker compose --profile local-api up
+#
+# Then open http://localhost:3000 (website) and http://localhost:8000/docs (API).
+# Stop with Ctrl+C; `docker compose down` removes the containers (the API's data volume stays).
+
+services:
+  web:
+    image: node:22-bookworm-slim
+    working_dir: /app
+    # Development server: edits to web/ show up on refresh. Installs packages on every start,
+    # so a branch with new packages just works.
+    command: sh -c "npm install --no-audit --no-fund && npx next dev -p 3000 -H 0.0.0.0"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./web:/app
+      # Keep Linux packages and the build cache inside Docker, not in your Windows folder
+      - web_node_modules:/app/node_modules
+      - web_next:/app/.next
+    env_file:
+      - path: ./web/.env.local
+        required: false
+    environment:
+      # Docker Desktop on Windows doesn't pass file-change events into containers; poll instead
+      WATCHPACK_POLLING: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+
+  api:
+    profiles: ["local-api"]
+    build: ./api
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: ./api/.env
+        required: false
+    environment:
+      # Local SQLite file in a Docker volume (never the Render database)
+      DATABASE_URL: sqlite:////data/giving.db
+      CORS_ORIGINS: http://localhost:3000
+    volumes:
+      - api_data:/data
+
+volumes:
+  web_node_modules:
+  web_next:
+  api_data:

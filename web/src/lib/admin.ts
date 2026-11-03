@@ -2,7 +2,7 @@
 // the browser, so these run in server components and server actions, never in client code.
 import "server-only";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+const API_URL = (process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL)?.replace(/\/$/, "");
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
 
 export type AdminProject = {
