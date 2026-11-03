@@ -3,7 +3,7 @@
 // (http://localhost:8000 locally, the Render URL when deployed) and the adapters below
 // turn the API's snake_case / *_cents fields into the shapes in ./types, so pages never change.
 import { backerStories, categories, impactUpdates, projects, sponsors } from "./mock-data";
-import type { BackerStory, Category, ImpactUpdate, Project, ProjectFilters, Sponsor } from "./types";
+import type { BackerStory, Category, ImpactUpdate, Leaderboard, LeaderboardRow, Project, ProjectFilters, Sponsor } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 
@@ -40,7 +40,27 @@ type ApiProject = {
   summary?: string;
   facilitator?: string;
 };
-type ApiRound = { ends_at: string };
+type ApiRound = { id: number; name: string; ends_at: string; matching_pool_cents: number; currency: string };
+type ApiLeaderboard = {
+  round_id: number;
+  is_final: boolean;
+  computed_at: string;
+  currency: string;
+  rows: {
+    rank: number;
+    project_id: number;
+    title: string;
+    category: string;
+    backer_count: number;
+    raised_cents: number;
+    score: number;
+    floor_cents: number;
+    crowd_cents: number;
+    match_cents: number;
+    capped: boolean;
+    matching_frozen: boolean;
+  }[];
+};
 type ApiStory = { id: number; project_id: number; title: string; body: string; evidence_urls: string[]; created_at: string };
 
 /** The site uses the category name as its id ("health"), the API a number */
@@ -181,4 +201,86 @@ export async function getSimilarProjects(p: Project, limit = 3): Promise<Project
 
 export function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Matching leaderboard for the current round: projected while open, final after close. */
+export async function getLeaderboard(): Promise<Leaderboard> {
+  if (!API_URL) return sampleLeaderboard();
+  const round = await get<ApiRound>("/rounds/current");
+  const lb = await get<ApiLeaderboard>(`/rounds/${round.id}/leaderboard`);
+  const c = lb.currency;
+  return {
+    roundId: String(round.id),
+    roundName: round.name,
+    endsAt: round.ends_at,
+    pool: money(round.matching_pool_cents, round.currency),
+    isFinal: lb.is_final,
+    computedAt: lb.computed_at,
+    sample: false,
+    rows: lb.rows.map((r) => ({
+      rank: r.rank,
+      projectId: String(r.project_id),
+      title: r.title,
+      categoryId: slug(r.category),
+      backerCount: r.backer_count,
+      raised: money(r.raised_cents, c),
+      score: r.score,
+      floor: money(r.floor_cents, c),
+      crowd: money(r.crowd_cents, c),
+      match: money(r.match_cents, c),
+      capped: r.capped,
+      frozen: r.matching_frozen,
+    })),
+  };
+}
+
+/** Rough two-level quadratic funding over the sample projects (equal gifts per backer),
+ *  only so the page has something to show without the API. The real numbers come from Person 1's engine. */
+function sampleLeaderboard(): Leaderboard {
+  const pool = 10_000_00;
+  const scoreOf = (p: Project) => {
+    if (p.backerCount === 0) return 0;
+    const d = p.raised.amount / p.backerCount;
+    return p.backerCount * p.backerCount * d - p.backerCount * d;
+  };
+  const cats = [...new Set(projects.map((p) => p.categoryId))];
+  const catScore = Object.fromEntries(cats.map((c) => [c, projects.filter((p) => p.categoryId === c).reduce((s, p) => s + scoreOf(p), 0)]));
+  const totalCat = Object.values(catScore).reduce((a, b) => a + b, 0) || 1;
+  const rows: LeaderboardRow[] = [];
+  for (const c of cats) {
+    const mine = projects.filter((p) => p.categoryId === c);
+    const catPool = Math.round((pool * catScore[c]) / totalCat);
+    const floorEach = Math.round((catPool * 0.2) / mine.length);
+    const total = mine.reduce((s, p) => s + scoreOf(p), 0) || 1;
+    const cap = Math.round(catPool * 0.4);
+    for (const p of mine) {
+      const crowd = Math.round((catPool * 0.8 * scoreOf(p)) / total);
+      const before = floorEach + crowd;
+      rows.push({
+        rank: 0,
+        projectId: p.id,
+        title: p.title,
+        categoryId: p.categoryId,
+        backerCount: p.backerCount,
+        raised: p.raised,
+        score: Math.round(scoreOf(p) / 100),
+        floor: money(floorEach, "USD"),
+        crowd: money(crowd, "USD"),
+        match: money(Math.min(before, cap), "USD"),
+        capped: before > cap,
+        frozen: false,
+      });
+    }
+  }
+  rows.sort((a, b) => b.match.amount - a.match.amount).forEach((r, i) => (r.rank = i + 1));
+  return {
+    roundId: "sample",
+    roundName: "Sample round",
+    endsAt: projects[0]?.endsAt ?? new Date().toISOString(),
+    pool: money(pool, "USD"),
+    isFinal: false,
+    computedAt: new Date().toISOString(),
+    rows,
+    sample: true,
+  };
 }
