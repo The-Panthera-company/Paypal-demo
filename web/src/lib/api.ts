@@ -45,6 +45,7 @@ type ApiProject = {
   currency: string;
   summary?: string;
   facilitator?: string;
+  milestones?: { id: number; seq: number; title: string; amount_cents: number; match_amount_cents: number; currency: string; due_date: string | null; status: string }[];
 };
 type ApiRound = { id: number; name: string; ends_at: string; matching_pool_cents: number; currency: string };
 type ApiLeaderboard = {
@@ -96,6 +97,15 @@ function toProject(p: ApiProject, endsAt: string): Project {
     urgency: Math.min(5, Math.max(1, p.urgency)) as Project["urgency"],
     status: (["verified", "active", "frozen", "completed"].includes(p.status) ? p.status : "active") as Project["status"],
     endsAt,
+    milestones: p.milestones?.map((m) => ({
+      id: String(m.id),
+      seq: m.seq,
+      title: m.title,
+      amount: money(m.amount_cents, m.currency),
+      match: money(m.match_amount_cents, m.currency),
+      dueDate: m.due_date,
+      status: (["open", "evidence_submitted", "released", "held"].includes(m.status) ? m.status : "open") as "open",
+    })),
   };
 }
 

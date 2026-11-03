@@ -30,6 +30,19 @@ export type Project = {
   status: ProjectStatus;
   /** ISO date the current round of funding ends */
   endsAt: string;
+  /** Funding tranches, released only with evidence (project page only) */
+  milestones?: Milestone[];
+};
+
+export type Milestone = {
+  id: string;
+  seq: number;
+  title: string;
+  amount: Money;
+  match: Money;
+  /** ISO date, or null when the project hasn't set one */
+  dueDate: string | null;
+  status: "open" | "evidence_submitted" | "released" | "held";
 };
 
 export type ProjectFilters = {

@@ -45,8 +45,9 @@ const catColour: Record<string, string> = {
 const fmt = (cents: number, currency: string) =>
   new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(cents / 100);
 
-function ProjectCell({ data }: ICellRendererParams<LeaderboardRow>) {
+function ProjectCell({ data, node }: ICellRendererParams<LeaderboardRow>) {
   if (!data) return null;
+  if (node.rowPinned) return <span className="flex h-full items-center font-bold text-ink">{data.title}</span>;
   return (
     <div className="flex h-full items-center gap-3 leading-5">
       <span className="size-2.5 shrink-0" style={{ background: catColour[data.categoryId] ?? "#797680" }} aria-hidden />
@@ -61,8 +62,9 @@ function ProjectCell({ data }: ICellRendererParams<LeaderboardRow>) {
 }
 
 /** Match split into the floor (equal share) and the crowd share (quadratic), with cap/frozen badges */
-function MatchCell({ data, context }: ICellRendererParams<LeaderboardRow, unknown, { maxMatch: number }>) {
+function MatchCell({ data, context, node }: ICellRendererParams<LeaderboardRow, unknown, { maxMatch: number }>) {
   if (!data) return null;
+  if (node.rowPinned) return <span className="tabular flex h-full items-center font-bold text-ink">{fmt(data.match.amount, data.match.currency)}</span>;
   const total = data.floor.amount + data.crowd.amount || 1;
   const width = Math.max(4, Math.round((data.match.amount / (context.maxMatch || 1)) * 100));
   return (
@@ -85,6 +87,7 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
   const grid = useRef<AgGridReact<LeaderboardRow>>(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
+  const [show, setShow] = useState<"all" | "matched" | "frozen">("all");
   const [shown, setShown] = useState(rows.length);
   // Pin the project column only where there is room for the numbers next to it
   const [wide, setWide] = useState(true);
@@ -106,11 +109,11 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
     return () => clearInterval(t);
   }, [refreshSeconds, router]);
 
-  useEffect(() => grid.current?.api?.onFilterChanged(), [category]);
+  useEffect(() => grid.current?.api?.onFilterChanged(), [category, show]);
 
   const columns = useMemo<ColDef<LeaderboardRow>[]>(
     () => [
-      { field: "rank", headerName: "#", width: 64, pinned: "left", sort: "asc", cellClass: "tabular font-bold" },
+      { field: "rank", headerName: "#", width: 64, pinned: "left", sort: "asc", cellClass: "tabular font-bold", valueFormatter: (p) => (p.node?.rowPinned ? "" : String(p.value)) },
       { field: "title", headerName: "Project", flex: 2, minWidth: wide ? 220 : 180, pinned: wide ? "left" : undefined, cellRenderer: ProjectCell },
       { field: "backerCount", headerName: "Backers", width: 110, type: "numericColumn", enableCellChangeFlash: true, cellClass: "tabular" },
       {
@@ -128,7 +131,7 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
         field: "score",
         width: 110,
         type: "numericColumn",
-        valueFormatter: (p) => Math.round(p.value ?? 0).toLocaleString(),
+        valueFormatter: (p) => (p.node?.rowPinned ? "" : Math.round(p.value ?? 0).toLocaleString()),
         headerTooltip: "Quadratic score: (sum of square roots of each backer's gift)² minus the total. Many small backers beat one big one.",
         cellClass: "tabular",
       },
@@ -166,8 +169,37 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
     [currency, wide],
   );
 
-  const isExternalFilterPresent = useCallback(() => category !== "all", [category]);
-  const doesExternalFilterPass = useCallback((node: IRowNode<LeaderboardRow>) => node.data?.categoryId === category, [category]);
+  const isExternalFilterPresent = useCallback(() => category !== "all" || show !== "all", [category, show]);
+  const doesExternalFilterPass = useCallback(
+    (node: IRowNode<LeaderboardRow>) =>
+      (category === "all" || node.data?.categoryId === category) &&
+      (show === "all" || (show === "frozen" ? Boolean(node.data?.frozen) : (node.data?.match.amount ?? 0) > 0)),
+    [category, show],
+  );
+
+  // Pinned bottom row: totals of the rows currently shown (follows search and filters)
+  const [totals, setTotals] = useState<LeaderboardRow[]>([]);
+  const updateTotals = useCallback(
+    (api: { forEachNodeAfterFilter: (cb: (n: IRowNode<LeaderboardRow>) => void) => void; getDisplayedRowCount: () => number }) => {
+      let backers = 0, raised = 0, floor = 0, crowd = 0, match = 0, n = 0;
+      api.forEachNodeAfterFilter((node) => {
+        const d = node.data;
+        if (!d) return;
+        n++;
+        backers += d.backerCount;
+        raised += d.raised.amount;
+        floor += d.floor.amount;
+        crowd += d.crowd.amount;
+        match += d.match.amount;
+      });
+      const m = (a: number) => ({ amount: a, currency });
+      setTotals([
+        { rank: 0, projectId: "__total", title: `Total (${n} projects)`, categoryId: "", backerCount: backers, raised: m(raised), score: 0, floor: m(floor), crowd: m(crowd), match: m(match), capped: false, frozen: false },
+      ]);
+      setShown(api.getDisplayedRowCount());
+    },
+    [currency],
+  );
 
   return (
     <div className="space-y-4">
@@ -182,6 +214,32 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
             className="min-h-12 w-64 border border-line bg-white px-4"
           />
         </label>
+        <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
+          {(
+            [
+              ["all", "All"],
+              ["matched", "Getting a match"],
+              ["frozen", "Frozen by Watchdog"],
+            ] as const
+          ).map(([v, l]) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setShow(v)}
+              aria-pressed={show === v}
+              className={`min-h-12 border px-4 text-sm ${show === v ? "border-ink bg-ink text-white" : "border-line bg-white text-ink hover:border-primary"}`}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => grid.current?.api?.exportDataAsCsv({ fileName: "leaderboard.csv", skipPinnedBottom: true })}
+          className="min-h-12 border border-line bg-white px-4 text-sm text-ink hover:border-primary"
+        >
+          Export CSV
+        </button>
         <div role="group" aria-label="Category" className="flex flex-wrap gap-2">
           {["all", ...categories].map((c) => (
             <button
@@ -213,7 +271,8 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
           quickFilterText={search}
           isExternalFilterPresent={isExternalFilterPresent}
           doesExternalFilterPass={doesExternalFilterPass}
-          onModelUpdated={(e) => setShown(e.api.getDisplayedRowCount())}
+          onModelUpdated={(e) => updateTotals(e.api)}
+          pinnedBottomRowData={totals}
           defaultColDef={{ sortable: true, resizable: true, suppressMovable: true }}
           domLayout="autoHeight"
           tooltipShowDelay={300}
