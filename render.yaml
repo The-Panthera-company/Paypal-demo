@@ -1,4 +1,4 @@
-# Render Blueprint: the core API (FastAPI) and its Postgres database.
+# Render Blueprint: the core API (FastAPI), its Postgres database, and the website (Next.js).
 # Render dashboard > New > Blueprint > pick this repo. Values marked sync: false are asked for once
 # in the dashboard and never stored here.
 services:
@@ -33,9 +33,38 @@ services:
         value: USD
       - key: STUB_EXAMPLES
         value: "true"
-      # Add P2's deployed frontend URL here, comma-separated.
+      # The website's URL must be listed here, or the browser blocks the PayPal button's calls.
+      # After the first deploy, set it in the dashboard to: https://<giving-web>.onrender.com,http://localhost:3000
       - key: CORS_ORIGINS
         value: http://localhost:3000
+
+  # Website (Person 2): donor pages, leaderboard, admin console.
+  - type: web
+    name: giving-web
+    runtime: node
+    plan: free
+    rootDir: web
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      # Full URL of giving-api, e.g. https://giving-api.onrender.com (no trailing slash).
+      # Read at build time: after changing it, redeploy the website.
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      # Server-only: lets the admin console call /admin/* on the API. Copied from the API service.
+      - key: ADMIN_TOKEN
+        fromService:
+          type: web
+          name: giving-api
+          envVarKey: ADMIN_TOKEN
+      # Password for /admin in the browser (any user name). Choose one; share it privately.
+      - key: ADMIN_UI_PASSWORD
+        sync: false
+      # Person 3's agent service for the giving assistant; leave empty until it exists.
+      - key: NEXT_PUBLIC_AGENTS_URL
+        sync: false
 
 databases:
   - name: giving-db

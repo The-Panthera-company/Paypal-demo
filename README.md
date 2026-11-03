@@ -93,6 +93,34 @@ Both must pass. **Do not run `npm audit fix --force`**: it upgrades major versio
 | Errors after `git pull` | Run `npm install` again |
 | `EBADENGINE` when updating npm | Ignore; you don't need a newer npm |
 
+## Put the website online (Render)
+
+`render.yaml` describes three things: `giving-api` (Person 1), its database `giving-db`, and the website `giving-web`. Free plan.
+
+**First time** (whoever owns the Render account):
+
+1. render.com → **New → Blueprint** → repo `The-Panthera-company/Paypal-demo`, branch `main` → it reads `render.yaml`.
+   - If the API already exists from Person 1's earlier deploy, open that Blueprint and click **Manual sync** instead; Render adds `giving-web`.
+2. It asks for the values marked `sync: false`:
+   | Service | Key | Value |
+   |---|---|---|
+   | giving-web | `NEXT_PUBLIC_API_URL` | the API's address, e.g. `https://giving-api.onrender.com` (no `/` at the end) |
+   | giving-web | `ADMIN_UI_PASSWORD` | choose a password for `/admin`; share it privately |
+   | giving-web | `NEXT_PUBLIC_AGENTS_URL` | leave empty until Person 3's agents are deployed |
+   `ADMIN_TOKEN` is copied from the API automatically.
+3. **Apply**, wait for both builds (the website takes ~3–5 min).
+4. Copy the website's address (`https://giving-web-xxxx.onrender.com`). In **giving-api → Environment**, set
+   `CORS_ORIGINS` to `https://giving-web-xxxx.onrender.com,http://localhost:3000` and save (the API restarts).
+   Without this, the PayPal button fails in the browser.
+5. Check: open the website, then **Explore** (projects from the API), a project page (PayPal button appears),
+   **Leaderboard**, and `/admin` (asks for the password).
+
+**After that**, every merge to `main` redeploys both services. If you change `NEXT_PUBLIC_API_URL`, click
+**Manual Deploy** on giving-web: Next.js reads it when building.
+
+Free services sleep after ~15 min without visitors; the first page then takes about a minute.
+**Before a demo, open the website and `/health` on the API a few minutes early.**
+
 ## How we work
 
 Issue → branch (`p2/8-category-pages`) → pull request with `Closes #8` → one review → merge to `main` → auto-deploy to Render. Details and dates: [docs/TEAM_SCHEDULE.md](docs/TEAM_SCHEDULE.md).
