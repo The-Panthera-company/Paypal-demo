@@ -164,6 +164,7 @@ export default async function Home() {
       </section>
 
       {/* Impact gallery preview: proof from released milestones */}
+      {galleryItems.length > 0 && (
       <section className="section">
         <div className="container-k">
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -178,6 +179,7 @@ export default async function Home() {
           <ImpactGallery items={galleryItems} dateLabels={dateLabels} />
         </div>
       </section>
+      )}
 
       <BackerStories stories={stories} projects={projects} />
 

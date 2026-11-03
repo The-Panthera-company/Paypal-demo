@@ -28,7 +28,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             </div>
             <h1 className="mb-2 text-4xl">{p.title}</h1>
             <p className="mb-6">
-              Facilitated by <span className="font-medium text-ink">{p.facilitator}</span> · Verified
+              {p.facilitator ? (
+                <>
+                  Facilitated by <span className="font-medium text-ink">{p.facilitator}</span> ·{" "}
+                </>
+              ) : null}
+              {p.status === "frozen" ? "Matching paused for review" : "Verified"}
             </p>
             <div className="mb-8 grid grid-cols-3 gap-3 sm:gap-[30px]">
               <StatBox value={formatMoney(p.raised)} label="Raised" />

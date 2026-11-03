@@ -6,6 +6,7 @@ import { Eyebrow } from "./ui";
 // Krowd testimonials, repurposed: backers' words, with the project they backed. Static cards, no slider;
 // they scroll sideways on phones.
 export function BackerStories({ stories, projects }: { stories: BackerStory[]; projects: Project[] }) {
+  if (stories.length === 0) return null;
   return (
     <section className="bg-surface-alt pb-16 lg:pb-[120px]">
       <div className="relative bg-accent py-10 text-center">
@@ -49,6 +50,7 @@ export function BackerStories({ stories, projects }: { stories: BackerStory[]; p
 
 // Krowd brand-logo strip, repurposed: the sponsors whose money makes up the matching pool.
 export function SponsorStrip({ sponsors }: { sponsors: Sponsor[] }) {
+  if (sponsors.length === 0) return null;
   const total = sponsors.reduce((s, x) => s + x.pool.amount, 0);
   return (
     <section className="border-y border-line py-12">
