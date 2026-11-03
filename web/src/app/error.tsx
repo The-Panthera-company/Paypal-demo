@@ -7,7 +7,7 @@ export default function Error({ reset }: { error: Error; reset: () => void }) {
       <div className="border border-line bg-white p-10 text-center">
         <p className="font-display text-2xl text-ink">We couldn&apos;t load this page</p>
         <p className="mt-2">Your connection may be slow, or our server is busy. Nothing was charged.</p>
-        <button onClick={reset} className="btn mt-6">
+        <button onClick={reset} className="btn btn-2 mt-6">
           Try again
         </button>
       </div>

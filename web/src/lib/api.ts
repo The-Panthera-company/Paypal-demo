@@ -284,3 +284,10 @@ function sampleLeaderboard(): Leaderboard {
     sample: true,
   };
 }
+
+/** The current matching round (name and end date) for countdowns */
+export async function getRound(): Promise<{ name: string; endsAt: string }> {
+  if (!API_URL) return { name: "Sample round", endsAt: projects[0]?.endsAt ?? new Date(Date.now() + 7 * 86_400_000).toISOString() };
+  const r = await get<ApiRound>("/rounds/current");
+  return { name: r.name, endsAt: r.ends_at };
+}

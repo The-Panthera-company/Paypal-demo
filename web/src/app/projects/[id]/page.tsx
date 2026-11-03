@@ -20,7 +20,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <section className="bg-surface-alt pb-24 pt-12 lg:pb-32 lg:pt-[120px]">
         <div className="container-k grid gap-10 lg:grid-cols-2">
           <div className="aspect-[4/3]">
-            <CategoryArt id={p.categoryId} />
+            <CategoryArt id={p.categoryId} seed={p.id} label={`Photo for ${p.title}`} />
           </div>
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -85,7 +85,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               <ol className="space-y-6 border-l-2 border-line pl-6">
                 {updates.map((u) => (
                   <li key={u.id} className="relative">
-                    <span className="absolute -left-[31px] top-1.5 size-3 bg-accent" aria-hidden />
+                    <span className="absolute -left-[31px] top-1.5 size-3 bg-growth" aria-hidden />
                     <p className="text-sm">
                       {formatDate(u.date)} · {u.kind === "receipt" ? "Receipt" : "Photo"}
                       {u.tranche && <> · {formatMoney(u.tranche)} released</>}

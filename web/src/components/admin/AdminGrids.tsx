@@ -25,12 +25,12 @@ import type {
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 const theme = themeQuartz.withParams({
-  accentColor: "#5a3fe4",
-  borderColor: "#e5e0ec",
-  headerBackgroundColor: "#f3eeff",
+  accentColor: "#007190",
+  borderColor: "#d9e8df",
+  headerBackgroundColor: "#eef6f1",
   headerFontWeight: 600,
-  oddRowBackgroundColor: "#fdf8fd",
-  rowHoverColor: "#e5deff",
+  oddRowBackgroundColor: "#f9faf8",
+  rowHoverColor: "#d7ece6",
   fontFamily: "inherit",
   fontSize: 14,
   borderRadius: 0,
@@ -87,7 +87,7 @@ function Actions({
           }}
           className={`min-h-9 px-3 text-xs font-bold uppercase tracking-wider disabled:opacity-50 ${
             b.tone === "primary"
-              ? "bg-accent text-ink hover:bg-ink hover:text-white"
+              ? "bg-primary text-white hover:bg-ink"
               : b.tone === "danger"
                 ? "bg-danger text-white"
                 : "border border-line bg-white text-ink hover:border-brand"

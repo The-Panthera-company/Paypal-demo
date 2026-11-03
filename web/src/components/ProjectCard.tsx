@@ -14,7 +14,7 @@ export function ProjectCard({ project: p }: { project: Project }) {
     <article className="group relative flex flex-col bg-white transition-shadow duration-300 hover:shadow-[0_15px_35px_rgba(27,31,46,0.08)]">
       <div className="relative aspect-[4/3] overflow-hidden">
         <div className="size-full transition-transform duration-300 group-hover:scale-110">
-          <CategoryArt id={p.categoryId} />
+          <CategoryArt id={p.categoryId} seed={p.id} label={`Photo for ${p.title}`} />
         </div>
         {state && (
           <span className="absolute left-5 top-5 bg-accent px-3 text-xs font-bold uppercase leading-7 tracking-[2px] text-ink">{state}</span>

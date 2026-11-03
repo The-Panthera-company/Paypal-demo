@@ -1,25 +1,42 @@
 import Link from "next/link";
 
 const art: Record<string, { from: string; to: string; label: string }> = {
-  health: { from: "#c2410c", to: "#7c2d12", label: "Health" },
-  education: { from: "#5a3fe4", to: "#4319cc", label: "Education" },
-  environment: { from: "#15803d", to: "#14532d", label: "Environment" },
-  water: { from: "#0e7490", to: "#164e63", label: "Water" },
+  health: { from: "#b4533a", to: "#0b2e33", label: "Health" },
+  education: { from: "#7a5c2e", to: "#0b2e33", label: "Education" },
+  environment: { from: "#2f7d4f", to: "#0b2e33", label: "Environment" },
+  water: { from: "#007190", to: "#0b2e33", label: "Water" },
 };
 
-/** Placeholder image until projects have real photos (from Person 3's seed data) */
-export function CategoryArt({ id }: { id: string }) {
+// Free Unsplash photos (Unsplash licence), loaded by the visitor's browser. Placeholders until
+// projects upload their own photos. Several per category so cards don't repeat.
+const u = (id: string) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=900&q=60`;
+export const PHOTOS: Record<string, string[]> = {
+  health: [u("1576091160550-2173dba999ef"), u("1584515933487-779824d29309"), u("1579684385127-1ef15d508118")],
+  education: [u("1503676260728-1c00da094a0b"), u("1497633762265-9d179a990aa6"), u("1509062522246-3755977927d7")],
+  environment: [u("1542601906990-b4d3fb778b09"), u("1466692476868-aef1dfb1e735"), u("1500382017468-9049fed747ef")],
+  water: [u("1509099836639-18ba1795216e"), u("1541544537156-7627a7a4aa1c"), u("1559825481-12a05cc00344")],
+  people: [u("1488521787991-ed7bbaae773c"), u("1559027615-cd4628902d4a"), u("1532629345422-7515f3d16bb6")],
+};
+
+/** Stable choice: the same project always gets the same photo */
+export function photoFor(categoryId: string, seed = "") {
+  const list = PHOTOS[categoryId] ?? PHOTOS.people;
+  const n = [...seed].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 0);
+  return list[n % list.length];
+}
+
+/** Project image: a photo with a soft teal tint over the category colour (shown alone if the photo can't load) */
+export function CategoryArt({ id, seed = "", label }: { id: string; seed?: string; label?: string }) {
   const a = art[id] ?? art.education;
+  const src = photoFor(id, seed);
   return (
     <div
       role="img"
-      aria-label={`${a.label} project photo placeholder`}
-      className="relative size-full"
-      style={{ background: `linear-gradient(135deg, ${a.from}, ${a.to})` }}
+      aria-label={label ?? `${a.label} project photo`}
+      className="relative size-full bg-cover bg-center"
+      style={{ backgroundImage: `url("${src}"), linear-gradient(135deg, ${a.from}, ${a.to})` }}
     >
-      <span className="absolute bottom-4 right-4 font-display text-5xl text-white/25" aria-hidden>
-        {a.label}
-      </span>
+      <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,113,144,0.10),rgba(11,46,51,0.45))]" aria-hidden />
     </div>
   );
 }
@@ -28,7 +45,7 @@ export function ProgressBar({ value, label }: { value: number; label: string }) 
   const pct = Math.max(0, Math.min(100, Math.round(value)));
   return (
     <div role="progressbar" aria-label={label} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} className="h-[9px] bg-line">
-      <div className="h-full bg-accent" style={{ width: `${pct}%` }} />
+      <div className="h-full bg-growth" style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -58,7 +75,7 @@ export function EmptyState({ title, body, action }: { title: string; body: strin
       <p className="font-display text-2xl text-ink">{title}</p>
       <p className="mt-2">{body}</p>
       {action && (
-        <Link href={action.href} className="btn mt-6">
+        <Link href={action.href} className="btn btn-2 mt-6">
           {action.label}
         </Link>
       )}
