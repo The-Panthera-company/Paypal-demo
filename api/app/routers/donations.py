@@ -162,7 +162,12 @@ def get_donation(donation_id: int, db: Session = Depends(get_db)):
     return donation_out(donation)
 
 
-@router.post("/category-preview", response_model=CategoryPreviewOut, responses={422: {"model": ErrorOut}})
+@router.post(
+    "/category-preview",
+    response_model=CategoryPreviewOut,
+    # A written description: FastAPI would otherwise use Python's name for 422, which changed in 3.13.
+    responses={422: {"model": ErrorOut, "description": "No such category, or nothing eligible"}},
+)
 def category_preview(
     body: CategoryPreviewIn, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)
 ):

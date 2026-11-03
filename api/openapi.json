@@ -617,7 +617,7 @@
             }
           },
           "422": {
-            "description": "Unprocessable Entity",
+            "description": "No such category, or nothing eligible",
             "content": {
               "application/json": {
                 "schema": {
@@ -882,14 +882,14 @@
             "description": "Not Found"
           },
           "422": {
+            "description": "Invalid mandate",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorOut"
                 }
               }
-            },
-            "description": "Unprocessable Entity"
+            }
           }
         }
       }
