@@ -1,0 +1,239 @@
+@import "tailwindcss";
+
+/* Design tokens modelled on Krowd "Home 2", with contrast fixes:
+   body text darkened to #5F6270 (6:1); mint is a fill behind navy text, never text on white. */
+/* Colour roles generated from the brand seed #674DF0 (Material 3 tonal method, from UI Design
+   Council round 2): each role has a matching "on" colour, so every pair passes WCAG AA.
+   Krowd structure kept; mint stays a fill behind navy text only. */
+@theme {
+  /* primary: buttons, links, tags (tone 40, 6.4:1 with white) */
+  --color-primary: #5a3fe4;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #e5deff;
+  --color-on-primary-container: #1a0064;
+  --color-primary-dark: #4319cc;
+  --color-primary-line: #735cff;
+  --color-primary-on-dark: #c8bfff;
+  /* secondary / surfaces */
+  --color-secondary: #5f5c72;
+  --color-surface: #fdf8fd;
+  --color-surface-variant: #f3eeff;
+  --color-on-surface: #1c1b1f;
+  --color-on-surface-variant: #48454f;
+  --color-outline: #797680;
+  --color-outline-variant: #e5e0ec;
+  --color-inverse-surface: #1b192c;
+  --color-error: #ba1a1a;
+  /* accent fill (behind dark text only) */
+  --color-accent: #29f0b4;
+
+  /* names used by the components, mapped onto the roles */
+  --color-brand: var(--color-primary);
+  --color-brand-dark: var(--color-primary-dark);
+  --color-brand-line: var(--color-primary-line);
+  --color-brand-tint: var(--color-primary-on-dark);
+  --color-brand-soft: var(--color-primary-container);
+  --color-ink: var(--color-inverse-surface);
+  --color-text: var(--color-on-surface-variant);
+  --color-surface-alt: var(--color-surface-variant);
+  --color-line: var(--color-outline-variant);
+  --color-footer-text: #c8c3dc;
+  --color-footer-line: #312e42;
+  --color-danger: var(--color-error);
+
+  --color-cat-health: #c2410c;
+  --color-cat-education: #5a3fe4;
+  --color-cat-environment: #15803d;
+  --color-cat-water: #0e7490;
+
+  --font-sans: var(--font-roboto), system-ui, sans-serif;
+  --font-display: var(--font-abril), Georgia, serif;
+
+  --radius-*: initial;
+  --radius-full: 9999px;
+}
+
+html {
+  scroll-padding-top: 120px; /* sticky header never hides a focused element (WCAG 2.2) */
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* In the base layer so utilities like text-white can override the heading colour */
+@layer base {
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    color: var(--color-ink);
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+@layer components {
+  /* Eyebrow: short label above a section title with a 6 px mint square */
+  .eyebrow {
+    position: relative;
+    display: inline-block;
+    padding-left: 16px;
+    font-size: 18px;
+    color: var(--color-brand);
+  }
+  .eyebrow::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    margin-top: -3px;
+    background: var(--color-accent);
+  }
+
+  /* Signature decoration: a small square in one corner of a block */
+  .corner {
+    position: relative;
+  }
+  .corner::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: var(--corner-size, 18px);
+    height: var(--corner-size, 18px);
+    background: var(--corner-colour, var(--color-accent));
+  }
+
+  /* Main button: mint fill, navy text; the navy corner square grows to fill on hover */
+  .btn {
+    position: relative;
+    z-index: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 56px;
+    padding: 0 40px;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    background: var(--color-accent);
+    color: var(--color-ink);
+    overflow: hidden;
+    transition: color 0.4s ease-out;
+  }
+  .btn::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: -1;
+    width: 17px;
+    height: 17px;
+    background: var(--color-ink);
+    transition: all 0.4s ease-out;
+  }
+  .btn:hover {
+    color: #fff;
+  }
+  .btn:hover::before {
+    width: 100%;
+    height: 100%;
+  }
+  /* Variant: navy fill, white text, white corner; hover = white fill */
+  .btn-2 {
+    background: var(--color-ink);
+    color: #fff;
+  }
+  .btn-2::before {
+    background: #fff;
+  }
+  .btn-2:hover {
+    color: var(--color-ink);
+  }
+  .btn:disabled {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  @media (min-width: 992px) {
+    .btn {
+      min-height: 74px;
+      padding: 0 50px;
+    }
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 0 15px;
+    line-height: 30px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #fff;
+    background: var(--color-brand);
+  }
+
+  .section-title {
+    font-size: 28px;
+    line-height: 1.2;
+  }
+  @media (min-width: 576px) {
+    .section-title {
+      font-size: 40px;
+    }
+  }
+  @media (min-width: 992px) {
+    .section-title {
+      font-size: 50px;
+    }
+  }
+  @media (min-width: 1200px) {
+    .section-title {
+      font-size: 60px;
+    }
+  }
+
+  .section {
+    padding-block: 64px;
+  }
+  @media (min-width: 992px) {
+    .section {
+      padding-block: 120px;
+    }
+  }
+
+  .container-k {
+    width: 100%;
+    max-width: 1170px;
+    margin-inline: auto;
+    padding-inline: 16px;
+  }
+  @media (min-width: 576px) {
+    .container-k {
+      padding-inline: 15px;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
