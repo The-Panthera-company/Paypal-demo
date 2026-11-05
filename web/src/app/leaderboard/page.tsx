@@ -5,7 +5,8 @@ import { PageTitle } from "@/components/PageTitle";
 import { EmptyState, Eyebrow, StatBox } from "@/components/ui";
 import { formatMoney, getLeaderboard } from "@/lib/api";
 
-export const dynamic = "force-dynamic";
+// Rebuilt in the background at most every 30 s, so tab switches serve a ready page.
+export const revalidate = 60;
 
 export default async function LeaderboardPage() {
   const lb = await getLeaderboard();

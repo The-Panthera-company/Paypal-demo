@@ -187,7 +187,7 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
           </div>
 
           <form
-            className="flex border-t border-line"
+            className="flex shrink-0 border-t border-line bg-white"
             onSubmit={(e) => {
               e.preventDefault();
               send(text);
@@ -202,13 +202,13 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Tell me what you care about…"
-              className="min-h-12 flex-1 px-4 text-sm text-ink focus:outline-none"
+              className="min-h-12 min-w-0 flex-1 px-4 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
             />
-            <button className="bg-primary px-5 font-bold text-white disabled:opacity-50" disabled={busy || !text.trim()}>
+            <button className="shrink-0 bg-primary px-5 font-bold text-white focus-visible:-outline-offset-4 focus-visible:outline-white disabled:opacity-50" disabled={busy || !text.trim()}>
               Send
             </button>
           </form>
-          <p className="bg-white px-4 pb-3 text-[11px]">Suggestions come from verified projects only. Giving always goes through the normal PayPal checkout.</p>
+          <p className="shrink-0 bg-white px-4 py-2 text-[11px] leading-4">Suggestions come from verified projects only. Giving always goes through the normal PayPal checkout.</p>
         </section>
       )}
     </>
