@@ -45,7 +45,9 @@ class FakeMcpClient:
         self.calls.append((tool, args))
         if tool in self.responses:
             value = self.responses[tool]
-            return value(args) if callable(value) else value
+            # Queued responses use the same {"result": ...} envelope the real client unwraps,
+            # so tests exercise the identical path.
+            return _normalize(value(args) if callable(value) else value)
         defaults: dict[str, Any] = {
             "list_active_mandates": [],
             "search_projects": [],
@@ -57,7 +59,7 @@ class FakeMcpClient:
             "request_milestone_payout": {"status": "held"},
             "log_decision": {"id": 1},
         }
-        return defaults.get(tool, {})
+        return _normalize(defaults.get(tool, {}))
 
     async def aclose(self) -> None:
         return None
@@ -142,6 +144,17 @@ class McpClient:
         await self._reset()
 
 
+def _normalize(value: Any) -> Any:
+    """mcp 2.x wraps tool results: a list comes back as {"result": [...]}.
+
+    Unwrap exactly that shape so every caller sees the bare value. A dict that merely
+    happens to have a "result" key alongside others is left alone.
+    """
+    if isinstance(value, dict) and len(value) == 1 and "result" in value:
+        return value["result"]
+    return value
+
+
 def _unwrap(result: Any) -> Any:
     """MCP returns content blocks; the server always answers with one JSON text block."""
     if getattr(result, "isError", False):
@@ -149,14 +162,13 @@ def _unwrap(result: Any) -> Any:
         raise McpUnavailable("; ".join(t for t in texts if t) or "MCP tool error")
     content = getattr(result, "content", None)
     if content is None:
-        structured = getattr(result, "structuredContent", None)
-        return structured
+        return _normalize(getattr(result, "structuredContent", None))
     for block in content:
         text = getattr(block, "text", None)
         if text is None:
             continue
         try:
-            return json.loads(text)
+            return _normalize(json.loads(text))
         except ValueError:
             return text
     return None
