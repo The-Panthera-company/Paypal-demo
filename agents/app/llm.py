@@ -66,11 +66,13 @@ class LLM:
 
     async def complete_text(self, system: str, user: str) -> str:
         try:
-            return (await self._raw(f"{system}\n\n{DATA_NOTICE}", user, json_mode=False, temperature=0.3)).strip()
+            return (await self._raw(f"{system}\n\n{DATA_NOTICE}", user, json_mode=False,
+                                    temperature=0.3, thinking=False)).strip()
         except Exception as exc:
             raise LLMUnavailable(str(exc)) from exc
 
-    async def _raw(self, system: str, user: str, *, json_mode: bool, temperature: float) -> str:
+    async def _raw(self, system: str, user: str, *, json_mode: bool, temperature: float,
+                   thinking: bool = True) -> str:
         client = self._sdk()
         kwargs: dict = {
             "model": self.cfg.deepseek_model,
@@ -80,8 +82,11 @@ class LLM:
         }
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
-            # DeepSeek documents thinking as a model-level switch; v4-flash has none, so this is a no-op there.
-            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        # Per the DeepSeek chat-completions reference, "thinking" is a top-level request body
+        # field: {"type": "enabled" | "disabled"}. Omitted or null means it follows
+        # reasoning_effort, and enabled if that is absent too -- so it must be sent explicitly.
+        # It is not an OpenAI parameter, hence extra_body.
+        kwargs["extra_body"] = {"thinking": {"type": "enabled" if thinking else "disabled"}}
         try:
             resp = await client.chat.completions.create(**kwargs)
         except Exception as exc:

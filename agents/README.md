@@ -60,6 +60,28 @@ The web app (`web/src/components/GivingAssistant.tsx`) sends `{"message": "..."}
 `reply` and `projectIds` mirror the spec-9.1 shape; the web ignores them. `projects` and `history`
 are accepted in the request and ignored.
 
+## Scripts
+
+Both are read-only and print no secrets. Run them from `agents/`.
+
+**Smoke test** — real MCP server, three projects, plus 1-result and 0-result shape checks
+(type and length only):
+
+```bash
+FAKE_CORE=false DRY_RUN=true .venv/bin/python scripts/hello_world.py
+```
+
+**Giving dry run** — canned mandate against live projects, real DeepSeek for the report
+(thinking disabled), no writes:
+
+```bash
+FAKE_CORE=false DRY_RUN=true .venv/bin/python scripts/giving_dryrun.py
+```
+
+It prints each candidate's score and five factors, the planned allocation, skipped projects with
+reasons, the report text and the LLM call count. `DRY_RUN=true` blocks `record_mandate_run` and
+`request_checked_donation`; the script never calls them at all.
+
 ## Configuration
 
 All from env (see `.env.example`):
