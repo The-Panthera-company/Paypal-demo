@@ -1,5 +1,6 @@
 "use client";
 
+import { Banner, notify } from "@/components/Status";
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
 import { useEffect, useState } from "react";
 
@@ -146,16 +147,8 @@ export function DonatePanel({
         </p>
       </fieldset>
 
-      {status.kind === "error" && (
-        <p className="border-l-4 border-danger bg-white p-3 text-sm text-ink" role="alert">
-          {status.message} Nothing was charged.
-        </p>
-      )}
-      {status.kind === "cancelled" && (
-        <p className="border-l-4 border-line bg-white p-3 text-sm text-ink" role="status">
-          Payment cancelled. Nothing was charged.
-        </p>
-      )}
+      {status.kind === "error" && <Banner tone="error">{status.message} Nothing was charged.</Banner>}
+      {status.kind === "cancelled" && <Banner tone="info">Payment cancelled. Nothing was charged.</Banner>}
 
       {!API_URL ? (
         <p className="border border-dashed border-line bg-white p-4 text-sm">
@@ -163,9 +156,9 @@ export function DonatePanel({
           sandbox.
         </p>
       ) : configError ? (
-        <p className="border border-dashed border-line bg-white p-4 text-sm" role="alert">
-          PayPal isn&apos;t available right now (the API has no PayPal sandbox keys, or it can&apos;t be reached).
-        </p>
+        <Banner tone="warning" title="PayPal isn't available right now">
+          The API has no PayPal sandbox keys, or it can&apos;t be reached. Try again in a minute.
+        </Banner>
       ) : !config ? (
         <div className="h-[150px] animate-pulse bg-line" aria-label="Loading PayPal" />
       ) : (
@@ -185,10 +178,12 @@ export function DonatePanel({
                   `/donations/orders/${data.orderID}/capture`,
                 );
                 setStatus({ kind: "done", amountCents: donation.amount_cents });
+                notify("Thank you! Your gift went through. PayPal will email your receipt.", "success");
               } catch (e) {
                 const err = e as Error & { code?: string };
                 if (err.code === "INSTRUMENT_DECLINED") return actions.restart();
                 setStatus({ kind: "error", message: err.message });
+                notify("The payment didn't go through. Nothing was charged.", "error");
               }
             }}
             onCancel={() => setStatus({ kind: "cancelled" })}

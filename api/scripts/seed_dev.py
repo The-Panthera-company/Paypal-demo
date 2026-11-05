@@ -75,6 +75,14 @@ PROJECTS = [
      "Repairing a broken borehole pump that served 600 people, and training two local mechanics."),
     ("Water", "School Rainwater Tanks", ["water", "schools"], "clean water", "children", "Eldoret", 3, 200_000,
      "Two 10,000-litre rain tanks and gutters so pupils have water at school all year."),
+    # Outside Kenya: the platform isn't tied to one country (Health, Water, Environment only, so the
+    # Education worked example above is unchanged)
+    ("Water", "Dhaka Household Water Filters", ["water", "health"], "clean water", "families", "Dhaka", 4, 300_000,
+     "Ceramic water filters and training for 120 households in a flood-prone Dhaka neighbourhood."),
+    ("Health", "Lima Community Dental Van", ["dental", "screening"], "primary care", "children", "Lima", 3, 400_000,
+     "A monthly dental check-up van for six schools on the edge of Lima, with fluoride and referrals."),
+    ("Environment", "Manila Bay Mangrove Replanting", ["trees", "climate"], "conservation", "community", "Manila", 3,
+     350_000, "Replanting 3,000 mangrove seedlings along Manila Bay with local fisherfolk groups."),
 ]
 
 # The worked example's backers: (project, people, cents each), one seeded person per gift. Half the design's
@@ -108,6 +116,10 @@ MILESTONES = {
                                 ("Train two local mechanics", 50_000, 60, OPEN)],
     "School Rainwater Tanks": [("First 10,000-litre tank", 90_000, 20, OPEN), ("Second tank", 90_000, 45, OPEN),
                                ("Gutters and taps", 20_000, 60, OPEN)],
+    "Dhaka Household Water Filters": [("First 60 filters", 150_000, 25, OPEN), ("Last 60 filters and training", 150_000, 55, OPEN)],
+    "Lima Community Dental Van": [("Van fit-out", 200_000, 30, OPEN), ("Six months of visits", 200_000, 90, OPEN)],
+    "Manila Bay Mangrove Replanting": [("Nursery and first 1,500 seedlings", 175_000, 30, OPEN),
+                                       ("Last 1,500 seedlings", 175_000, 75, OPEN)],
 }
 EVIDENCE_URL = "https://files.example.com/seed/milestone-{id}-{kind}.jpg"
 SEED_PAYEE = "seed-payee@example.com"

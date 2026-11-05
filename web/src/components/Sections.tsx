@@ -1,3 +1,4 @@
+import { Avatar } from "./Avatar";
 import Link from "next/link";
 import { formatMoney } from "@/lib/api";
 import type { BackerStory, Project, Sponsor } from "@/lib/types";
@@ -36,8 +37,8 @@ export function BackerStories({ stories, projects }: { stories: BackerStory[]; p
                     Backed {p.title}
                   </Link>
                 )}
-                <span className="absolute -bottom-[30px] left-1/2 -ml-[30px] grid size-[60px] place-items-center rounded-full border-4 border-white bg-primary-container font-display text-xl text-brand" aria-hidden>
-                  {s.name.slice(-1)}
+                <span className="absolute -bottom-[30px] left-1/2 -ml-[30px] block size-[60px] overflow-hidden border-4 border-white" aria-hidden>
+                  <Avatar name={s.name} seed={s.id} size={52} />
                 </span>
               </li>
             );

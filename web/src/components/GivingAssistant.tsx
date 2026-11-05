@@ -1,5 +1,11 @@
 "use client";
 
+import { doodleTile, doodleUrl } from "@/lib/doodles";
+import { Avatar } from "./Avatar";
+
+const DEMO_DONOR = process.env.NEXT_PUBLIC_DEMO_DONOR_ID ?? "1";
+// WhatsApp-style doodle wallpaper behind the messages, in a faint teal on the mint surface
+const WALLPAPER = doodleUrl(doodleTile({ stroke: "#b9d8cb", seed: 11 }));
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Project } from "@/lib/types";
@@ -126,7 +132,7 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
             </button>
           </header>
 
-          <div className="flex-1 space-y-3 overflow-y-auto bg-surface-alt p-4" aria-live="polite">
+          <div className="flex-1 space-y-3 overflow-y-auto bg-surface-alt p-4" style={{ backgroundImage: WALLPAPER, backgroundSize: "320px" }} aria-live="polite">
             {turns.length === 0 && (
               <div className="space-y-3">
                 <p className="border border-line bg-white p-3 text-sm text-ink">
@@ -146,12 +152,15 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
             )}
             {turns.map((t, i) =>
               t.who === "me" ? (
-                <p key={i} className="ml-auto w-fit max-w-[85%] bg-primary px-3 py-2 text-sm text-white">
-                  {t.text}
-                </p>
+                <div key={i} className="ml-auto flex w-fit max-w-[85%] items-end gap-2">
+                  <p className="bg-primary px-3 py-2 text-sm text-white">{t.text}</p>
+                  <Avatar seed={`donor-${DEMO_DONOR}`} anonymous size={28} label="You" />
+                </div>
               ) : (
                 <div key={i} className="space-y-2">
-                  <div className="w-fit max-w-[92%] border border-line bg-white px-3 py-2 text-sm text-ink">
+                  <div className="flex items-start gap-2">
+                  <Avatar kind="assistant" seed="assistant" size={28} />
+                  <div className="w-fit max-w-[85%] border border-line bg-white px-3 py-2 text-sm text-ink">
                     {t.chips.length > 0 && (
                       <>
                         <span>I searched for:</span>
@@ -165,6 +174,7 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
                       </>
                     )}
                     {t.text}
+                  </div>
                   </div>
                   {t.picks.map((p) => (
                     <div key={p.id} className="flex items-center justify-between gap-3 border border-line bg-white px-3 py-2 text-sm">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Avatar } from "@/components/Avatar";
 import { LeaderboardOptIn } from "@/components/LeaderboardOptIn";
 import { PageTitle } from "@/components/PageTitle";
 import { EmptyState, StatBox } from "@/components/ui";
@@ -65,6 +66,15 @@ export default async function ReportPage() {
             />
           ) : (
             <>
+              <div className="flex items-center gap-4">
+                <Avatar seed={`donor-${report.donorId}`} anonymous={!report.showOnLeaderboard} name={`Donor ${report.donorId}`} size={64} label="Your avatar" />
+                <div>
+                  <p className="font-display text-2xl text-ink">Your giving so far</p>
+                  <p className="text-sm">
+                    {report.showOnLeaderboard ? "Shown on public pages with your avatar." : "Anonymous on public pages. Your avatar stays a pattern."}
+                  </p>
+                </div>
+              </div>
               {/* Headline numbers */}
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 <StatBox value={formatMoney(report.totalGiven)} label="You gave" />
@@ -161,7 +171,10 @@ export default async function ReportPage() {
                 <div className="space-y-8">
                   {/* Giving Agent */}
                   <section className="space-y-3 bg-ink p-6 text-white">
-                    <h2 className="text-2xl text-white">Your Giving Agent</h2>
+                    <h2 className="flex items-center gap-3 text-2xl text-white">
+                      <Avatar name="Giving Agent" seed="giving-agent" size={36} label="Giving Agent" />
+                      Your Giving Agent
+                    </h2>
                     {report.agentReport ? (
                       <p className="leading-7 text-cobalt-green">{report.agentReport}</p>
                     ) : (

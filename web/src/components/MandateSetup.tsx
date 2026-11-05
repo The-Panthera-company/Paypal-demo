@@ -1,5 +1,6 @@
 "use client";
 
+import { Banner, notify } from "@/components/Status";
 import { useEffect, useState } from "react";
 import type { Category } from "@/lib/types";
 import { DonatePanel } from "./DonatePanel";
@@ -124,6 +125,7 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
     if (m.ok) {
       setBalance((m.data as Mandate).funded_balance_cents ?? null);
       setNotice({ ok: true, text: "Your Giving Agent is set up. It will donate within these rules on its next run." });
+      notify("Giving Agent saved.", "success");
     } else setNotice({ ok: false, text: m.message });
   }
 
@@ -131,6 +133,7 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
     const r = await call(`/donors/${DONOR_ID}/pending-approvals/${id}`, { method: "POST", body: JSON.stringify({ approve }) });
     if (r.ok) setPending((p) => p.filter((x) => x.donation_id !== id));
     setNotice(r.ok ? { ok: true, text: approve ? "Gift approved." : "Gift declined: no money moved." } : { ok: false, text: r.message });
+    notify(r.ok ? (approve ? "Gift approved." : "Gift declined: no money moved.") : r.message, r.ok ? "success" : "error");
   }
 
   const money = (label: string, value: string, set: (v: string) => void, error: string | null, help: string, id: string) => (
@@ -163,12 +166,12 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
     <div className="grid gap-10 lg:grid-cols-[1.5fr_1fr]">
       <div className="space-y-6">
         {!live && (
-          <p className="border-l-4 border-growth bg-white p-3 text-sm text-ink">Sample mode: connect the core API to save your Giving Agent for real.</p>
+          <Banner tone="info">Sample mode: connect the core API to save your Giving Agent for real.</Banner>
         )}
         {donorMissing && (
-          <p role="alert" className="border-l-4 border-danger bg-white p-3 text-sm text-ink">
-            The demo donor (id {DONOR_ID}) doesn&apos;t exist in the API yet, so this can&apos;t be saved. Person 1: add a demo donor to the seed.
-          </p>
+          <Banner tone="error" title="Can't save yet">
+            The demo donor (id {DONOR_ID}) doesn&apos;t exist in the API yet. Person 1: add a demo donor to the seed.
+          </Banner>
         )}
 
         <ol className="flex flex-wrap gap-2" aria-label="Steps">
@@ -302,10 +305,7 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
         )}
 
         {notice && (
-          <p role={notice.ok ? "status" : "alert"} className={`border-l-4 bg-white p-3 text-sm text-ink ${notice.ok ? "border-growth" : "border-danger"}`}>
-            {notice.ok ? "✓ " : ""}
-            {notice.text}
-          </p>
+          <Banner tone={notice.ok ? "success" : "error"}>{notice.text}</Banner>
         )}
 
         <div className="flex justify-between gap-3">
