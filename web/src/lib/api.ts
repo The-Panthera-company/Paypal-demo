@@ -411,3 +411,41 @@ function sampleReport(): DonorReport {
     sample: true,
   };
 }
+
+export type DonorBoardRow = {
+  alias: string;
+  displayName: string | null;
+  isMe: boolean;
+  given: number;
+  matchUnlocked: number;
+  multiplier: number;
+  projectsBacked: number;
+  categoriesReached: number;
+  agentGiven: number;
+  impactPoints: number;
+};
+
+/** Donor ladders for the round (GET /rounds/{id}/donors). Empty when there's no round or API. */
+export async function getDonorBoard(roundId: string, me = process.env.NEXT_PUBLIC_DEMO_DONOR_ID ?? "1"): Promise<{ currency: string; rows: DonorBoardRow[] }> {
+  if (!API_URL || !roundId) return { currency: "USD", rows: [] };
+  try {
+    const d = await get<{ currency: string; rows: Record<string, number | string | boolean | null>[] }>(`/rounds/${roundId}/donors?me=${me}`, 60);
+    return {
+      currency: d.currency,
+      rows: d.rows.map((r) => ({
+        alias: String(r.alias),
+        displayName: (r.display_name as string | null) ?? null,
+        isMe: Boolean(r.is_me),
+        given: Number(r.given_cents),
+        matchUnlocked: Number(r.match_unlocked_cents),
+        multiplier: Number(r.multiplier),
+        projectsBacked: Number(r.projects_backed),
+        categoriesReached: Number(r.categories_reached),
+        agentGiven: Number(r.agent_given_cents),
+        impactPoints: Number(r.impact_points),
+      })),
+    };
+  } catch {
+    return { currency: "USD", rows: [] };
+  }
+}

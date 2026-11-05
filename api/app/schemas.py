@@ -746,3 +746,22 @@ class SubscriptionOut(BaseModel):
     currency: str
     status: str
     approve_url: str | None = Field(None, description="Send the donor here to approve (only while APPROVAL_PENDING)")
+
+
+class DonorBoardRow(BaseModel):
+    alias: str
+    display_name: str | None = None
+    is_me: bool = False
+    given_cents: int
+    match_unlocked_cents: int
+    multiplier: float
+    projects_backed: int
+    categories_reached: int
+    agent_given_cents: int
+    impact_points: int
+
+
+class DonorBoardOut(BaseModel):
+    round_id: int
+    currency: str
+    rows: list[DonorBoardRow]

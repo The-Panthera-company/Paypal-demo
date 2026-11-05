@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect, useRef, useState } from "react";
 import type { Milestone } from "@/lib/types";
 
 // Bryntum is browser-only and large, so it loads on its own after the page has shown.
@@ -30,7 +31,9 @@ export function MilestoneTimeline({ milestones }: { milestones: Milestone[] }) {
         round&apos;s matching is added to the next tranche.
       </p>
       {dated ? (
-        <MilestoneGantt milestones={milestones} />
+        <WhenVisible>
+          <MilestoneGantt milestones={milestones} />
+        </WhenVisible>
       ) : (
         // No due dates yet: a plain list rather than invented dates
         <ol className="divide-y divide-line border border-line bg-white">
@@ -47,5 +50,24 @@ export function MilestoneTimeline({ milestones }: { milestones: Milestone[] }) {
         </ol>
       )}
     </section>
+  );
+}
+
+// Bryntum keeps working in the background once mounted (measured: ~56% CPU on a slow phone while
+// hidden in a closed tab). Mount it only while it is on screen; a placeholder keeps the space.
+function WhenVisible({ children }: { children: React.ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setOn(e.isIntersecting), { rootMargin: "200px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <div ref={box} className="min-h-[260px]">
+      {on ? children : <div className="h-[260px] bg-line/50" aria-label="Milestone timeline" />}
+    </div>
   );
 }

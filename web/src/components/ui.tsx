@@ -1,3 +1,4 @@
+import { RollingNumber } from "./RollingNumber";
 import Link from "next/link";
 
 const art: Record<string, { from: string; to: string; label: string }> = {
@@ -78,7 +79,9 @@ export function Eyebrow({ children, dark = false }: { children: React.ReactNode;
 export function StatBox({ value, label }: { value: string; label: string }) {
   return (
     <div className="flex flex-col justify-center bg-white p-5 text-center shadow-[0_0_30px_rgba(0,0,0,0.05)]">
-      <div className="tabular text-2xl font-bold text-brand">{value}</div>
+      <div className="text-2xl font-bold text-brand">
+        <RollingNumber value={value} />
+      </div>
       <div className="text-sm">{label}</div>
     </div>
   );
