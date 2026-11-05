@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useFavorites } from "@/lib/favorites";
 import type { Project } from "@/lib/types";
-import { ProjectCard } from "./ProjectCard";
+import { ProjectMosaic } from "./ProjectMosaic";
 
 /** The Favourites tab: projects saved with the heart, to review before deciding */
-export function FavoritesGrid({ projects, photos, cols }: { projects: Project[]; photos: Record<string, string>; cols: string }) {
+export function FavoritesGrid({ projects, photos }: { projects: Project[]; photos: Record<string, string> }) {
   const { ids } = useFavorites();
   const saved = ids.map((id) => projects.find((p) => p.id === id)).filter((p): p is Project => Boolean(p));
   if (saved.length === 0)
@@ -28,11 +28,7 @@ export function FavoritesGrid({ projects, photos, cols }: { projects: Project[];
           {new Intl.NumberFormat(undefined, { style: "currency", currency: saved[0].goal.currency, maximumFractionDigits: 0 }).format(total / 100)}
         </strong>
       </p>
-      <div className={`grid gap-[30px] ${cols}`}>
-        {saved.map((p) => (
-          <ProjectCard key={p.id} project={p} photo={photos[p.id]} />
-        ))}
-      </div>
+      <ProjectMosaic projects={saved} photos={photos} sort={false} />
     </div>
   );
 }
