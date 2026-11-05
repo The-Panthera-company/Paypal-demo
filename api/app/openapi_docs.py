@@ -414,6 +414,8 @@ def _example_value(name: str, prop: dict, schemas: dict, depth: int = 0) -> Any:
         return {}
     if prop.get("format") == "date-time":
         return "2026-11-03T09:00:00Z"
+    if prop.get("format") == "date":
+        return "2026-12-15"
     return "Receipts match the plan" if name == "summary" else name.replace("_", " ")
 
 
@@ -593,6 +595,28 @@ def _fill(node: dict, name: str, hint: Any, text: str | None, schemas: dict) -> 
     return value
 
 
+def _plain_refs(spec: dict) -> None:
+    """APIMatic reads `allOf: [$ref]` plus nullable or a default as an inline schema. Where nothing is
+    lost, point straight at the named schema: an optional field can simply be left out, and a query
+    parameter's default goes into its description."""
+    def single_ref(node: dict) -> str | None:
+        parts = node.get("allOf", [])
+        return parts[0]["$ref"] if len(parts) == 1 and "$ref" in parts[0] else None
+
+    for schema in spec["components"]["schemas"].values():
+        required = set(schema.get("required", []))
+        for key, prop in schema.get("properties", {}).items():
+            if key not in required and (ref := single_ref(prop)):
+                schema["properties"][key] = {"$ref": ref}
+    for item in spec["paths"].values():
+        for op in item.values():
+            for param in op.get("parameters", []):
+                if ref := single_ref(param.get("schema", {})):
+                    if "default" in param["schema"]:
+                        param["description"] = f"{param.get('description', '').rstrip('.')}. Default: {param['schema']['default']}."
+                    param["schema"] = {"$ref": ref}
+
+
 def _examples_and_bodies(spec: dict) -> None:
     schemas = spec["components"]["schemas"]
     for name, schema in schemas.items():
@@ -700,5 +724,6 @@ def document(spec: dict) -> dict:
     converted = _to_30({k: v for k, v in spec.items() if k != "openapi"})
     spec.clear()
     spec.update({"openapi": "3.0.3", **converted})
+    _plain_refs(spec)
     _examples_and_bodies(spec)
     return spec
