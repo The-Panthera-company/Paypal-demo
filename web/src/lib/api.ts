@@ -64,6 +64,9 @@ type ApiProject = {
   currency: string;
   summary?: string;
   facilitator?: string;
+  verified_at?: string | null;
+  projected_match_cents?: number;
+  matching_frozen?: boolean;
   milestones?: { id: number; seq: number; title: string; amount_cents: number; match_amount_cents: number; currency: string; due_date: string | null; status: string }[];
 };
 type ApiRound = { id: number; name: string; ends_at: string; matching_pool_cents: number; currency: string };
@@ -116,6 +119,9 @@ function toProject(p: ApiProject, endsAt: string): Project {
     urgency: Math.min(5, Math.max(1, p.urgency)) as Project["urgency"],
     status: (["verified", "active", "frozen", "completed"].includes(p.status) ? p.status : "active") as Project["status"],
     endsAt,
+    verifiedAt: p.verified_at ?? undefined,
+    projectedMatch: p.projected_match_cents !== undefined ? money(p.projected_match_cents, p.currency) : undefined,
+    matchingFrozen: p.matching_frozen ?? false,
     milestones: p.milestones?.map((m) => ({
       id: String(m.id),
       seq: m.seq,
