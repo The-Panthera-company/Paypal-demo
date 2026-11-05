@@ -184,3 +184,53 @@ const sample: Omit<AdminData, "sampleReason"> = {
     { id: "s-a4", actor: "milestone_agent", action: "tranche_held", inputs: { milestone_id: 7, receipt_total_cents: 135000, tranche_cents: 120000 }, ruleResult: "receipt_over_10pct", reason: "Receipt total is 12.5% above the tranche; sent to an admin", createdAt: ago(5) },
   ],
 };
+
+export type Dashboard = {
+  totals: {
+    received: number;
+    refunded: number;
+    fees: number;
+    paidOut: number;
+    released: number;
+    releasedNotPaid: number;
+    agentUnspent: number;
+    platformBalance: number;
+  } | null;
+  issues: { check: string; severity: "error" | "warning"; detail: string; count: number }[];
+  reconciledAt: string | null;
+  payouts: { batch: string; status: string; amount: number; items: number; pending: number }[];
+};
+
+/** Money figures for the overview: reconciliation totals + issues, and payout batches */
+export async function getDashboard(): Promise<Dashboard> {
+  const empty: Dashboard = { totals: null, issues: [], reconciledAt: null, payouts: [] };
+  if (!API_URL || !ADMIN_TOKEN) return empty;
+  const [rec, pay] = await Promise.all([
+    adminFetch<{ generated_at: string; totals: Record<string, number>; issues: { check: string; severity: "error" | "warning"; detail: string; refs: unknown[] }[] }>("/admin/reconciliation").catch(() => null),
+    adminFetch<{ sender_batch_id: string; status: string; items: { amount_cents: number; status: string }[] }[]>("/admin/payouts").catch(() => []),
+  ]);
+  const t = rec?.totals;
+  return {
+    totals: t
+      ? {
+          received: t.received_via_paypal_cents ?? 0,
+          refunded: t.refunded_cents ?? 0,
+          fees: t.paypal_fees_cents ?? 0,
+          paidOut: t.paid_out_cents ?? 0,
+          released: t.tranches_released_cents ?? 0,
+          releasedNotPaid: t.released_not_yet_paid_cents ?? 0,
+          agentUnspent: t.agent_budget_unspent_cents ?? 0,
+          platformBalance: t.platform_balance_cents ?? 0,
+        }
+      : null,
+    issues: (rec?.issues ?? []).map((i) => ({ check: i.check, severity: i.severity, detail: i.detail, count: i.refs?.length ?? 1 })),
+    reconciledAt: rec?.generated_at ?? null,
+    payouts: pay.map((b) => ({
+      batch: b.sender_batch_id,
+      status: b.status,
+      amount: b.items.reduce((s, i) => s + i.amount_cents, 0),
+      items: b.items.length,
+      pending: b.items.filter((i) => i.status !== "SUCCESS").length,
+    })),
+  };
+}
