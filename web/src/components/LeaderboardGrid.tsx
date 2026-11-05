@@ -82,6 +82,9 @@ function MatchCell({ data, context, node }: ICellRendererParams<LeaderboardRow, 
   );
 }
 
+const defaultColDef: ColDef<LeaderboardRow> = { sortable: true, resizable: true, suppressMovable: true };
+const getRowId = (p: { data: LeaderboardRow }) => p.data.projectId;
+
 export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow[]; refreshSeconds?: number }) {
   const router = useRouter();
   const grid = useRef<AgGridReact<LeaderboardRow>>(null);
@@ -179,6 +182,7 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
 
   // Pinned bottom row: totals of the rows currently shown (follows search and filters)
   const [totals, setTotals] = useState<LeaderboardRow[]>([]);
+  const totalsKey = useRef("");
   const updateTotals = useCallback(
     (api: { forEachNodeAfterFilter: (cb: (n: IRowNode<LeaderboardRow>) => void) => void; getDisplayedRowCount: () => number }) => {
       let backers = 0, raised = 0, floor = 0, crowd = 0, match = 0, n = 0;
@@ -193,10 +197,16 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
         match += d.match.amount;
       });
       const m = (a: number) => ({ amount: a, currency });
+      // Only store new totals when a number changed. A new pinned row makes the grid update its
+      // model, which calls this again: storing every time was an endless loop that froze page
+      // navigation (links on the leaderboard stopped working).
+      const key = [n, backers, raised, floor, crowd, match].join("|");
+      setShown(api.getDisplayedRowCount());
+      if (key === totalsKey.current) return;
+      totalsKey.current = key;
       setTotals([
         { rank: 0, projectId: "__total", title: `Total (${n} projects)`, categoryId: "", backerCount: backers, raised: m(raised), score: 0, floor: m(floor), crowd: m(crowd), match: m(match), capped: false, frozen: false },
       ]);
-      setShown(api.getDisplayedRowCount());
     },
     [currency],
   );
@@ -267,13 +277,13 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
           rowData={rows}
           columnDefs={columns}
           context={context}
-          getRowId={(p) => p.data.projectId}
+          getRowId={getRowId}
           quickFilterText={search}
           isExternalFilterPresent={isExternalFilterPresent}
           doesExternalFilterPass={doesExternalFilterPass}
           onModelUpdated={(e) => updateTotals(e.api)}
           pinnedBottomRowData={totals}
-          defaultColDef={{ sortable: true, resizable: true, suppressMovable: true }}
+          defaultColDef={defaultColDef}
           domLayout="autoHeight"
           tooltipShowDelay={300}
           animateRows
