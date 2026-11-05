@@ -101,6 +101,20 @@ SCHEMAS = {
     "VerifyIn": "An admin's verification decision on a project under review.",
     "WebhookAck": "What the API did with a PayPal webhook delivery.",
     "WebhookEventOut": "A PayPal webhook delivery the API accepted, and the result.",
+    "EvidenceMilestone": "A tranche with evidence waiting for the Milestone Agent, and its documents.",
+    "MatchPreviewItem": "What one gift would add to one project's match.",
+    "MatchPreviewOut": "Estimated matching a gift would add, per project, on the round's live inputs.",
+    "MilestonePlanIn": "One tranche in a project's application: what it pays for, how much, and when.",
+    "OwnerTokenOut": "A project's new owner token for document uploads.",
+    "ProjectApplicationOut": "The new project (pending review) and its owner token.",
+    "RefundIn": "An admin's refund: how much (default: all that's left) and why.",
+    "RefundOut": "What PayPal did with the refund and where the donation stands.",
+    "RoundIn": "A new matching round: its window, pool and matching rules.",
+    "RoundResultRow": "One project's outcome in a round: projected and final match.",
+    "RoundResultsOut": "A round's outcome: totals and each project's projected and final match.",
+    "RoundUpdateIn": "Changes to a scheduled or open round; fields left out stay as they are.",
+    "SponsorOut": "One contribution to a round's matching pool.",
+    "SponsorsOut": "Who added to a round's matching pool, largest first.",
 }
 
 # --- fields: by name, with per-schema wording where a name means different things ------------
@@ -290,6 +304,15 @@ SCHEMA_FIELDS = {
     ("SweepOut", "captured"): "Donation ids captured or recorded now.",
     ("SweepOut", "failed"): "Donation ids voided, declined or abandoned (never approved).",
     ("StoryOut", "id"): "Story id (the milestone's id).",
+    ("CreateOrderIn", "sponsor_name"): "POOL only: the name on the round's sponsor list; leave out to be anonymous.",
+    ("EvidenceMilestone", "documents"): "Everything uploaded for this tranche, oldest first.",
+    ("ProjectApplicationOut", "milestone_ids"): "The tranches created from the plan, in order.",
+    ("RefundOut", "refund_id"): "PayPal's refund id.",
+    ("RefundOut", "refunded_total_cents"): "Everything refunded on this donation so far (booked refunds only).",
+    ("RoundResultsOut", "is_final"): "True once the round has closed and the match is fixed.",
+    ("RoundResultsOut", "matched_cents"): "Match shared out: final once closed, projected before.",
+    ("SponsorOut", "given_at"): "When the contribution was captured (UTC).",
+    ("SponsorsOut", "total_cents"): "Everything sponsors added to the pool.",
 }
 for _schema in ("ActiveMandate", "AuditOut", "CaseOut", "CategoryOut", "DocumentOut", "DonationOut", "DonorOut",
                 "MandateOut", "MandateRunOut", "MilestoneOut", "PayoutOut", "ProjectDetail", "ProjectSummary", "RoundOut"):
@@ -341,7 +364,13 @@ EXAMPLES = {
     "ProjectApplicationIn": {"title": "Lanet Library", "facilitator": "Lanet Community Library Group", "summary": "A lending library for three primary schools in Lanet.",
                              "category_id": 2, "tags": ["books", "literacy"], "cause": "literacy",
                              "beneficiary_group": "children", "region": "Nakuru", "hide_location": False,
-                             "goal_cents": 600000, "urgency": 4},
+                             "goal_cents": 600000, "urgency": 4,
+                             "milestones": [
+                                 {"title": "Shelves for three schools", "amount_cents": 200000, "due_date": "2026-12-15"},
+                                 {"title": "400 books", "amount_cents": 250000, "due_date": "2027-01-31"},
+                                 {"title": "Librarian, first term", "amount_cents": 150000, "due_date": "2027-03-31"},
+                             ],
+                             "payout_email": "lanet.library@example.com"},
 }
 
 SAMPLES = {

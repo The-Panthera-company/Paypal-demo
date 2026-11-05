@@ -16,6 +16,7 @@ from app.config import Settings, get_settings
 from app.db import get_db
 from app.mandates import check_gift
 from app.models import (
+    ProjectDocument,
     AuditLog,
     CaseStatus,
     Donation,
@@ -34,8 +35,10 @@ from app.models import (
 from app.money import to_paypal
 from app.paypal import PayPalClient, get_paypal
 from app.routers.donations import mark_captured
+from app.routers.catalogue import document_out, milestone_out
 from app.routers.donors import mandate_out, run_out
 from app.schemas import (
+    EvidenceMilestone,
     ActiveMandate,
     AuditIn,
     AuditOut,
@@ -268,3 +271,19 @@ def write_audit(body: AuditIn, db: Session = Depends(get_db)):
     db.add(entry)
     db.commit()
     return AuditOut(**body.model_dump(), id=entry.id, created_at=entry.created_at)
+
+
+@router.get("/milestones/evidence", response_model=list[EvidenceMilestone])
+def evidence_queue(db: Session = Depends(get_db)):
+    """Milestone Agent: tranches whose owners submitted evidence, oldest first, with all their
+    documents. Check them, then POST /internal/payout-requests."""
+    milestones = list(db.scalars(select(Milestone).where(Milestone.status == MilestoneStatus.evidence_submitted)
+                                 .order_by(Milestone.id)))
+    titles = dict(db.execute(select(Project.id, Project.title).where(Project.id.in_({m.project_id for m in milestones}))).all())
+    docs = list(db.scalars(select(ProjectDocument).where(ProjectDocument.milestone_id.in_([m.id for m in milestones]))
+                           .order_by(ProjectDocument.id)))
+    return [
+        EvidenceMilestone(milestone=milestone_out(m), project_id=m.project_id, project_title=titles.get(m.project_id, ""),
+                          documents=[document_out(d) for d in docs if d.milestone_id == m.id])
+        for m in milestones
+    ]

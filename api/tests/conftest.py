@@ -36,6 +36,8 @@ class FakePayPal:
         self.plans: dict[str, dict] = {}  # plan id -> request body
         self.subscriptions: dict[str, dict] = {}  # subscription id -> request body
         self.cancelled: list[str] = []
+        self.refunds: list[dict] = []  # request bodies, with the capture id
+        self.refund_status = "COMPLETED"
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -53,6 +55,10 @@ class FakePayPal:
                 status, body = self.capture_override
                 return httpx.Response(status, json=body)
             return httpx.Response(201, json=self.capture(path.split("/")[-2]))
+        if path.startswith("/v2/payments/captures/") and path.endswith("/refund"):
+            body = json.loads(request.content)
+            self.refunds.append({"capture_id": path.split("/")[-2], **body})
+            return httpx.Response(201, json={"id": f"REF-{len(self.refunds)}", "status": self.refund_status})
         if path == "/v1/payments/payouts" and request.method == "POST":
             if self.payout_error:
                 status, body = self.payout_error

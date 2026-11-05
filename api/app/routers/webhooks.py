@@ -9,16 +9,17 @@ failure while handling answers 502 without recording, so PayPal retries later.
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_db
 from app import payouts, subscriptions
-from app.models import AuditLog, Donation, DonationStatus, LedgerEntry, LedgerType, Payout, WebhookEvent
+from app.models import Donation, DonationStatus, Payout, WebhookEvent
 from app.money import from_paypal
 from app.paypal import PayPalClient, PayPalError, get_paypal
+from app.refunds import book_refund
 from app.routers.donations import apply_capture
 from app.schemas import ErrorOut, WebhookAck
 
@@ -150,35 +151,8 @@ def _refund(db: Session, refund: dict, *, reversed_: bool) -> str:
     amount = abs(from_paypal(money["value"], currency)) if money.get("value") else donation.amount
     if currency != donation.currency:
         return "mismatch"
-
-    db.add(
-        LedgerEntry(
-            type=LedgerType.refund,
-            amount=amount,
-            currency=currency,
-            project_id=donation.project_id,
-            donation_id=donation.id,
-        )
-    )
-    db.flush()
-    refunded = db.scalar(
-        select(func.coalesce(func.sum(LedgerEntry.amount), 0)).where(
-            LedgerEntry.donation_id == donation.id, LedgerEntry.type == LedgerType.refund
-        )
-    )
-    # Fully refunded gifts leave project totals and matching; a partial refund stays counted.
-    if refunded >= donation.amount:
-        donation.status = DonationStatus.refunded
-    if reversed_:
-        db.add(
-            AuditLog(
-                actor="paypal",
-                action="capture_reversed",
-                inputs={"donation_id": donation.id, "capture_id": capture_id, "amount_cents": amount},
-                rule_result="reversal",
-                reason="Donor's bank or PayPal reversed the payment (chargeback or dispute)",
-            )
-        )
+    # An admin refund was booked when PayPal answered; its webhook finds the refund id and stops.
+    book_refund(db, donation, amount, refund.get("id"), reversed_=reversed_)
     return "processed"
 
 

@@ -134,6 +134,8 @@ def donor_report(db: Session, donor: Donor, currency: str) -> DonorReport:
         title = titles.get(d.project_id) if d.project_id else None
         if d.target_type == TargetType.CATEGORY:
             title = f"Split across {len(shares[d.id])} projects" if shares[d.id] else "Category gift"
+        if d.target_type == TargetType.POOL:
+            title = "Matching pool"
         rows.append(ReportGift(
             donation_id=d.id, project_id=d.project_id, project_title=title, via=d.target_type,
             amount_cents=d.amount, status=d.status, match_unlocked_cents=unlocked.get(d.id, 0),

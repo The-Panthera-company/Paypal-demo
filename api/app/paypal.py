@@ -80,6 +80,13 @@ class PayPalClient:
     def get_order(self, order_id: str) -> dict:
         return self._request("GET", f"/v2/checkout/orders/{order_id}")
 
+    def refund_capture(self, capture_id: str, *, amount: str | None, currency: str, note: str, request_id: str) -> dict:
+        """Refund all of a capture (amount None) or part of it. The answer's status is COMPLETED or PENDING."""
+        body: dict = {"note_to_payer": note[:255]}
+        if amount is not None:
+            body["amount"] = {"value": amount, "currency_code": currency}
+        return self._request("POST", f"/v2/payments/captures/{capture_id}/refund", request_id=request_id, json=body)
+
     def create_payout(self, *, sender_batch_id: str, currency: str, items: list[dict]) -> dict:
         """Send one Payouts batch. items: sender_item_id, receiver (email), amount (PayPal string), note.
 

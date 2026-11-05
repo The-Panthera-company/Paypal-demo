@@ -5,6 +5,7 @@ no Watchdog case is open (the round sits in `closing`), computes the final match
 each project's match to its next unreleased milestone, so matching money is only paid out with
 evidence. A project with no unreleased milestone gets a "Matching funds" milestone to hold it.
 Closing is one-way: a closed round is never recomputed and its match never added twice.
+`open_due` opens a scheduled round once its start time comes (one round runs at a time).
 """
 
 from datetime import datetime, timezone
@@ -100,3 +101,17 @@ def close_due(db: Session, now: datetime | None = None) -> list[int]:
         if (waiting or _aware(round_.ends_at) <= now) and close(db, round_, now=now, early=waiting):
             closed.append(round_.id)
     return closed
+
+
+def open_due(db: Session, now: datetime | None = None) -> Round | None:
+    """Open the earliest scheduled round whose start has come, if no round is open or closing."""
+    now = now or datetime.now(timezone.utc)
+    if db.scalar(select(Round.id).where(Round.status.in_((RoundStatus.open, RoundStatus.closing)))):
+        return None
+    for round_ in db.scalars(select(Round).where(Round.status == RoundStatus.scheduled).order_by(Round.starts_at)):
+        if _aware(round_.starts_at) <= now < _aware(round_.ends_at):
+            round_.status = RoundStatus.open
+            db.add(AuditLog(actor="system", action="round_opened", inputs={"round_id": round_.id},
+                            rule_result="open", reason=f"{round_.name} started"))
+            return round_
+    return None

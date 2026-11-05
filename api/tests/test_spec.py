@@ -82,19 +82,37 @@ def test_unset_token_fails_closed(client):
     assert client.get("/admin/projects", headers=ADMIN).status_code == 503
 
 
-DOCUMENT = {"kind": "receipt", "file_url": "https://files.example.com/receipt.jpg"}
+def _stub_app(settings):
+    """Every route is built now, so the stub helper is tried on an app of its own."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.stubs import Planned, planned, planned_handler
+
+    stub = FastAPI()
+    stub.add_exception_handler(Planned, planned_handler)
+    stub.dependency_overrides[get_settings] = lambda: settings
+
+    @stub.post("/documents", response_model=DocumentOut, status_code=201)
+    def add_document():
+        planned("document uploads")
+
+    return TestClient(stub)
 
 
-def test_stub_returns_spec_example(client):
-    r = client.post("/projects/1/documents", json=DOCUMENT)
+def test_stub_returns_spec_example():
+    from app.config import Settings
+
+    r = _stub_app(Settings(stub_examples=True)).post("/documents")
     assert r.status_code == 201  # the route's own status code
     assert r.headers["X-Stub"] == "document uploads"
     assert r.json() == DocumentOut.model_config["json_schema_extra"]["example"]
 
 
-def test_stub_returns_501_when_examples_off(client):
-    app.dependency_overrides[get_settings]().stub_examples = False
-    r = client.post("/projects/1/documents", json=DOCUMENT)
+def test_stub_returns_501_when_examples_off():
+    from app.config import Settings
+
+    r = _stub_app(Settings(stub_examples=False)).post("/documents")
     assert r.status_code == 501
     assert r.json()["detail"] == {"error": "NOT_IMPLEMENTED", "message": "Planned: document uploads"}
     assert "X-Stub" not in r.headers
