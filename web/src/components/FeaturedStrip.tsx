@@ -38,7 +38,7 @@ export function FeaturedStrip({ items }: { items: StripItem[] }) {
 
   // Visible panels plus one waiting (width 0) on the right, wrapping round the pool
   const windowSize = Math.min(n, VISIBLE + 1);
-  const shown = Array.from({ length: windowSize }, (_, k) => ({ ...items[(offset + k) % n], pos: k, poolIndex: (offset + k) % n }));
+  const shown = Array.from({ length: windowSize }, (_, k) => ({ ...items[(offset + k) % n], pos: k }));
   const activePos = shown.findIndex((s) => s.project.id === active);
 
   const running = canMove && n > VISIBLE && !hover && !paused;
@@ -71,7 +71,7 @@ export function FeaturedStrip({ items }: { items: StripItem[] }) {
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
       >
-        {shown.map(({ project: p, photo, raised, goal, days, pos, poolIndex }) => {
+        {shown.map(({ project: p, photo, raised, goal, days, pos }) => {
           const on = p.id === active;
           const leaving = shifting && pos === 0;
           const waiting = pos === windowSize - 1 && n > VISIBLE;
@@ -95,18 +95,23 @@ export function FeaturedStrip({ items }: { items: StripItem[] }) {
                 className={`absolute inset-0 bg-[linear-gradient(90deg,rgba(11,46,51,0.88),rgba(11,46,51,0.15)_75%)] transition-opacity duration-500 ${on ? "opacity-100" : "opacity-100 md:opacity-0"}`}
                 aria-hidden
               />
-              <span className="tabular absolute left-5 top-4 font-display text-5xl" aria-hidden>
-                {String(poolIndex + 1).padStart(2, "0")}
-              </span>
-              <span className={`absolute left-5 top-[84px] w-28 text-[11px] font-bold uppercase leading-4 tracking-[2px] ${on ? "text-accent" : "text-cobalt-green"}`} aria-hidden>
-                {p.categoryId}
-              </span>
+              {/* Brief info at the top of every panel: cause, title, place */}
+              <div className="absolute inset-x-5 top-5" aria-hidden={on ? true : undefined}>
+                <span className={`block text-[11px] font-bold uppercase leading-4 tracking-[2px] ${on ? "text-accent" : "text-cobalt-green"}`}>
+                  {p.categoryId} · {p.facets.region}
+                </span>
+                {!on && <span className="mt-2 block font-display text-xl leading-6 text-white [overflow-wrap:anywhere]">{p.title}</span>}
+                {!on && <span className="mt-2 block text-xs text-white/75">{pct}% funded</span>}
+              </div>
               <div
                 className={`absolute bottom-0 left-0 w-[min(100%,560px)] p-6 transition-all duration-500 md:p-8 ${
                   on && !shifting ? "opacity-100 md:translate-y-0 md:delay-300" : "opacity-100 md:pointer-events-none md:translate-y-4 md:opacity-0"
                 }`}
               >
                 <h3 className="max-w-md text-3xl leading-tight text-white">{p.title}</h3>
+                <p className="mt-2 line-clamp-2 max-w-md text-sm leading-6 text-white/90">
+                  {p.summary || `${p.facets.cause[0].toUpperCase()}${p.facets.cause.slice(1)} for ${p.facets.group.toLowerCase()} in ${p.facets.region}.`}
+                </p>
                 <p className="mt-3 max-w-md text-sm text-white/85">
                   <strong className="tabular text-accent">{raised}</strong> of {goal} · {p.backerCount} backers · {days} days left
                 </p>
@@ -131,9 +136,7 @@ export function FeaturedStrip({ items }: { items: StripItem[] }) {
           >
             <span aria-hidden>{paused ? "▶" : "❚❚"}</span> {paused ? "Play" : "Pause"} the moving strip
           </button>
-          <span>
-            {n} projects · {hover ? "paused while you look" : paused ? "paused" : "moving"}
-          </span>
+          <span>{hover ? "Paused while you look" : paused ? "Paused" : "Moving through every project"}</span>
         </div>
       )}
     </div>

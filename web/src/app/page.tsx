@@ -147,7 +147,7 @@ export default async function Home() {
               <h2 className="section-title">Explore projects</h2>
             </div>
             <Link href="/projects" className="btn btn-2">
-              See all {showcase.length} projects
+              Discover all projects
             </Link>
           </div>
           <FeaturedStrip
