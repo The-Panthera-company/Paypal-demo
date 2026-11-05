@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { GivingAssistant } from "@/components/GivingAssistant";
 import { ImpactGallery } from "@/components/ImpactGallery";
-import { FeaturedStrip } from "@/components/FeaturedStrip";
+import { CountUp } from "@/components/CountUp";
+import { PlatformIdentity } from "@/components/PlatformIdentity";
+import { ProjectShowcase } from "@/components/ProjectShowcase";
 import { BackerStories, SponsorStrip } from "@/components/Sections";
 import { Countdown } from "@/components/Countdown";
-import { categoryIcon, Icon } from "@/components/Icon";
+import { Icon } from "@/components/Icon";
 import { assignPhotos, CategoryArt, Eyebrow, photoFor } from "@/components/ui";
-import { daysLeft, formatDate, formatMoney, getBackerStories, getCategories, getImpactUpdates, getProjects, getRound, getSponsors } from "@/lib/api";
+import { daysLeft, formatDate, formatMoney, getBackerStories, getImpactUpdates, getProjects, getRound, getSponsors } from "@/lib/api";
 
 const faqs = [
   ["How does matching work?", "A sponsor pool is shared by quadratic funding: a project backed by many people gets a bigger top-up than one backed by a few large gifts. Caps stop any single project taking everything."],
@@ -22,9 +24,8 @@ const steps = [
 ];
 
 export default async function Home() {
-  const [projects, categories, updates, stories, sponsors, round] = await Promise.all([
+  const [projects, updates, stories, sponsors, round] = await Promise.all([
     getProjects(),
-    getCategories(),
     getImpactUpdates(),
     getBackerStories(),
     getSponsors(),
@@ -34,8 +35,9 @@ export default async function Home() {
   const dateLabels = Object.fromEntries(updates.map((u) => [u.id, formatDate(u.date)]));
   const raised = projects.reduce((s, p) => s + p.raised.amount, 0);
   const backers = projects.reduce((s, p) => s + p.backerCount, 0);
-  const featured = [...projects].sort((a, b) => b.urgency - a.urgency).slice(0, 5);
-  const photos = assignPhotos(featured);
+  // Most urgent and least-backed first, then the rest: every listed project is in the rotation
+  const showcase = [...projects].filter((p) => p.status !== "completed").sort((a, b) => b.urgency - a.urgency || a.backerCount - b.backerCount);
+  const photos = assignPhotos(showcase);
 
   return (
     <>
@@ -63,7 +65,25 @@ export default async function Home() {
               </Link>
             </div>
           </div>
-          <Countdown endsAt={round.endsAt} />
+        </div>
+      </section>
+
+      {/* Matching round: its own calm band below the hero, so the hero can breathe */}
+      <section className="border-b border-line bg-surface-alt py-10">
+        <div className="container-k flex flex-wrap items-center justify-between gap-8">
+          <div className="max-w-xl">
+            <Eyebrow>{round.name}</Eyebrow>
+            <p className="font-display text-2xl text-ink lg:text-3xl">
+              {round.pool ? (
+                <>
+                  <span className="tabular">{formatMoney(round.pool)}</span> matching pool, shared by how many people back each project
+                </>
+              ) : (
+                "The matching pool is shared by how many people back each project"
+              )}
+            </p>
+          </div>
+          <Countdown endsAt={round.endsAt} small label="This matching round closes in" />
         </div>
       </section>
 
@@ -95,13 +115,17 @@ export default async function Home() {
               ))}
             </ul>
             <div className="mb-8 grid grid-cols-3 gap-px bg-brand-line">
-              {[
-                [formatMoney({ amount: raised, currency: "USD" }), "raised"],
-                [String(backers), "backers"],
-                [String(projects.length), "projects"],
-              ].map(([v, l], i) => (
+              {(
+                [
+                  [raised, "raised", "money"],
+                  [backers, "backers", "number"],
+                  [projects.length, "projects", "number"],
+                ] as const
+              ).map(([v, l, f], i) => (
                 <div key={l} className={`bg-brand p-4 text-center text-white lg:p-6 ${i === 2 ? "corner" : ""}`} style={{ ["--corner-size" as string]: "23px" }}>
-                  <div className="tabular font-display text-2xl lg:text-4xl">{v}</div>
+                  <div className="font-display text-2xl lg:text-4xl">
+                    <CountUp value={v} format={f} />
+                  </div>
                   <div className="text-sm text-brand-tint">{l}</div>
                 </div>
               ))}
@@ -113,38 +137,12 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Explore projects: static grid on a light band */}
-      <section className="relative pb-16 lg:pb-[120px]">
-        <div className="absolute inset-x-0 top-0 h-[480px] bg-surface-alt lg:h-[602px]" aria-hidden />
-        <div className="container-k relative pt-16 lg:pt-[110px]">
-          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <Eyebrow>Urgent and overlooked first</Eyebrow>
-              <h2 className="section-title">Explore projects</h2>
-            </div>
-            <nav aria-label="Categories" className="flex flex-wrap gap-2">
-              {categories.map((c) => (
-                <Link
-                  key={c.id}
-                  href={`/projects?category=${c.id}`}
-                  className="flex min-h-11 items-center gap-2 border border-line bg-white px-4 text-sm text-ink hover:border-brand hover:text-brand"
-                >
-                  <Icon name={categoryIcon[c.id] ?? "heart"} size={18} className="text-growth" />
-                  {c.name}
-                </Link>
-              ))}
-            </nav>
-          </div>
-          <FeaturedStrip
-            items={featured.map((p) => ({ project: p, photo: photos[p.id], raised: formatMoney(p.raised), goal: formatMoney(p.goal), days: daysLeft(p) }))}
-          />
-          <div className="mt-10 text-center">
-            <Link href="/projects" className="btn btn-2">
-              See all projects
-            </Link>
-          </div>
-        </div>
-      </section>
+      {/* Explore projects: full-screen, one project in focus, every project in the rotation */}
+      <ProjectShowcase
+        items={showcase.map((p) => ({ project: p, photo: photos[p.id], raised: formatMoney(p.raised), goal: formatMoney(p.goal), days: daysLeft(p) }))}
+      />
+
+      <PlatformIdentity />
 
       {/* FAQ on a dark band */}
       <section id="faq" className="bg-ink bg-[linear-gradient(135deg,#0b2e33,#005a73)] py-16 lg:py-[120px]">
