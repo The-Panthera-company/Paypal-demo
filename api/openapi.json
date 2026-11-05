@@ -2885,17 +2885,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/ProjectStatus"
-                }
-              ],
-              "default": "pending_review",
-              "description": "Only items in this status.",
-              "example": "pending_review"
+              "$ref": "#/components/schemas/ProjectStatus"
             },
-            "description": "Only items in this status.",
-            "example": "pending_review"
+            "description": "Only items in this status. Default: pending_review.",
+            "example": "draft"
           }
         ],
         "responses": {
@@ -3151,17 +3144,9 @@
             "in": "query",
             "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/CaseStatus"
-                }
-              ],
-              "default": "open",
-              "nullable": true,
-              "description": "Only items in this status.",
-              "example": "open"
+              "$ref": "#/components/schemas/CaseStatus"
             },
-            "description": "Only items in this status.",
+            "description": "Only items in this status. Default: open.",
             "example": "open"
           }
         ],
@@ -8261,7 +8246,7 @@
             "type": "string",
             "format": "date",
             "description": "When the milestone should be reached.",
-            "example": "due date"
+            "example": "2026-12-15"
           }
         },
         "type": "object",
@@ -8275,7 +8260,7 @@
         "example": {
           "title": "Lanet Library",
           "amount_cents": 2500,
-          "due_date": "due date"
+          "due_date": "2026-12-15"
         }
       },
       "MilestoneReviewIn": {
@@ -8687,14 +8672,7 @@
             "example": "literacy"
           },
           "beneficiary_group": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ProjectApplicationInBeneficiaryGroup"
-              }
-            ],
-            "description": "Who the project helps, e.g. children, adults, elderly, community.",
-            "nullable": true,
-            "example": "children"
+            "$ref": "#/components/schemas/ProjectApplicationInBeneficiaryGroup"
           },
           "region": {
             "type": "string",
