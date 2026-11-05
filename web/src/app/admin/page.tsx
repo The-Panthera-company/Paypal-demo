@@ -3,11 +3,14 @@ import { getGlobePins } from "@/lib/globe";
 
 import { AuditGrid, CasesGrid, MilestonesGrid, VerificationGrid } from "@/components/admin/AdminGrids";
 import { PageTitle } from "@/components/PageTitle";
-import { getAdminData } from "@/lib/admin";
+import { getAdminData, getDashboard } from "@/lib/admin";
+import { getCategories, getLeaderboard, getProjects } from "@/lib/api";
+import { Overview } from "@/components/admin/Overview";
 
 export const dynamic = "force-dynamic";
 
 const tabs = [
+  { id: "overview", label: "Overview" },
   { id: "cases", label: "Watchdog cases" },
   { id: "verify", label: "Verification queue" },
   { id: "milestones", label: "Held tranches" },
@@ -17,9 +20,10 @@ type Tab = (typeof tabs)[number]["id"];
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab: raw } = await searchParams;
-  const tab: Tab = tabs.some((t) => t.id === raw) ? (raw as Tab) : "cases";
-  const [data, globe] = await Promise.all([getAdminData(), getGlobePins()]);
+  const tab: Tab = tabs.some((t) => t.id === raw) ? (raw as Tab) : "overview";
+  const [data, globe, dash, projects, lb, categories] = await Promise.all([getAdminData(), getGlobePins(), getDashboard(), getProjects(), getLeaderboard(), getCategories()]);
   const counts: Record<Tab, number> = {
+    overview: 0,
     cases: data.cases.filter((c) => c.status === "open").length,
     verify: data.queue.length,
     milestones: data.milestones.length,
@@ -28,7 +32,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   return (
     <>
-      <PageTitle title="Admin console" crumb="Admin" globe={globe} />
+      <PageTitle title="Admin console" crumb="Admin" />
       <section className="section">
         <div className="container-k space-y-8">
           <p className="max-w-[70ch] text-lg leading-8">
@@ -42,20 +46,27 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             </p>
           )}
 
-          <nav aria-label="Admin sections" className="flex flex-wrap bg-brand">
-            {tabs.map((t) => (
-              <Link
-                key={t.id}
-                href={`/admin?tab=${t.id}`}
-                aria-current={tab === t.id ? "page" : undefined}
-                className={`flex min-h-14 items-center gap-2 px-6 font-medium ${tab === t.id ? "bg-white text-ink" : "text-white hover:bg-brand-dark"}`}
-              >
-                {t.label}
-                <span className={`tabular px-2 text-xs leading-6 ${tab === t.id ? "bg-brand text-white" : "bg-white/20 text-white"}`}>{counts[t.id]}</span>
-              </Link>
-            ))}
+          <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
+          <nav aria-label="Admin sections" className="h-fit bg-ink p-2 lg:sticky lg:top-32">
+            <ul className="flex gap-1 overflow-x-auto lg:flex-col">
+              {tabs.map((t) => (
+                <li key={t.id}>
+                  <Link
+                    href={t.id === "overview" ? "/admin" : `/admin?tab=${t.id}`}
+                    aria-current={tab === t.id ? "page" : undefined}
+                    className={`flex min-h-12 items-center justify-between gap-3 whitespace-nowrap px-4 text-sm font-medium ${tab === t.id ? "bg-accent text-ink" : "text-white hover:bg-white/10"}`}
+                  >
+                    {t.label}
+                    {t.id !== "overview" && counts[t.id] > 0 && <span className={`tabular px-2 text-xs leading-6 ${tab === t.id ? "bg-ink text-white" : "bg-white/15"}`}>{counts[t.id]}</span>}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </nav>
-
+          <div className="min-w-0 space-y-6">
+          {tab === "overview" && (
+            <Overview data={data} dash={dash} projects={projects} lb={lb} categories={categories} globe={globe} />
+          )}
           {tab === "cases" && (
             <div className="space-y-3">
               <p>The Watchdog freezes a project&apos;s <strong>matching</strong> (never its donations) and opens a case. Clear a false alarm, or confirm it.</p>
@@ -80,6 +91,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               <AuditGrid rows={data.audit} />
             </div>
           )}
+          </div>
+          </div>
         </div>
       </section>
     </>
