@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { GivingAssistant } from "@/components/GivingAssistant";
 import { ImpactGallery } from "@/components/ImpactGallery";
-import { ProjectCard } from "@/components/ProjectCard";
+import { FeaturedStrip } from "@/components/FeaturedStrip";
 import { BackerStories, SponsorStrip } from "@/components/Sections";
 import { Countdown } from "@/components/Countdown";
 import { categoryIcon, Icon } from "@/components/Icon";
-import { CategoryArt, Eyebrow, photoFor } from "@/components/ui";
-import { formatDate, formatMoney, getBackerStories, getCategories, getImpactUpdates, getProjects, getRound, getSponsors } from "@/lib/api";
+import { assignPhotos, CategoryArt, Eyebrow, photoFor } from "@/components/ui";
+import { daysLeft, formatDate, formatMoney, getBackerStories, getCategories, getImpactUpdates, getProjects, getRound, getSponsors } from "@/lib/api";
 
 const faqs = [
   ["How does matching work?", "A sponsor pool is shared by quadratic funding: a project backed by many people gets a bigger top-up than one backed by a few large gifts. Caps stop any single project taking everything."],
@@ -34,7 +34,8 @@ export default async function Home() {
   const dateLabels = Object.fromEntries(updates.map((u) => [u.id, formatDate(u.date)]));
   const raised = projects.reduce((s, p) => s + p.raised.amount, 0);
   const backers = projects.reduce((s, p) => s + p.backerCount, 0);
-  const featured = [...projects].sort((a, b) => b.urgency - a.urgency).slice(0, 6);
+  const featured = [...projects].sort((a, b) => b.urgency - a.urgency).slice(0, 5);
+  const photos = assignPhotos(featured);
 
   return (
     <>
@@ -134,11 +135,9 @@ export default async function Home() {
               ))}
             </nav>
           </div>
-          <div className="grid gap-[30px] sm:grid-cols-2 lg:grid-cols-3">
-            {featured.map((p) => (
-              <ProjectCard key={p.id} project={p} />
-            ))}
-          </div>
+          <FeaturedStrip
+            items={featured.map((p) => ({ project: p, photo: photos[p.id], raised: formatMoney(p.raised), goal: formatMoney(p.goal), days: daysLeft(p) }))}
+          />
           <div className="mt-10 text-center">
             <Link href="/projects" className="btn btn-2">
               See all projects

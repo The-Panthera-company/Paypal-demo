@@ -25,10 +25,26 @@ export function photoFor(categoryId: string, seed = "") {
   return list[n % list.length];
 }
 
+/** Give each project its own photo: within a category, no two projects share one until the list runs out */
+export function assignPhotos(projects: { id: string; categoryId: string }[]): Record<string, string> {
+  const used: Record<string, Set<number>> = {};
+  const out: Record<string, string> = {};
+  for (const p of projects) {
+    const list = PHOTOS[p.categoryId] ?? PHOTOS.people;
+    const seen = (used[p.categoryId] ??= new Set());
+    if (seen.size >= list.length) seen.clear();
+    let i = [...p.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 0) % list.length;
+    while (seen.has(i)) i = (i + 1) % list.length;
+    seen.add(i);
+    out[p.id] = list[i];
+  }
+  return out;
+}
+
 /** Project image: a photo with a soft teal tint over the category colour (shown alone if the photo can't load) */
-export function CategoryArt({ id, seed = "", label }: { id: string; seed?: string; label?: string }) {
+export function CategoryArt({ id, seed = "", label, photo, tint = true }: { id: string; seed?: string; label?: string; photo?: string; tint?: boolean }) {
   const a = art[id] ?? art.education;
-  const src = photoFor(id, seed);
+  const src = photo ?? photoFor(id, seed);
   return (
     <div
       role="img"
@@ -36,7 +52,7 @@ export function CategoryArt({ id, seed = "", label }: { id: string; seed?: strin
       className="relative size-full bg-cover bg-center"
       style={{ backgroundImage: `url("${src}"), linear-gradient(135deg, ${a.from}, ${a.to})` }}
     >
-      <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,113,144,0.10),rgba(11,46,51,0.45))]" aria-hidden />
+      {tint && <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,113,144,0.10),rgba(11,46,51,0.45))]" aria-hidden />}
     </div>
   );
 }

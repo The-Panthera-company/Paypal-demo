@@ -2,7 +2,7 @@ import Link from "next/link";
 import { GivingAssistant } from "@/components/GivingAssistant";
 import { PageTitle } from "@/components/PageTitle";
 import { ProjectCard } from "@/components/ProjectCard";
-import { EmptyState } from "@/components/ui";
+import { assignPhotos, EmptyState } from "@/components/ui";
 import { getCategories, getFacetOptions, getProjects } from "@/lib/api";
 import type { ProjectFilters } from "@/lib/types";
 
@@ -13,6 +13,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const filters = await searchParams;
   const [projects, categories, options] = await Promise.all([getProjects(filters), getCategories(), getFacetOptions()]);
   const active = Object.values(filters).some(Boolean);
+  const photos = assignPhotos(projects);
 
   return (
     <>
@@ -79,7 +80,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
           ) : (
             <div className="grid gap-[30px] sm:grid-cols-2 lg:grid-cols-3">
               {projects.map((p) => (
-                <ProjectCard key={p.id} project={p} />
+                <ProjectCard key={p.id} project={p} photo={photos[p.id]} />
               ))}
             </div>
           )}
