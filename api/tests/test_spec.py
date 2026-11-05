@@ -167,3 +167,24 @@ def test_no_duplicate_schema_titles():
     assert titles == []
     named = [s["title"] for s in spec["components"]["schemas"].values() if "title" in s]
     assert len(named) == len(set(named))
+
+
+def test_new_columns_reach_existing_databases():
+    """Render's database predates some columns; create_schema adds them at startup."""
+    from sqlalchemy import create_engine, inspect, text
+    from sqlalchemy.pool import StaticPool
+
+    from app.db import Base, create_schema
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE projects DROP COLUMN facilitator"))
+    create_schema(engine)
+    create_schema(engine)  # nothing left to add the second time
+    assert "facilitator" in {c["name"] for c in inspect(engine).get_columns("projects")}
+
+
+def test_projects_show_their_facilitator(client):
+    assert all("facilitator" in p for p in client.get("/projects").json())
+    assert "facilitator" in client.get("/projects/1").json()

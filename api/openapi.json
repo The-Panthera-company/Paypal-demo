@@ -203,6 +203,7 @@
                       "category_id": 2,
                       "cause": "literacy",
                       "currency": "USD",
+                      "facilitator": "Lanet Community Library Group",
                       "goal_cents": 120000,
                       "id": 1,
                       "matching_frozen": false,
@@ -227,6 +228,7 @@
                     "category_id": 2,
                     "cause": "literacy",
                     "currency": "USD",
+                    "facilitator": "Lanet Community Library Group",
                     "goal_cents": 120000,
                     "id": 1,
                     "matching_frozen": false,
@@ -286,6 +288,7 @@
               },
               "example": {
                 "title": "Lanet Library",
+                "facilitator": "Lanet Community Library Group",
                 "summary": "A lending library for three primary schools in Lanet.",
                 "category_id": 2,
                 "tags": [
@@ -318,6 +321,7 @@
                   "category_id": 2,
                   "cause": "literacy",
                   "currency": "USD",
+                  "facilitator": "Lanet Community Library Group",
                   "goal_cents": 120000,
                   "id": 1,
                   "matching_frozen": false,
@@ -426,6 +430,7 @@
                   "category_id": 2,
                   "cause": "literacy",
                   "currency": "USD",
+                  "facilitator": "Lanet Community Library Group",
                   "goal_cents": 120000,
                   "id": 1,
                   "matching_frozen": false,
@@ -2522,6 +2527,7 @@
                       "category_id": 2,
                       "cause": "literacy",
                       "currency": "USD",
+                      "facilitator": "Lanet Community Library Group",
                       "goal_cents": 120000,
                       "id": 1,
                       "matching_frozen": false,
@@ -2546,6 +2552,7 @@
                     "category_id": 2,
                     "cause": "literacy",
                     "currency": "USD",
+                    "facilitator": "Lanet Community Library Group",
                     "goal_cents": 120000,
                     "id": 1,
                     "matching_frozen": false,
@@ -2647,6 +2654,7 @@
                   "category_id": 2,
                   "cause": "literacy",
                   "currency": "USD",
+                  "facilitator": "Lanet Community Library Group",
                   "goal_cents": 120000,
                   "id": 1,
                   "matching_frozen": false,
@@ -7376,6 +7384,13 @@
             "description": "Title.",
             "example": "Lanet Library"
           },
+          "facilitator": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "The group running the project on the ground",
+            "nullable": true,
+            "example": "Lanet Community Library Group"
+          },
           "summary": {
             "type": "string",
             "description": "A short description of the project.",
@@ -7454,6 +7469,7 @@
         "description": "A new project's application, reviewed by an admin before it is listed.",
         "example": {
           "title": "Lanet Library",
+          "facilitator": "Lanet Community Library Group",
           "summary": "A lending library for three primary schools in Lanet.",
           "category_id": 2,
           "tags": [
@@ -7479,6 +7495,12 @@
             "type": "string",
             "description": "Title.",
             "example": "Lanet Library"
+          },
+          "facilitator": {
+            "type": "string",
+            "description": "The group running the project on the ground",
+            "nullable": true,
+            "example": "Lanet Community Library Group"
           },
           "category_id": {
             "type": "integer",
@@ -7598,6 +7620,7 @@
         "required": [
           "id",
           "title",
+          "facilitator",
           "category_id",
           "category",
           "tags",
@@ -7623,6 +7646,7 @@
           "category_id": 2,
           "cause": "literacy",
           "currency": "USD",
+          "facilitator": "Lanet Community Library Group",
           "goal_cents": 120000,
           "id": 1,
           "matching_frozen": false,
@@ -7679,6 +7703,12 @@
             "type": "string",
             "description": "Title.",
             "example": "Lanet Library"
+          },
+          "facilitator": {
+            "type": "string",
+            "description": "The group running the project on the ground",
+            "nullable": true,
+            "example": "Lanet Community Library Group"
           },
           "category_id": {
             "type": "integer",
@@ -7766,6 +7796,7 @@
         "required": [
           "id",
           "title",
+          "facilitator",
           "category_id",
           "category",
           "tags",
@@ -7788,6 +7819,7 @@
           "category_id": 2,
           "cause": "literacy",
           "currency": "USD",
+          "facilitator": "Lanet Community Library Group",
           "goal_cents": 120000,
           "id": 1,
           "matching_frozen": false,

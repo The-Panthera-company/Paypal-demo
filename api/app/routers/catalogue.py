@@ -205,6 +205,7 @@ def _summaries(db: Session, projects: list[Project]) -> list[ProjectSummary]:
         ProjectSummary(
             id=p.id,
             title=p.title,
+            facilitator=p.facilitator,
             category_id=p.category_id,
             category=names.get(p.category_id, ""),
             tags=p.tags or [],

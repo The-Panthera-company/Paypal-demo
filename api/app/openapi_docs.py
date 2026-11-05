@@ -338,7 +338,7 @@ EXAMPLES = {
     "MandateIn": {"monthly_budget_cents": 1000, "categories": [2], "excluded_tags": ["faith-based"],
                   "per_project_max_cents": 400, "approval_threshold_cents": 500,
                   "weight_overrides": {"few_backers": 45}, "active": True},
-    "ProjectApplicationIn": {"title": "Lanet Library", "summary": "A lending library for three primary schools in Lanet.",
+    "ProjectApplicationIn": {"title": "Lanet Library", "facilitator": "Lanet Community Library Group", "summary": "A lending library for three primary schools in Lanet.",
                              "category_id": 2, "tags": ["books", "literacy"], "cause": "literacy",
                              "beneficiary_group": "children", "region": "Nakuru", "hide_location": False,
                              "goal_cents": 600000, "urgency": 4},
