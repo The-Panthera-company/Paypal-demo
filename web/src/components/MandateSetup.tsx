@@ -180,7 +180,7 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
   };
 
   return (
-    <div id="agent-wizard" className="mx-auto max-w-3xl scroll-mt-32 space-y-8">
+    <div id="agent-wizard" className="mx-auto max-w-3xl scroll-mt-32 space-y-8 bg-white/95 p-5 shadow-[0_10px_30px_rgba(11,46,51,0.08)] sm:p-8">
         {!live && (
           <Banner tone="info">Sample mode: connect the core API to save your Giving Agent for real.</Banner>
         )}

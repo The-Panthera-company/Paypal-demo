@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FavoritesCount, FavoritesGrid } from "@/components/FavoritesGrid";
+import { RecommendedGrid } from "@/components/RecommendedGrid";
 import { GivingAssistant } from "@/components/GivingAssistant";
 import { PageTitle } from "@/components/PageTitle";
 import { ProjectMosaic } from "@/components/ProjectMosaic";
@@ -14,7 +15,7 @@ const field = "min-h-11 w-full border border-line bg-white px-3 text-sm text-ink
 // hover). Filters are a plain GET form (works without JavaScript, shareable URL).
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const { tab: rawTab, ...filters } = await searchParams;
-  const tab = rawTab === "favorites" ? "favorites" : "all";
+  const tab = rawTab === "favorites" ? "favorites" : rawTab === "ai" ? "ai" : "all";
   const [projects, all, categories, options] = await Promise.all([getProjects(filters), getProjects(), getCategories(), getFacetOptions()]);
   const active = (Object.keys(filters) as (keyof ProjectFilters)[]).filter((k) => filters[k]);
   const photos = assignPhotos(all);
@@ -64,10 +65,11 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   );
 
   const tabs = (
-    <nav aria-label="Projects or favourites" className="flex gap-1 bg-white p-1 shadow-[0_0_30px_rgba(0,0,0,0.05)]">
+    <nav aria-label="Projects or favourites" className="flex flex-wrap gap-1 bg-white p-1 shadow-[0_0_30px_rgba(0,0,0,0.05)]">
       {(
         [
           ["all", "All projects", keep({})],
+          ["ai", "AI recommended", `${keep({})}${keep({}).includes("?") ? "&" : "?"}tab=ai`],
           ["favorites", "Favourites", `${keep({})}${keep({}).includes("?") ? "&" : "?"}tab=favorites`],
         ] as const
       ).map(([id, label, href]) => (
@@ -78,7 +80,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
           className={`flex min-h-11 items-center px-5 font-medium ${tab === id ? "bg-ink text-white" : "text-ink hover:bg-surface-alt"}`}
         >
           {label}
-          {id === "favorites" ? <FavoritesCount /> : <span className="tabular ml-1.5 text-sm opacity-70">{projects.length}</span>}
+          {id === "favorites" ? <FavoritesCount /> : id === "all" ? <span className="tabular ml-1.5 text-sm opacity-70">{projects.length}</span> : <span className="ml-1.5" aria-hidden>✦</span>}
         </Link>
       ))}
     </nav>
@@ -98,7 +100,9 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   );
 
   const grid =
-    tab === "favorites" ? (
+    tab === "ai" ? (
+      <RecommendedGrid projects={all} photos={photos} />
+    ) : tab === "favorites" ? (
       <FavoritesGrid projects={all} photos={photos} />
     ) : projects.length === 0 ? (
       <EmptyState title="No projects match" body="Try removing a filter, or ask the assistant to suggest something close." action={{ href: keep({ q: undefined, category: undefined, cause: undefined, group: undefined, region: undefined }), label: "Clear filters" }} />
