@@ -27,6 +27,11 @@ export const DOODLES: string[] = [
   "M2 12c3-4 6-4 10 0s7 4 10 0", // wave
   "M12 2v4M12 18v4M2 12h4M18 12h4", // sparkle
   "M7 12a5 5 0 1010 0 5 5 0 00-10 0zM3 21c1.5-3.5 5-5 9-5s7.5 1.5 9 5", // person
+  // little avatar faces, like the characters in the anonymous avatars
+  "M6 9L5 3l4 3h6l4-3-1 6c2 5-1 11-6 11S4 14 6 9zM9.5 12h.01M14.5 12h.01M11 15l1 1 1-1", // cat
+  "M12 6a8 8 0 110 16 8 8 0 010-16zM6 5a3 3 0 110 6M18 5a3 3 0 100 6M10 12h.01M14 12h.01M10 17q2 2 4 0", // bear
+  "M6 7h12v11H6zM12 7V4M9.5 11h1M13.5 11h1M10 15h4M4 11v3M20 11v3", // robot
+  "M6 6q6-4 12 0v10q-6 7-12 0zM9.5 10a2 2 0 110 4 2 2 0 010-4zM14.5 10a2 2 0 110 4 2 2 0 010-4zM11 16l1 1.5 1-1.5", // owl
 ];
 
 /** Deterministic pseudo-random numbers from a seed (mulberry32) */

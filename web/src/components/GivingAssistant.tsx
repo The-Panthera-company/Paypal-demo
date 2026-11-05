@@ -3,9 +3,9 @@
 import { doodleTile, doodleUrl } from "@/lib/doodles";
 import { Avatar } from "./Avatar";
 
-const DEMO_DONOR = process.env.NEXT_PUBLIC_DEMO_DONOR_ID ?? "1";
-// WhatsApp-style doodle wallpaper behind the messages, in a faint teal on the mint surface
-const WALLPAPER = doodleUrl(doodleTile({ stroke: "#b9d8cb", seed: 11 }));
+// WhatsApp-style doodle wallpaper (with little avatar faces) behind the messages, faint teal on mint
+const WALLPAPER = doodleUrl(doodleTile({ stroke: "#b9d8cb", seed: 11, density: 7 }));
+const clock = () => new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Project } from "@/lib/types";
@@ -19,8 +19,8 @@ import { Icon } from "./Icon";
 const AGENTS_URL = process.env.NEXT_PUBLIC_AGENTS_URL?.replace(/\/$/, "");
 
 type Turn =
-  | { who: "me"; text: string }
-  | { who: "bot"; text: string; chips: string[]; picks: Project[]; source: "ai" | "keywords" };
+  | { who: "me"; text: string; at?: string }
+  | { who: "bot"; text: string; chips: string[]; picks: Project[]; source: "ai" | "keywords"; at?: string };
 
 const SYNONYMS: [RegExp, (p: Project) => boolean, string][] = [
   [/\b(read|reading|book|books|library|literacy)\b/i, (p) => /book|librar|literacy|read/i.test(p.title + p.summary + p.facets.cause + p.tags.join(" ")), "Books & reading"],
@@ -85,11 +85,15 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
   useEffect(() => {
     if (open) input.current?.focus();
   }, [open]);
-  useEffect(() => end.current?.scrollIntoView({ block: "nearest" }), [turns]);
+  // Braces matter: newer browsers make scrollIntoView return a Promise, and an effect that returns
+  // anything but a cleanup function crashes React on the next update ("destroy is not a function")
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "nearest" });
+  }, [turns]);
 
   async function send(message: string) {
     if (!message.trim() || busy) return;
-    setTurns((t) => [...t, { who: "me", text: message }]);
+    setTurns((t) => [...t, { who: "me", text: message, at: clock() }]);
     setText("");
     setBusy(true);
     let answer: Extract<Turn, { who: "bot" }>;
@@ -98,7 +102,7 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
     } catch {
       answer = keywordAnswer(message, projects);
     }
-    setTurns((t) => [...t, answer]);
+    setTurns((t) => [...t, { ...answer, at: clock() }]);
     setBusy(false);
   }
 
@@ -118,12 +122,17 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
       {open && (
         <section
           aria-label="Giving assistant"
-          className="fixed inset-x-0 bottom-0 z-40 flex max-h-[85vh] flex-col bg-white shadow-[0_15px_40px_rgba(0,0,0,0.2)] sm:inset-x-auto sm:bottom-8 sm:right-8 sm:w-[400px]"
+          className="fixed inset-x-0 bottom-0 z-40 flex h-[85vh] max-h-[680px] flex-col overflow-hidden bg-white shadow-[0_15px_40px_rgba(0,0,0,0.25)] sm:inset-x-auto sm:bottom-8 sm:right-8 sm:w-[400px]"
         >
-          <header className="flex items-center justify-between gap-3 bg-ink px-5 py-4 text-white">
-            <div>
-              <h2 className="text-lg text-white">Ask the giving assistant</h2>
-              <p className="text-xs text-cobalt-green">{AGENTS_URL ? "AI · suggests, never pays" : "Keyword search · AI assistant coming soon"}</p>
+          {/* Chat header, messaging-app style */}
+          <header className="flex shrink-0 items-center gap-3 bg-ink px-4 py-3 text-white">
+            <span className="relative">
+              <Avatar kind="assistant" seed="assistant" size={40} />
+              <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full bg-cobalt-green ring-2 ring-ink" aria-hidden />
+            </span>
+            <div className="flex-1">
+              <h2 className="text-lg leading-6 text-white">Giving assistant</h2>
+              <p className="text-xs text-cobalt-green">{busy ? "typing…" : AGENTS_URL ? "online · suggests, never pays" : "online · keyword search"}</p>
             </div>
             <button type="button" onClick={() => setOpen(false)} className="grid size-11 place-items-center" aria-label="Close assistant">
               <svg width="18" height="18" viewBox="0 0 20 20" stroke="currentColor" strokeWidth="2" aria-hidden>
@@ -132,72 +141,102 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
             </button>
           </header>
 
-          <div className="flex-1 space-y-3 overflow-y-auto bg-surface-alt p-4" style={{ backgroundImage: WALLPAPER, backgroundSize: "320px" }} aria-live="polite">
+          {/* Conversation on the doodle wallpaper */}
+          <div className="flex-1 space-y-2 overflow-y-auto bg-[#e7f1ec] px-3 py-4" style={{ backgroundImage: WALLPAPER, backgroundSize: "300px" }} aria-live="polite">
+            {/* The disclaimer, set apart like a messaging app's system notice */}
+            <p className="sticky top-0 z-10 mx-auto mb-3 max-w-[300px] rounded-lg border border-[#e8d98a] bg-accent px-3 py-2 text-center text-[11px] leading-4 text-ink shadow-sm">
+              <span aria-hidden>🔒 </span>Suggestions come from verified projects only. Giving always goes through the normal PayPal checkout.
+            </p>
+
             {turns.length === 0 && (
-              <div className="space-y-3">
-                <p className="border border-line bg-white p-3 text-sm text-ink">
-                  Tell me what you care about and I&apos;ll suggest verified projects. Try one of these:
-                </p>
-                {["Children learning to read, somewhere overlooked", "Clean water, urgently", "Trees and nature"].map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => send(q)}
-                    className="block w-full border border-primary bg-white px-3 py-2 text-left text-sm text-primary hover:bg-primary-container"
-                  >
-                    {q}
-                  </button>
-                ))}
+              <div className="space-y-2">
+                <div className="flex items-end gap-2">
+                  <Avatar kind="assistant" seed="assistant" size={28} />
+                  <p className="relative max-w-[80%] rounded-lg rounded-bl-none bg-white px-3 py-2 text-sm text-ink shadow-sm">
+                    Hi! Tell me what you care about and I&apos;ll suggest verified projects. Try one of these:
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 pl-9">
+                  {["Children learning to read, somewhere overlooked", "Clean water, urgently", "Trees and nature"].map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => send(q)}
+                      className="rounded-full border border-primary bg-white px-3 py-1.5 text-left text-xs text-primary shadow-sm hover:bg-primary hover:text-white"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
+
             {turns.map((t, i) =>
               t.who === "me" ? (
-                <div key={i} className="ml-auto flex w-fit max-w-[85%] items-end gap-2">
-                  <p className="bg-primary px-3 py-2 text-sm text-white">{t.text}</p>
-                  <Avatar seed={`donor-${DEMO_DONOR}`} anonymous size={28} label="You" />
+                <div key={i} className="flex justify-end">
+                  <p className="relative max-w-[80%] rounded-lg rounded-br-none bg-cobalt-green px-3 pb-1.5 pt-2 text-sm text-ink shadow-sm">
+                    {t.text}
+                    <span className="mt-0.5 block text-right text-[10px] text-ink/60">
+                      {t.at} <span aria-label="sent">✓✓</span>
+                    </span>
+                  </p>
                 </div>
               ) : (
                 <div key={i} className="space-y-2">
-                  <div className="flex items-start gap-2">
-                  <Avatar kind="assistant" seed="assistant" size={28} />
-                  <div className="w-fit max-w-[85%] border border-line bg-white px-3 py-2 text-sm text-ink">
-                    {t.chips.length > 0 && (
-                      <>
-                        <span>I searched for:</span>
-                        <span className="my-1.5 flex flex-wrap gap-1.5">
+                  <div className="flex items-end gap-2">
+                    <Avatar kind="assistant" seed="assistant" size={28} />
+                    <div className="relative max-w-[80%] rounded-lg rounded-bl-none bg-white px-3 pb-1.5 pt-2 text-sm text-ink shadow-sm">
+                      {t.chips.length > 0 && (
+                        <span className="mb-1.5 flex flex-wrap gap-1.5">
                           {t.chips.map((c) => (
-                            <span key={c} className="border border-primary px-2 text-xs leading-6 text-primary">
+                            <span key={c} className="rounded-full bg-primary-container px-2 text-xs leading-6 text-primary">
                               {c}
                             </span>
                           ))}
                         </span>
-                      </>
-                    )}
-                    {t.text}
-                  </div>
-                  </div>
-                  {t.picks.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between gap-3 border border-line bg-white px-3 py-2 text-sm">
-                      <span>
-                        <span className="block font-medium text-ink">{p.title}</span>
-                        <span className="text-xs">
-                          {p.backerCount} backers · {Math.round((p.raised.amount / p.goal.amount) * 100)}% funded
-                        </span>
-                      </span>
-                      <Link href={`/projects/${p.id}#donate`} className="shrink-0 bg-ink px-3 py-2 text-xs font-bold uppercase tracking-wider text-white hover:bg-primary">
-                        Back it
-                      </Link>
+                      )}
+                      {t.text}
+                      <span className="mt-0.5 block text-right text-[10px] text-text">{t.at}</span>
                     </div>
-                  ))}
+                  </div>
+                  {t.picks.length > 0 && (
+                    <div className="ml-9 max-w-[80%] overflow-hidden rounded-lg bg-white shadow-sm">
+                      {t.picks.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between gap-3 border-b border-line px-3 py-2 text-sm last:border-0">
+                          <span>
+                            <span className="block font-medium text-ink">{p.title}</span>
+                            <span className="text-xs">
+                              {p.backerCount} backers · {Math.round((p.raised.amount / p.goal.amount) * 100)}% funded
+                            </span>
+                          </span>
+                          <Link href={`/projects/${p.id}#donate-box`} className="shrink-0 rounded-full bg-ink px-3 py-1.5 text-xs font-bold text-white hover:bg-primary">
+                            Back it
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ),
             )}
-            {busy && <p className="text-sm">Looking…</p>}
+            {busy && (
+              <div className="flex items-end gap-2">
+                <Avatar kind="assistant" seed="assistant" size={28} />
+                <p className="rounded-lg rounded-bl-none bg-white px-4 py-3 shadow-sm" aria-label="The assistant is typing">
+                  <span className="inline-flex gap-1" aria-hidden>
+                    {[0, 1, 2].map((d) => (
+                      <span key={d} className="size-1.5 animate-bounce rounded-full bg-text" style={{ animationDelay: `${d * 150}ms` }} />
+                    ))}
+                  </span>
+                </p>
+              </div>
+            )}
             <div ref={end} />
           </div>
 
+          {/* Input bar, its own strip */}
           <form
-            className="flex shrink-0 border-t border-line bg-white"
+            className="flex shrink-0 items-center gap-2 border-t border-line bg-surface px-3 py-3"
             onSubmit={(e) => {
               e.preventDefault();
               send(text);
@@ -211,14 +250,19 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
               ref={input}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Tell me what you care about…"
-              className="min-h-12 min-w-0 flex-1 px-4 text-sm text-ink outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary"
+              placeholder="Type a message"
+              className="min-h-11 min-w-0 flex-1 rounded-full border border-line bg-white px-4 text-sm text-ink outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
             />
-            <button className="shrink-0 bg-primary px-5 font-bold text-white focus-visible:-outline-offset-4 focus-visible:outline-white disabled:opacity-50" disabled={busy || !text.trim()}>
-              Send
+            <button
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-white hover:bg-ink focus-visible:outline-offset-2 disabled:opacity-40"
+              disabled={busy || !text.trim()}
+              aria-label="Send"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M3 20l18-8L3 4v6l12 2-12 2z" />
+              </svg>
             </button>
           </form>
-          <p className="shrink-0 bg-white px-4 py-2 text-[11px] leading-4">Suggestions come from verified projects only. Giving always goes through the normal PayPal checkout.</p>
         </section>
       )}
     </>

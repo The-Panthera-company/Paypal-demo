@@ -4,6 +4,7 @@ import { Banner, notify } from "@/components/Status";
 import { useEffect, useState } from "react";
 import type { Category } from "@/lib/types";
 import { DonatePanel } from "./DonatePanel";
+import { MonthlyGiving } from "./MonthlyGiving";
 import { categoryIcon, Icon } from "./Icon";
 
 // Giving Agent setup (#23). The donor's rules (mandate) are enforced by the core API, never by the
@@ -27,7 +28,7 @@ type Mandate = {
 type Pending = { donation_id: number; project_title: string; amount_cents: number; reason: string };
 type Run = { id: number; run_at: string; report_text: string | null };
 
-const STEPS = ["Your interests", "Your rules", "Review and fund"];
+const STEPS = ["Your interests", "Your rules", "Review", "Fund it", "Your agent"];
 const GROUPS = ["Children", "Youth", "Adults", "Elderly", "Community"];
 
 async function call<T>(path: string, init?: RequestInit): Promise<{ ok: true; data: T } | { ok: false; status: number; message: string }> {
@@ -57,6 +58,8 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
   const [donorMissing, setDonorMissing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [fundMode, setFundMode] = useState<"monthly" | "once">("monthly");
+  const [hasMandate, setHasMandate] = useState(false);
 
   // Load what the donor already set up
   useEffect(() => {
@@ -78,6 +81,10 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
         setThreshold(String(m.data.approval_threshold_cents / 100));
         setExcluded(m.data.excluded_tags ?? []);
         setBalance(m.data.funded_balance_cents ?? null);
+        setHasMandate(true);
+        // Already set up: open on the agent's own page; back from PayPal: on the funding step,
+        // where monthly giving shows PayPal's answer
+        setStep(new URLSearchParams(window.location.search).has("subscription") ? 3 : 4);
       } else if (i.categories) setCats(i.categories);
       const p = await call<Pending[]>(`/donors/${DONOR_ID}/pending-approvals`);
       if (p.ok) setPending(p.data);
@@ -94,16 +101,17 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
       !(cents(perProject) >= 100) ? "Enter at least $1." : cents(perProject) > cents(budget) ? "Can't be more than your monthly budget." : null,
     threshold: !(cents(threshold) >= 0) ? "Enter $0 or more." : null,
   };
-  const stepOk = [!errors.cats, !errors.budget && !errors.perProject && !errors.threshold, true];
+  const stepOk = [!errors.cats, !errors.budget && !errors.perProject && !errors.threshold, true, true, true];
   const fmt = (c: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(c / 100);
 
-  async function save() {
+  /** Saves interests + mandate; true when it worked (the wizard then moves on to funding) */
+  async function save(): Promise<boolean> {
     setSaving(true);
     setNotice(null);
     if (!live) {
-      setNotice({ ok: true, text: "Saved in sample mode (nothing sent). Connect the API to save for real." });
+      notify("Saved in sample mode (nothing sent). Connect the API to save for real.", "info");
       setSaving(false);
-      return;
+      return true;
     }
     const d = await call(`/donors/${DONOR_ID}`, { method: "PATCH", body: JSON.stringify({ interests: { categories: cats, groups, overlooked } }) });
     const m = d.ok
@@ -124,9 +132,12 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
     setSaving(false);
     if (m.ok) {
       setBalance((m.data as Mandate).funded_balance_cents ?? null);
-      setNotice({ ok: true, text: "Your Giving Agent is set up. It will donate within these rules on its next run." });
-      notify("Giving Agent saved.", "success");
-    } else setNotice({ ok: false, text: m.message });
+      setHasMandate(true);
+      notify("Your rules are saved. Your agent will give within them on its next run.", "success");
+      return true;
+    }
+    setNotice({ ok: false, text: m.message });
+    return false;
   }
 
   async function decide(id: number, approve: boolean) {
@@ -162,9 +173,14 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
     </label>
   );
 
+  const go = (n: number) => {
+    setNotice(null);
+    setStep(n);
+    if (typeof window !== "undefined") document.getElementById("agent-wizard")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <div className="grid gap-10 lg:grid-cols-[1.5fr_1fr]">
-      <div className="space-y-6">
+    <div id="agent-wizard" className="mx-auto max-w-3xl scroll-mt-32 space-y-8">
         {!live && (
           <Banner tone="info">Sample mode: connect the core API to save your Giving Agent for real.</Banner>
         )}
@@ -174,210 +190,270 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
           </Banner>
         )}
 
-        <ol className="flex flex-wrap gap-2" aria-label="Steps">
-          {STEPS.map((s, i) => (
-            <li key={s}>
-              <button
-                type="button"
-                onClick={() => i <= step && setStep(i)}
-                aria-current={step === i ? "step" : undefined}
-                className={`flex min-h-11 items-center gap-2 border px-4 text-sm ${
-                  step === i ? "border-primary bg-primary text-white" : i < step ? "border-primary bg-white text-primary" : "border-line bg-white text-text"
-                }`}
-              >
-                <span className="tabular font-bold">{i < step ? "✓" : i + 1}</span> {s}
-              </button>
-            </li>
-          ))}
-        </ol>
-
-        {step === 0 && (
-          <div className="space-y-6 border border-line bg-white p-6">
-            <fieldset>
-              <legend className="mb-1 font-display text-xl text-ink">What do you care about?</legend>
-              <p className="mb-3 text-sm">Your agent only gives to verified projects in these causes.</p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {categories.map((c) => {
-                  const on = cats.includes(c.id);
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => setCats((x) => (on ? x.filter((y) => y !== c.id) : [...x, c.id]))}
-                      className={`flex min-h-24 flex-col items-center justify-center gap-2 border p-3 ${on ? "border-primary bg-primary-container text-ink" : "border-line text-ink hover:border-primary"}`}
-                    >
-                      <Icon name={categoryIcon[c.id] ?? "heart"} size={30} className="text-primary" />
-                      {c.name}
-                    </button>
-                  );
-                })}
-              </div>
-              {errors.cats && <p className="mt-2 text-sm font-medium text-danger">{errors.cats}</p>}
-            </fieldset>
-            <fieldset>
-              <legend className="mb-3 font-display text-xl text-ink">Who would you like to help? (optional)</legend>
-              <div className="flex flex-wrap gap-2">
-                {GROUPS.map((g) => {
-                  const on = groups.includes(g);
-                  return (
-                    <button
-                      key={g}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => setGroups((x) => (on ? x.filter((y) => y !== g) : [...x, g]))}
-                      className={`min-h-11 border px-4 text-sm ${on ? "border-primary bg-primary text-white" : "border-line text-ink hover:border-primary"}`}
-                    >
-                      {g}
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-            <label className="flex items-start gap-3 text-ink">
-              <input type="checkbox" checked={overlooked} onChange={(e) => setOverlooked(e.target.checked)} className="mt-1 size-5 accent-[#007190]" />
-              <span>
-                <span className="font-medium">Favour overlooked projects</span>
-                <span className="block text-sm text-text">Give more weight to projects with few backers.</span>
-              </span>
-            </label>
-          </div>
-        )}
-
-        {step === 1 && (
-          <div className="space-y-6 border border-line bg-white p-6">
-            <div className="grid gap-5 sm:grid-cols-3">
-              {money("Monthly budget", budget, setBudget, errors.budget, "The most your agent gives in a month.", "budget")}
-              {money("Most per project", perProject, setPerProject, errors.perProject, "Spreads your gifts out.", "per-project")}
-              {money("Ask me above", threshold, setThreshold, errors.threshold, "Bigger gifts wait for your yes.", "threshold")}
-            </div>
-            <fieldset>
-              <legend className="mb-1 font-medium text-ink">Never fund projects tagged</legend>
-              <p className="mb-3 text-sm">Your agent skips these, and tells you when it does.</p>
-              <div className="flex flex-wrap gap-2">
-                {tags.map((t) => {
-                  const on = excluded.includes(t);
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => setExcluded((x) => (on ? x.filter((y) => y !== t) : [...x, t]))}
-                      className={`min-h-11 border px-4 text-sm ${on ? "border-ink bg-ink text-white line-through" : "border-line text-ink hover:border-primary"}`}
-                    >
-                      {t}
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="space-y-4 border border-line bg-white p-6">
-            <h2 className="text-2xl">Your Giving Agent will…</h2>
-            <ul className="space-y-2 text-ink">
-              <li>
-                give up to <strong>{fmt(cents(budget))}</strong> a month to{" "}
-                <strong>{categories.filter((c) => cats.includes(c.id)).map((c) => c.name).join(", ")}</strong>
-                {groups.length > 0 && <> projects helping <strong>{groups.join(", ").toLowerCase()}</strong></>}
-              </li>
-              <li>
-                give at most <strong>{fmt(cents(perProject))}</strong> to any one project
-                {overlooked && ", favouring projects with few backers"}
-              </li>
-              <li>
-                ask you first before any gift over <strong>{fmt(cents(threshold))}</strong>
-              </li>
-              {excluded.length > 0 && (
-                <li>
-                  never fund projects tagged <strong>{excluded.join(", ")}</strong>
-                </li>
-              )}
-              <li>explain every choice in your impact report</li>
-            </ul>
-            <p className="text-sm">The platform checks every gift against these rules before any money moves, so the agent can&apos;t overspend.</p>
-            <button type="button" onClick={save} disabled={saving || donorMissing} className="btn btn-2 w-full sm:w-auto">
-              {saving ? "Saving…" : "Save my Giving Agent"}
-            </button>
-          </div>
-        )}
-
-        {notice && (
-          <Banner tone={notice.ok ? "success" : "error"}>{notice.text}</Banner>
-        )}
-
-        <div className="flex justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => setStep((s) => Math.max(0, s - 1))}
-            disabled={step === 0}
-            className="min-h-12 border border-line bg-white px-5 text-ink disabled:invisible"
-          >
-            Back
-          </button>
-          {step < 2 && (
-            <button type="button" onClick={() => setStep((s) => s + 1)} disabled={!stepOk[step]} className="btn btn-2 disabled:opacity-50">
-              Next
-            </button>
-          )}
-        </div>
-      </div>
-
-      <aside className="h-fit space-y-6 lg:sticky lg:top-28">
-        <div className="space-y-3 border border-line bg-white p-6">
-          <h2 className="text-2xl">Fund your agent</h2>
-          <p className="text-sm">
-            Top up once through PayPal; your agent gives from this balance.
-            {balance !== null && (
-              <>
-                {" "}
-                Balance now: <strong className="text-ink">{fmt(balance)}</strong>.
-              </>
-            )}
+        {/* Step rail: one phase at a time; finished steps can be revisited */}
+        <nav aria-label="Giving Agent setup">
+          <p className="mb-3 text-sm text-ink">
+            Step {step + 1} of {STEPS.length}: <strong>{STEPS[step]}</strong>
           </p>
-          <DonatePanel projectTitle="your Giving Agent budget" target={{ kind: "AGENT" }} />
-        </div>
-
-        <div className="space-y-3 border border-line bg-white p-6">
-          <h2 className="text-xl">Waiting for your yes</h2>
-          {pending.length === 0 ? (
-            <p className="text-sm">Nothing waiting. Gifts above your limit appear here before any money moves.</p>
-          ) : (
-            pending.map((p) => (
-              <div key={p.donation_id} className="space-y-2 border-t border-line pt-3">
-                <p className="text-ink">
-                  <strong>{fmt(p.amount_cents)}</strong> to {p.project_title}
-                </p>
-                <p className="text-sm">{p.reason}</p>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => decide(p.donation_id, true)} className="min-h-11 bg-primary px-4 text-sm font-medium text-white">
-                    Approve
+          <ol className="grid grid-cols-5">
+            {STEPS.map((s, i) => {
+              const reachable = i <= step || (hasMandate && i !== 2);
+              return (
+                <li key={s} className="relative flex flex-col items-center text-center">
+                  {i > 0 && <span className={`absolute right-1/2 top-5 h-0.5 w-full -translate-y-1/2 ${i <= step ? "bg-primary" : "bg-line"}`} aria-hidden />}
+                  <button
+                    type="button"
+                    onClick={() => reachable && go(i)}
+                    disabled={!reachable}
+                    aria-current={step === i ? "step" : undefined}
+                    aria-label={`Step ${i + 1}: ${s}`}
+                    className={`tabular relative z-10 grid size-10 place-items-center border-2 font-bold transition-colors ${
+                      step === i ? "border-primary bg-primary text-white" : i < step ? "border-primary bg-white text-primary" : "border-line bg-white text-text"
+                    }`}
+                  >
+                    {i < step ? "✓" : i + 1}
                   </button>
-                  <button type="button" onClick={() => decide(p.donation_id, false)} className="min-h-11 border border-line px-4 text-sm text-ink">
-                    Decline
+                  <span className={`mt-2 hidden text-sm sm:block ${step === i ? "font-medium text-ink" : ""}`}>{s}</span>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+
+        <div key={step} className="animate-[showcase-in_.4s_ease-out] space-y-6">
+        {step === 0 && (
+            <div className="space-y-6 border border-line bg-white p-6">
+              <fieldset>
+                <legend className="mb-1 font-display text-xl text-ink">What do you care about?</legend>
+                <p className="mb-3 text-sm">Your agent only gives to verified projects in these causes.</p>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {categories.map((c) => {
+                    const on = cats.includes(c.id);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setCats((x) => (on ? x.filter((y) => y !== c.id) : [...x, c.id]))}
+                        className={`flex min-h-24 flex-col items-center justify-center gap-2 border p-3 ${on ? "border-primary bg-primary-container text-ink" : "border-line text-ink hover:border-primary"}`}
+                      >
+                        <Icon name={categoryIcon[c.id] ?? "heart"} size={30} className="text-primary" />
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {errors.cats && <p className="mt-2 text-sm font-medium text-danger">{errors.cats}</p>}
+              </fieldset>
+              <fieldset>
+                <legend className="mb-3 font-display text-xl text-ink">Who would you like to help? (optional)</legend>
+                <div className="flex flex-wrap gap-2">
+                  {GROUPS.map((g) => {
+                    const on = groups.includes(g);
+                    return (
+                      <button
+                        key={g}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setGroups((x) => (on ? x.filter((y) => y !== g) : [...x, g]))}
+                        className={`min-h-11 border px-4 text-sm ${on ? "border-primary bg-primary text-white" : "border-line text-ink hover:border-primary"}`}
+                      >
+                        {g}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+              <label className="flex items-start gap-3 text-ink">
+                <input type="checkbox" checked={overlooked} onChange={(e) => setOverlooked(e.target.checked)} className="mt-1 size-5 accent-[#007190]" />
+                <span>
+                  <span className="font-medium">Favour overlooked projects</span>
+                  <span className="block text-sm text-text">Give more weight to projects with few backers.</span>
+                </span>
+              </label>
+            </div>
+          )}
+
+          {step === 1 && (
+            <div className="space-y-6 border border-line bg-white p-6">
+              <div className="grid gap-5 sm:grid-cols-3">
+                {money("Monthly budget", budget, setBudget, errors.budget, "The most your agent gives in a month.", "budget")}
+                {money("Most per project", perProject, setPerProject, errors.perProject, "Spreads your gifts out.", "per-project")}
+                {money("Ask me above", threshold, setThreshold, errors.threshold, "Bigger gifts wait for your yes.", "threshold")}
+              </div>
+              <fieldset>
+                <legend className="mb-1 font-medium text-ink">Never fund projects tagged</legend>
+                <p className="mb-3 text-sm">Your agent skips these, and tells you when it does.</p>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((t) => {
+                    const on = excluded.includes(t);
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setExcluded((x) => (on ? x.filter((y) => y !== t) : [...x, t]))}
+                        className={`min-h-11 border px-4 text-sm ${on ? "border-ink bg-ink text-white line-through" : "border-line text-ink hover:border-primary"}`}
+                      >
+                        {t}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            </div>
+          )}
+
+
+          {step === 2 && (
+            <div className="space-y-4 border border-line bg-white p-6">
+              <h2 className="text-2xl">Your Giving Agent will…</h2>
+              <ul className="space-y-2 text-ink">
+                <li>
+                  give up to <strong>{fmt(cents(budget))}</strong> a month to{" "}
+                  <strong>{categories.filter((c) => cats.includes(c.id)).map((c) => c.name).join(", ")}</strong>
+                  {groups.length > 0 && <> projects helping <strong>{groups.join(", ").toLowerCase()}</strong></>}
+                </li>
+                <li>
+                  give at most <strong>{fmt(cents(perProject))}</strong> to any one project
+                  {overlooked && ", favouring projects with few backers"}
+                </li>
+                <li>
+                  ask you first before any gift over <strong>{fmt(cents(threshold))}</strong>
+                </li>
+                {excluded.length > 0 && (
+                  <li>
+                    never fund projects tagged <strong>{excluded.join(", ")}</strong>
+                  </li>
+                )}
+                <li>explain every choice in your impact report</li>
+              </ul>
+              <p className="text-sm">The platform checks every gift against these rules before any money moves, so the agent can&apos;t overspend.</p>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-5 border border-line bg-white p-6">
+              <div>
+                <h2 className="text-2xl">Fund your agent</h2>
+                <p className="mt-1">Your agent only gives from money you put in. Choose monthly, or top up once.</p>
+              </div>
+              <div role="tablist" aria-label="How to fund" className="flex gap-1 bg-surface-alt p-1">
+                {(
+                  [
+                    ["monthly", "Every month"],
+                    ["once", "Top up once"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    role="tab"
+                    aria-selected={fundMode === id}
+                    onClick={() => setFundMode(id)}
+                    className={`min-h-11 flex-1 font-medium ${fundMode === id ? "bg-ink text-white" : "text-ink hover:bg-white"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {fundMode === "monthly" ? (
+                <MonthlyGiving />
+              ) : (
+                <DonatePanel projectTitle="your Giving Agent budget" target={{ kind: "AGENT" }} />
+              )}
+              {balance !== null && (
+                <p className="text-sm">
+                  Balance ready to give: <strong className="tabular text-ink">{fmt(balance)}</strong>
+                </p>
+              )}
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-4 bg-ink p-6 text-white">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[2px] text-cobalt-green">Your Giving Agent</p>
+                  <p className="mt-1 font-display text-2xl">
+                    {hasMandate ? `Up to ${fmt(cents(budget))} a month, within your rules` : "Not set up yet"}
+                  </p>
+                  {balance !== null && <p className="mt-1 text-sm text-white/80">Balance ready to give: {fmt(balance)}</p>}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <button type="button" onClick={() => go(0)} className="btn btn-2 border border-white/30">
+                    Edit my rules
+                  </button>
+                  <button type="button" onClick={() => go(3)} className="btn">
+                    Add money
                   </button>
                 </div>
               </div>
-            ))
+
+              <section className="space-y-3 border border-line bg-white p-6">
+                <h2 className="text-xl">Waiting for your yes</h2>
+                {pending.length === 0 ? (
+                  <p className="text-sm">Nothing waiting. Gifts above your limit appear here before any money moves.</p>
+                ) : (
+                  pending.map((p) => (
+                    <div key={p.donation_id} className="space-y-2 border-t border-line pt-3">
+                      <p className="text-ink">
+                        <strong>{fmt(p.amount_cents)}</strong> to {p.project_title}
+                      </p>
+                      <p className="text-sm">{p.reason}</p>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => decide(p.donation_id, true)} className="min-h-11 bg-primary px-4 text-sm font-medium text-white">
+                          Approve
+                        </button>
+                        <button type="button" onClick={() => decide(p.donation_id, false)} className="min-h-11 border border-line px-4 text-sm text-ink">
+                          Decline
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </section>
+
+              <section className="space-y-3 border border-line bg-white p-6">
+                <h2 className="text-xl">What your agent did</h2>
+                {runs.length === 0 ? (
+                  <p className="text-sm">No runs yet. After each run you&apos;ll see what it gave, what it skipped and why.</p>
+                ) : (
+                  runs.map((r) => (
+                    <div key={r.id} className="border-t border-line pt-3 text-sm">
+                      <p className="font-medium text-ink">{new Date(r.run_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</p>
+                      <p>{r.report_text ?? "Run recorded."}</p>
+                    </div>
+                  ))
+                )}
+              </section>
+            </div>
           )}
         </div>
 
-        <div className="space-y-3 border border-line bg-white p-6">
-          <h2 className="text-xl">What your agent did</h2>
-          {runs.length === 0 ? (
-            <p className="text-sm">No runs yet. After each run you&apos;ll see what it gave, what it skipped and why.</p>
-          ) : (
-            runs.map((r) => (
-              <div key={r.id} className="border-t border-line pt-3 text-sm">
-                <p className="font-medium text-ink">{new Date(r.run_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</p>
-                <p>{r.report_text ?? "Run recorded."}</p>
-              </div>
-            ))
-          )}
-        </div>
-      </aside>
+        {notice && <Banner tone={notice.ok ? "success" : "error"}>{notice.text}</Banner>}
+
+        {step < 4 && (
+          <div className="flex items-center justify-between gap-3 border-t border-line pt-6">
+            <button type="button" onClick={() => go(Math.max(0, step - 1))} disabled={step === 0} className="min-h-12 border border-line bg-white px-5 text-ink disabled:invisible">
+              ← Back
+            </button>
+            {step < 2 && (
+              <button type="button" onClick={() => go(step + 1)} disabled={!stepOk[step]} className="btn btn-2 disabled:opacity-50">
+                Next →
+              </button>
+            )}
+            {step === 2 && (
+              <button type="button" disabled={saving || donorMissing} onClick={async () => (await save()) && go(3)} className="btn btn-2 disabled:opacity-50">
+                {saving ? "Saving…" : "Save and continue →"}
+              </button>
+            )}
+            {step === 3 && (
+              <button type="button" onClick={() => go(4)} className="btn btn-2">
+                {balance ? "See your agent →" : "Skip for now →"}
+              </button>
+            )}
+          </div>
+        )}
     </div>
   );
 }
