@@ -14,6 +14,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LeaderboardRow } from "@/lib/types";
 import { notify } from "./Status";
+import { Avatar } from "./Avatar";
+import { RankBadge } from "./Podium";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -46,12 +48,23 @@ const catColour: Record<string, string> = {
 const fmt = (cents: number, currency: string) =>
   new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(cents / 100);
 
+function RankCell({ data, node }: ICellRendererParams<LeaderboardRow>) {
+  if (!data || node.rowPinned) return null;
+  return (
+    <span className="flex h-full items-center">
+      <RankBadge rank={data.rank} />
+    </span>
+  );
+}
+
 function ProjectCell({ data, node }: ICellRendererParams<LeaderboardRow>) {
   if (!data) return null;
   if (node.rowPinned) return <span className="flex h-full items-center font-bold text-ink">{data.title}</span>;
   return (
     <div className="flex h-full items-center gap-3 leading-5">
-      <span className="size-2.5 shrink-0" style={{ background: catColour[data.categoryId] ?? "#797680" }} aria-hidden />
+      <span className="shrink-0 border-l-4" style={{ borderColor: catColour[data.categoryId] ?? "#797680" }} aria-hidden>
+        <Avatar name={data.title} seed={data.projectId} size={36} label="" />
+      </span>
       <span>
         <Link href={`/projects/${data.projectId}`} className="font-medium text-ink hover:text-brand hover:underline">
           {data.title}
@@ -119,7 +132,7 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
 
   const columns = useMemo<ColDef<LeaderboardRow>[]>(
     () => [
-      { field: "rank", headerName: "#", width: 64, pinned: "left", sort: "asc", cellClass: "tabular font-bold", valueFormatter: (p) => (p.node?.rowPinned ? "" : String(p.value)) },
+      { field: "rank", headerName: "#", width: 72, pinned: "left", sort: "asc", cellRenderer: RankCell },
       { field: "title", headerName: "Project", flex: 2, minWidth: wide ? 220 : 180, pinned: wide ? "left" : undefined, cellRenderer: ProjectCell },
       { field: "backerCount", headerName: "Backers", width: 110, type: "numericColumn", enableCellChangeFlash: true, cellClass: "tabular" },
       {

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getGlobePins } from "@/lib/globe";
 
 import { Countdown } from "@/components/Countdown";
+import { Podium } from "@/components/Podium";
+import { doodleTile, doodleUrl } from "@/lib/doodles";
 import { LeaderboardGrid } from "@/components/LeaderboardGrid";
 import { PageTitle } from "@/components/PageTitle";
 import { EmptyState, Eyebrow, StatBox } from "@/components/ui";
@@ -9,6 +11,8 @@ import { formatMoney, getLeaderboard } from "@/lib/api";
 
 // Rebuilt in the background at most every 30 s, so tab switches serve a ready page.
 export const revalidate = 60;
+
+const WALLPAPER = doodleUrl(doodleTile({ stroke: "#1d4248", seed: 31, density: 7 }));
 
 export default async function LeaderboardPage() {
   const [lb, globe] = await Promise.all([getLeaderboard(), getGlobePins()]);
@@ -58,6 +62,8 @@ export default async function LeaderboardPage() {
               Sample numbers. Connect the core API (<code>NEXT_PUBLIC_API_URL</code>) to see the real matching engine.
             </p>
           )}
+
+          {lb.rows.length > 0 && <Podium rows={lb.rows} wallpaper={WALLPAPER} />}
 
           {lb.rows.length === 0 ? (
             <EmptyState
