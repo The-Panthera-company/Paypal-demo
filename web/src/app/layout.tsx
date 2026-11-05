@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Abril_Fatface, Roboto } from "next/font/google";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
+import { StatusProvider } from "@/components/Status";
 import "./globals.css";
 
 const roboto = Roboto({ subsets: ["latin"], weight: ["300", "400", "500", "700"], variable: "--font-roboto", display: "swap" });
@@ -16,9 +17,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className={`${roboto.variable} ${abril.variable}`}>
       <body className="flex min-h-screen flex-col antialiased">
-        <Header />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        <StatusProvider>
+          <Header />
+          <main className="flex-1">{children}</main>
+          <Footer />
+        </StatusProvider>
       </body>
     </html>
   );

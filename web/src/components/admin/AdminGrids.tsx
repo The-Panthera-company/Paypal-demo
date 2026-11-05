@@ -1,5 +1,6 @@
 "use client";
 
+import { Banner, Confirm, notify as toast } from "@/components/Status";
 import {
   AllCommunityModule,
   ModuleRegistry,
@@ -70,6 +71,14 @@ function Actions({
 }) {
   const [pending, start] = useTransition();
   const [result, setResult] = useState<ActionResult | null>(null);
+  const [asking, setAsking] = useState<(typeof buttons)[number] | null>(null);
+  const run = (b: (typeof buttons)[number]) =>
+    start(async () => {
+      const r = await b.run();
+      setResult(r);
+      notify(r);
+      toast(r.message, r.ok ? "success" : "error");
+    });
   return (
     <div className="flex h-full items-center gap-2 leading-5">
       {buttons.map((b) => (
@@ -78,12 +87,8 @@ function Actions({
           type="button"
           disabled={pending}
           onClick={() => {
-            if (b.confirm && !window.confirm(b.confirm)) return;
-            start(async () => {
-              const r = await b.run();
-              setResult(r);
-              notify(r);
-            });
+            if (b.confirm) setAsking(b);
+            else run(b);
           }}
           className={`min-h-9 px-3 text-xs font-bold uppercase tracking-wider disabled:opacity-50 ${
             b.tone === "primary"
@@ -96,6 +101,18 @@ function Actions({
           {pending ? "…" : b.label}
         </button>
       ))}
+      <Confirm
+        open={asking !== null}
+        title={asking ? `${asking.label}?` : ""}
+        body={asking?.confirm}
+        confirmLabel={asking?.label}
+        danger={asking?.tone === "danger"}
+        onCancel={() => setAsking(null)}
+        onConfirm={() => {
+          if (asking) run(asking);
+          setAsking(null);
+        }}
+      />
       {result && !result.ok && (
         <span role="alert" className="text-xs font-medium text-danger">
           {result.message}
@@ -122,13 +139,7 @@ function Grid<T>({
   return (
     <div className="space-y-3">
       {notice && (
-        <p
-          role={notice.ok ? "status" : "alert"}
-          className={`border-l-4 bg-white p-3 text-sm text-ink ${notice.ok ? "border-accent" : "border-danger"}`}
-        >
-          {notice.ok ? "✓ " : ""}
-          {notice.message}
-        </p>
+        <Banner tone={notice.ok ? "success" : "error"}>{notice.message}</Banner>
       )}
       <AgGridReact<T>
         context={context}
