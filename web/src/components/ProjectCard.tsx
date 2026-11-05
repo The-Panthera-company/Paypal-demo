@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { daysLeft, formatMoney } from "@/lib/api";
 import type { Project } from "@/lib/types";
+import { FavoriteButton } from "./FavoriteButton";
 import { CategoryArt } from "./ui";
 
 const catColour: Record<string, string> = {
@@ -23,6 +24,7 @@ export function ProjectCard({ project: p, photo }: { project: Project; photo?: s
       </div>
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(11,46,51,0)_35%,rgba(11,46,51,0.92)_85%)]" aria-hidden />
 
+      <FavoriteButton id={p.id} title={p.title} className="absolute right-4 top-4 z-10" />
       {state && (
         <span className="absolute left-0 top-5 bg-accent py-1 pl-5 pr-7 text-xs font-bold uppercase tracking-[2px] text-ink [clip-path:polygon(0_0,100%_0,88%_100%,0_100%)]">
           {state}

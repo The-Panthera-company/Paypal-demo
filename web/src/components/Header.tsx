@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { FavoritesLink } from "./FavoriteButton";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -67,16 +68,20 @@ export function Header() {
             </ul>
           </nav>
 
-          <div className="ml-auto hidden h-full shrink-0 items-center border-l border-white/15 pl-8 lg:flex">
-            <Link href="/projects" className="btn">
+          <div className="ml-auto hidden h-full shrink-0 items-center gap-4 border-l border-white/15 pl-6 lg:flex">
+            <FavoritesLink />
+            <Link href="/projects" className="btn hidden 2xl:inline-flex">
               Back a project
             </Link>
           </div>
 
+          <div className="ml-auto lg:hidden">
+            <FavoritesLink />
+          </div>
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="ml-auto grid size-12 place-items-center text-white lg:hidden"
+            className="grid size-12 place-items-center text-white lg:hidden"
             aria-label="Open menu"
             aria-expanded={open}
             aria-controls="offcanvas"
