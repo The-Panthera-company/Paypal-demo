@@ -93,6 +93,27 @@ def merge_weights(overrides: dict | None) -> dict:
     return weights
 
 
+def reason_detail(project: dict, factors: dict) -> str:
+    """Rule-built explanation handed to the LLM, e.g. "few backers (1), 2% funded, urgency 4/5".
+
+    Built from the same numbers that produced the score, so the report explains the
+    decision instead of inventing a rationale.
+    """
+    backers = project.get("backer_count") or 0
+    goal = project.get("goal_cents") or 0
+    pct = int(100 * (project.get("raised_cents") or 0) / goal) if goal else 0
+    bits = [
+        "few backers (" + str(backers) + ")",
+        str(pct) + "% funded",
+        "urgency " + str(project.get("urgency") or 1) + "/5",
+    ]
+    if factors.get("evidence") == 1.0:
+        bits.append("receipts uploaded")
+    if factors.get("days_since_funded") == 1.0:
+        bits.append("no funding in " + str(DAYS_SCALE) + "+ days")
+    return ", ".join(bits)
+
+
 def reason_for(project: dict, factors: dict) -> str:
     backers = project.get("backer_count") or 0
     goal = project.get("goal_cents") or 0
@@ -239,14 +260,17 @@ class GivingAgent:
             "donor_budget_cents": mandate.get("monthly_budget_cents"),
             "planned": [
                 {"title": c["project"].get("title"), "amount_cents": c["amount"],
-                 "reason": reason_for(c["project"], c["factors"])}
+                 "reason": reason_for(c["project"], c["factors"]),
+                 "why": reason_detail(c["project"], c["factors"])}
                 for c in chosen
             ],
             "skipped": skipped[:10],
         }
         system = (
             "You write a short monthly giving report to a donor. Use only the facts given. "
-            "Call each gift planned. Never invent amounts, projects or outcomes."
+            "Call each gift planned. Never invent amounts, projects or outcomes. "
+            "For each gift, explain in one clause why it was chosen, using that gift's "
+            "\"why\" field. Never change, round or recompute an amount."
         )
         try:
             text = await self.llm.complete_text(system, data_block("allocation", json.dumps(facts)))
@@ -259,7 +283,7 @@ class GivingAgent:
         head = "Planned " + str(len(chosen)) + " gift" + ("" if len(chosen) == 1 else "s") + " this month:"
         body = [
             "- " + str(c["project"].get("title")) + ": $" + format(c["amount"] / 100, ".2f")
-            + " (" + reason_for(c["project"], c["factors"]) + ")"
+            + " (" + reason_detail(c["project"], c["factors"]) + ")"
             for c in chosen
         ]
         return chr(10).join([head] + body)

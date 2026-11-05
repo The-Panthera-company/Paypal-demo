@@ -23,6 +23,7 @@ from app.agents.giving import (          # noqa: E402
     days_since_last_funding,
     merge_weights,
     passes_hard_filters,
+    reason_detail,
     reason_for,
     score_project,
 )
@@ -162,8 +163,10 @@ async def main() -> int:
 
         print("--- planned allocation (not sent) ---")
         for c in chosen:
+            # title lives on the project, not on the wrapper dict
+            p = c["project"]
             print(
-                str(c["project"]["id"]) + "  " + str(c.get("title"))
+                str(p["id"]) + "  " + str(p.get("title"))
                 + "  " + str(c["amount"]) + " cents"
             )
         if not chosen:
@@ -182,14 +185,17 @@ async def main() -> int:
             "donor_budget_cents": mandate["monthly_budget_cents"],
             "planned": [
                 {"title": c["project"].get("title"), "amount_cents": c["amount"],
-                 "reason": reason_for(c["project"], c["factors"])}
+                 "reason": reason_for(c["project"], c["factors"]),
+                 "why": reason_detail(c["project"], c["factors"])}
                 for c in chosen
             ],
             "skipped": skipped[:10],
         }
         system = (
             "You write a short monthly giving report to a donor. Use only the facts given. "
-            "Call each gift planned. Never invent amounts, projects or outcomes."
+            "Call each gift planned. Never invent amounts, projects or outcomes. "
+            "For each gift, explain in one clause why it was chosen, using that gift's "
+            "\"why\" field. Never change, round or recompute an amount."
         )
         from app.llm import data_block
 
