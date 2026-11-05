@@ -11,7 +11,8 @@ from app.config import Settings, get_settings
 from app.db import get_db
 from app.models import MatchResult, Project, Round, RoundStatus
 from app.routers.catalogue import LISTED, _summaries
-from app.schemas import ErrorOut, LeaderboardOut, LeaderboardRow, RoundOut
+from app.donor_board import donor_board
+from app.schemas import DonorBoardOut, ErrorOut, LeaderboardOut, LeaderboardRow, RoundOut
 
 router = APIRouter(prefix="/rounds", tags=["rounds"])
 
@@ -96,3 +97,13 @@ def leaderboard(round_id: int, db: Session = Depends(get_db), settings: Settings
         currency=round_.currency,
         rows=rows,
     )
+
+
+@router.get("/{round_id}/donors", response_model=DonorBoardOut, responses={404: {"model": ErrorOut}})
+def donor_leaderboard(round_id: int, me: int | None = None, db: Session = Depends(get_db)):
+    """Donor ladders for the round: given, matching unlocked, multiplier, reach, agent-given, impact points.
+    Names only for donors who opted in; `me` marks the caller's own row (demo: no login yet)."""
+    round_ = db.get(Round, round_id)
+    if round_ is None:
+        raise HTTPException(404, detail={"error": "ROUND_NOT_FOUND", "message": "No such round"})
+    return donor_board(db, round_, me)

@@ -35,6 +35,8 @@ SECURITY = {
 # --- schemas ---------------------------------------------------------------------------------
 
 SCHEMAS = {
+    "DonorBoardRow": "One donor's numbers for the round, for each ladder (given, matching unlocked, multiplier, reach, agent-given, impact points).",
+    "DonorBoardOut": "A round's donor ladders. Names appear only for donors who opted in.",
     "ActiveMandate": "A mandate the Giving Agent should run now, with the donor's remaining funded balance.",
     "Allocation": "One project's share of a category gift.",
     "ApprovalIn": "The donor's answer to an agent gift above their approval threshold.",
@@ -104,6 +106,14 @@ SCHEMAS = {
 # --- fields: by name, with per-schema wording where a name means different things ------------
 
 FIELDS = {
+    "impact_points": "(given + matching unlocked) in dollars, times a reach bonus of 1 + 0.25 per extra project.",
+    "agent_given_cents": "What the donor's Giving Agent gave for them in the round, in cents.",
+    "categories_reached": "Distinct categories the donor's money reached.",
+    "projects_backed": "Distinct projects the donor's money reached, including through category gifts.",
+    "multiplier": "Matching unlocked per dollar given.",
+    "given_cents": "Everything the donor gave in the round, in cents (agent budget top-ups excluded).",
+    "is_me": "True on the row of the donor passed as `me`.",
+    "alias": "Stable anonymous name that does not reveal the donor id, e.g. Donor 3FA2C1.",
     "action": "What was done, e.g. checked_donation, case_opened, payout_request.",
     "active": "Whether the Giving Agent runs for this mandate; false pauses it.",
     "actor": "Who acted: giving-agent, milestone-agent, watchdog-agent, admin, donor, system or paypal.",
@@ -292,6 +302,7 @@ SCHEMA_FIELDS[("MandateRunOut", "id")] = "Run id."
 SCHEMA_FIELDS[("PayoutOut", "id")] = "Payout batch id."
 
 PARAMS = {
+    "me": "Donor id of the caller, to mark their own row (demo: no login yet).",
     "case_id": "Watchdog case id.",
     "category_id": "Only projects in this category.",
     "cause": "Only projects with this cause, e.g. literacy.",
@@ -384,6 +395,7 @@ def _object_example(schema: dict, schemas: dict, depth: int = 0) -> dict:
 # --- operations, parameters and enums ---------------------------------------------------------
 
 OPERATIONS = {
+    "donor_leaderboard": "Donor ladders for the round: biggest givers, most matching unlocked, best multiplier, widest reach, Giving Agent gifts and impact points. Anonymous unless the donor opted in.",
     "list_categories": "All categories with how many listed (verified or active) projects each has.",
     "list_projects": "Listed projects with totals, facets and projected match. Filter by category, cause, beneficiary group, region or search text, leave out excluded tags, and sort.",
     "get_project": "One listed or completed project with its summary, totals and milestones. 404 for projects under review or delisted.",

@@ -2367,6 +2367,111 @@
         }
       }
     },
+    "/rounds/{round_id}/donors": {
+      "get": {
+        "tags": [
+          "rounds"
+        ],
+        "summary": "Donor Leaderboard",
+        "description": "Donor ladders for the round: given, matching unlocked, multiplier, reach, agent-given, impact points.\nNames only for donors who opted in; `me` marks the caller's own row (demo: no login yet).",
+        "operationId": "donor_leaderboard",
+        "parameters": [
+          {
+            "name": "round_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Round id.",
+              "example": 1
+            },
+            "description": "Round id.",
+            "example": 1
+          },
+          {
+            "name": "me",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "description": "Donor id of the caller, to mark their own row (demo: no login yet).",
+              "example": 1
+            },
+            "description": "Donor id of the caller, to mark their own row (demo: no login yet).",
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DonorBoardOut"
+                },
+                "example": {
+                  "round_id": 1,
+                  "currency": "USD",
+                  "rows": [
+                    {
+                      "alias": "alias",
+                      "display_name": "Wanjiru",
+                      "is_me": true,
+                      "given_cents": 2500,
+                      "match_unlocked_cents": 2500,
+                      "multiplier": 1.0,
+                      "projects_backed": 1,
+                      "categories_reached": 1,
+                      "agent_given_cents": 2500,
+                      "impact_points": 1
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/projects": {
       "get": {
         "tags": [
@@ -5810,6 +5915,148 @@
         "title": "DonationStatus",
         "description": "created: order made, not paid; pending: PayPal is holding the payment; captured: received; failed: declined, denied or abandoned; refunded: refunded in full.",
         "example": "created"
+      },
+      "DonorBoardOut": {
+        "properties": {
+          "round_id": {
+            "type": "integer",
+            "description": "Round id.",
+            "example": 1
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 currency code. All PayPal money moves in USD.",
+            "example": "USD"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/DonorBoardRow"
+            },
+            "type": "array",
+            "description": "Projects ranked by match.",
+            "example": [
+              {
+                "alias": "alias",
+                "display_name": "Wanjiru",
+                "is_me": true,
+                "given_cents": 2500,
+                "match_unlocked_cents": 2500,
+                "multiplier": 1.0,
+                "projects_backed": 1,
+                "categories_reached": 1,
+                "agent_given_cents": 2500,
+                "impact_points": 1
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "round_id",
+          "currency",
+          "rows"
+        ],
+        "title": "DonorBoardOut",
+        "description": "A round's donor ladders. Names appear only for donors who opted in.",
+        "example": {
+          "round_id": 1,
+          "currency": "USD",
+          "rows": [
+            {
+              "alias": "alias",
+              "display_name": "Wanjiru",
+              "is_me": true,
+              "given_cents": 2500,
+              "match_unlocked_cents": 2500,
+              "multiplier": 1.0,
+              "projects_backed": 1,
+              "categories_reached": 1,
+              "agent_given_cents": 2500,
+              "impact_points": 1
+            }
+          ]
+        }
+      },
+      "DonorBoardRow": {
+        "properties": {
+          "alias": {
+            "type": "string",
+            "description": "Stable anonymous name that does not reveal the donor id, e.g. Donor 3FA2C1.",
+            "example": "alias"
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Name shown on the leaderboard if the donor opts in.",
+            "nullable": true,
+            "example": "Wanjiru"
+          },
+          "is_me": {
+            "type": "boolean",
+            "default": false,
+            "description": "True on the row of the donor passed as `me`.",
+            "example": true
+          },
+          "given_cents": {
+            "type": "integer",
+            "description": "Everything the donor gave in the round, in cents (agent budget top-ups excluded).",
+            "example": 2500
+          },
+          "match_unlocked_cents": {
+            "type": "integer",
+            "description": "This donor's share of the matching their gifts unlocked (square-root share of each project's match).",
+            "example": 2500
+          },
+          "multiplier": {
+            "type": "number",
+            "description": "Matching unlocked per dollar given.",
+            "example": 1.0
+          },
+          "projects_backed": {
+            "type": "integer",
+            "description": "Distinct projects the donor's money reached, including through category gifts.",
+            "example": 1
+          },
+          "categories_reached": {
+            "type": "integer",
+            "description": "Distinct categories the donor's money reached.",
+            "example": 1
+          },
+          "agent_given_cents": {
+            "type": "integer",
+            "description": "What the donor's Giving Agent gave for them in the round, in cents.",
+            "example": 2500
+          },
+          "impact_points": {
+            "type": "integer",
+            "description": "(given + matching unlocked) in dollars, times a reach bonus of 1 + 0.25 per extra project.",
+            "example": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "alias",
+          "given_cents",
+          "match_unlocked_cents",
+          "multiplier",
+          "projects_backed",
+          "categories_reached",
+          "agent_given_cents",
+          "impact_points"
+        ],
+        "title": "DonorBoardRow",
+        "description": "One donor's numbers for the round, for each ladder (given, matching unlocked, multiplier, reach, agent-given, impact points).",
+        "example": {
+          "alias": "alias",
+          "display_name": "Wanjiru",
+          "is_me": true,
+          "given_cents": 2500,
+          "match_unlocked_cents": 2500,
+          "multiplier": 1.0,
+          "projects_backed": 1,
+          "categories_reached": 1,
+          "agent_given_cents": 2500,
+          "impact_points": 1
+        }
       },
       "DonorOut": {
         "properties": {
