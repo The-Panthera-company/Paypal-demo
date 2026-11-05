@@ -3,7 +3,7 @@ import { GivingAssistant } from "@/components/GivingAssistant";
 import { ImpactGallery } from "@/components/ImpactGallery";
 import { CountUp } from "@/components/CountUp";
 import { PlatformIdentity } from "@/components/PlatformIdentity";
-import { ProjectShowcase } from "@/components/ProjectShowcase";
+import { FeaturedStrip } from "@/components/FeaturedStrip";
 import { BackerStories, SponsorStrip } from "@/components/Sections";
 import { Countdown } from "@/components/Countdown";
 import { Icon } from "@/components/Icon";
@@ -48,7 +48,7 @@ export default async function Home() {
           style={{ backgroundImage: `url("${photoFor("people", "hero")}")` }}
           aria-hidden
         />
-        <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(11,46,51,0.96)_25%,rgba(0,113,144,0.85)_65%,rgba(0,151,141,0.7)_100%)]" aria-hidden />
+        <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(11,46,51,0.9)_20%,rgba(0,113,144,0.62)_60%,rgba(0,151,141,0.45)_100%)]" aria-hidden />
         <div className="absolute -right-20 top-1/4 hidden size-[420px] border border-white/10 lg:block" aria-hidden />
         <div className="absolute right-32 top-1/3 hidden size-[300px] border border-white/10 lg:block" aria-hidden />
         <div className="container-k relative flex flex-wrap items-center justify-between gap-12">
@@ -137,10 +137,24 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Explore projects: full-screen, one project in focus, every project in the rotation */}
-      <ProjectShowcase
-        items={showcase.map((p) => ({ project: p, photo: photos[p.id], raised: formatMoney(p.raised), goal: formatMoney(p.goal), days: daysLeft(p) }))}
-      />
+      {/* Explore projects: the Doria-style strip, now moving on its own through every project */}
+      <section className="relative pb-16 lg:pb-[120px]">
+        <div className="absolute inset-x-0 top-0 h-[480px] bg-surface-alt lg:h-[602px]" aria-hidden />
+        <div className="container-k relative pt-16 lg:pt-[110px]">
+          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <Eyebrow>Urgent and overlooked first</Eyebrow>
+              <h2 className="section-title">Explore projects</h2>
+            </div>
+            <Link href="/projects" className="btn btn-2">
+              See all {showcase.length} projects
+            </Link>
+          </div>
+          <FeaturedStrip
+            items={showcase.map((p) => ({ project: p, photo: photos[p.id], raised: formatMoney(p.raised), goal: formatMoney(p.goal), days: daysLeft(p) }))}
+          />
+        </div>
+      </section>
 
       <PlatformIdentity />
 

@@ -272,11 +272,3 @@ body {
     transform: none;
   }
 }
-@keyframes showcase-progress {
-  from {
-    width: 0%;
-  }
-  to {
-    width: 100%;
-  }
-}
