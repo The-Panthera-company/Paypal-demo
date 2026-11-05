@@ -68,6 +68,7 @@ class ProjectSummary(BaseModel):
         {
             "id": 1,
             "title": "Lanet Library",
+            "facilitator": "Lanet Community Library Group",
             "category_id": 2,
             "category": "Education",
             "tags": ["books", "literacy"],
@@ -86,6 +87,7 @@ class ProjectSummary(BaseModel):
     )
     id: int
     title: str
+    facilitator: str | None = Field(description="The group running the project on the ground")
     category_id: int
     category: str
     tags: list[str]
@@ -146,6 +148,7 @@ class FundingPoint(BaseModel):
 
 class ProjectApplicationIn(BaseModel):
     title: str
+    facilitator: str | None = Field(None, max_length=120, description="The group running the project on the ground")
     summary: str
     category_id: int
     tags: list[str] = []

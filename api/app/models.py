@@ -165,6 +165,8 @@ class Project(Base):
     cause: Mapped[str | None] = mapped_column(String(60))
     beneficiary_group: Mapped[str | None] = mapped_column(String(30))  # children, adults, elderly
     region: Mapped[str | None] = mapped_column(String(60))
+    # The group running the project on the ground, e.g. "Lanet Community Library Group".
+    facilitator: Mapped[str | None] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

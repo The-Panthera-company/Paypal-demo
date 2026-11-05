@@ -2,7 +2,8 @@
 
 Safe to run again: everything is added only if missing, and the worked-example settings are
 re-applied. Adds:
-- the four categories, with two or more tagged projects in each (filters, exclusions and the chat)
+- the four categories, with two or more tagged projects in each (filters, exclusions and the chat),
+  each with the group that runs it (its facilitator)
 - the System Design worked example in Education: the four projects with goals big enough that
   the 40% category cap binds, and their seeded backers (16 x 12.50, 9 x 12.50, 4 x 50 USD), so the
   leaderboard shows Lanet Library capped and its excess shared out
@@ -28,7 +29,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db import Base, SessionLocal, engine
+from app.db import SessionLocal, create_schema, engine
 from app.models import (
     AuditLog,
     Category,
@@ -84,6 +85,24 @@ PROJECTS = [
     ("Environment", "Manila Bay Mangrove Replanting", ["trees", "climate"], "conservation", "community", "Manila", 3,
      350_000, "Replanting 3,000 mangrove seedlings along Manila Bay with local fisherfolk groups."),
 ]
+
+# Who runs each project on the ground (filled in only where a project has none).
+FACILITATORS = {
+    "Lanet Library": "Lanet Community Library Group",
+    "Kaptembwo Desks": "Kaptembwo Primary Parents Association",
+    "Girls' STEM Club": "Kisumu STEM Futures Network",
+    "New Reading Corner": "Eldoret Early Readers Trust",
+    "Mobile Eye Clinic": "Turkana Clear Sight Outreach",
+    "St. Mary's Mission Maternity Ward": "St. Mary's Mission Health Committee",
+    "Lupus Patient Support Fund": "Nairobi Lupus Support Network",
+    "Lake Shoreline Trees": "Lakeside Youth Conservation Group",
+    "Plastic-Free Market": "Kongowea Traders Welfare Group",
+    "Village Borehole Repair": "Lokichar Village Water Committee",
+    "School Rainwater Tanks": "Eldoret Schools Water Project",
+    "Dhaka Household Water Filters": "Mirpur Clean Water Collective",
+    "Lima Community Dental Van": "Sonrisas Lima Dental Outreach",
+    "Manila Bay Mangrove Replanting": "Manila Bay Fisherfolk Alliance",
+}
 
 # The worked example's backers: (project, people, cents each), one seeded person per gift. Half the design's
 # 25 / 25 / 100 so every gift is within the 50 USD per-person cap; the scores keep the design's 6000:1800:1200.
@@ -164,7 +183,7 @@ def seed_milestones(db: Session, project: Project, today: date) -> None:
 
 
 def main() -> None:
-    Base.metadata.create_all(engine)
+    create_schema(engine)  # also adds columns new since Render last deployed
     now = datetime.now(timezone.utc)
     with SessionLocal() as db:
         categories = {}
@@ -185,6 +204,7 @@ def main() -> None:
             project.tags, project.cause, project.beneficiary_group = tags, cause, group
             project.region, project.urgency, project.goal_amount = region, urgency, goal
             project.summary = project.summary or summary
+            project.facilitator = project.facilitator or FACILITATORS[title]
         db.flush()
 
         for project in db.scalars(select(Project).where(Project.title.in_(list(MILESTONES)))):

@@ -164,7 +164,7 @@ def test_seed_reproduces_the_worked_example_and_is_rerunnable(monkeypatch):
     with factory() as db:
         projects = list(db.scalars(select(Project)))
         assert len(projects) == len(seed_dev.PROJECTS)
-        assert len({p.category_id for p in projects}) == 4 and all(p.tags for p in projects)
+        assert len({p.category_id for p in projects}) == 4 and all(p.tags and p.facilitator for p in projects)
         assert db.scalar(select(Donor).order_by(Donor.id)).id == 1  # the demo donor
         assert len(db.scalars(select(Donation)).all()) == 29
         round_ = db.scalar(select(Round))
