@@ -4,11 +4,23 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LAND } from "@/lib/globe-land";
 
+// Per dot, computed once: sin(lat), cos(lat), lng in radians (the per-frame work is one cos/sin)
+const DOTS = (() => {
+  const out = new Float32Array((LAND.length / 2) * 3);
+  for (let i = 0, j = 0; i < LAND.length; i += 2, j += 3) {
+    const la = (LAND[i] * Math.PI) / 180;
+    out[j] = Math.sin(la);
+    out[j + 1] = Math.cos(la);
+    out[j + 2] = (LAND[i + 1] * Math.PI) / 180;
+  }
+  return out;
+})();
+
 export type GlobePin = { id: string; title: string; categoryId: string; location: [number, number]; raised: string; goal: string; place: string };
 
 type Group = { key: string; location: [number, number]; place: string; pins: GlobePin[] };
 
-const SPEED = 0.0025; // radians per frame (~30 fps): slow, a backdrop not a show
+const SPEED = 0.005; // radians per frame (~15 fps): slow, a backdrop not a show
 const TILT = -0.3; // lift the equator (where most projects are) above the faded bottom edge
 
 // Orthographic projection shared by the dots and the HTML pins, so pins sit exactly on the globe.
@@ -57,16 +69,36 @@ export function GlobeBackdrop({ pins, className = "" }: { pins: GlobePin[]; clas
     // Start with the first project's longitude facing slightly left of centre
     let phi = groups[0] ? -((groups[0].location[1] * Math.PI) / 180) + 0.5 : 0;
     let visible = true;
-    const io = new IntersectionObserver(([e]) => (visible = e.isIntersecting));
-    io.observe(wrap);
     let raf = 0;
-    let last = 0;
+    let running = false;
+    // Fully stopped while scrolled away or on another tab: no timer, no pulsing pins.
+    // Picks up where it left off (same angle) when it comes back into view.
+    const stop = () => {
+      running = false;
+      window.clearTimeout(raf);
+      pinEls.current.forEach((d) => d && (d.dataset.live = "false"));
+    };
+    const start = () => {
+      if (running || !visible || document.hidden) return;
+      running = true;
+      draw();
+    };
+    const io = new IntersectionObserver(([e]) => {
+      visible = e.isIntersecting;
+      if (visible) start();
+      else stop();
+    });
+    io.observe(wrap);
+    const onVis = () => (document.hidden ? stop() : start());
+    document.addEventListener("visibilitychange", onVis);
 
-    const draw = (t: number) => {
-      raf = requestAnimationFrame(draw);
-      if (t - last < 33 && last) return; // ~30 fps is plenty for a slow turn
-      last = t;
-      if (!visible) return;
+    // ~15 fps: wake on a timer, then draw in the next animation frame
+    const tick = () => {
+      raf = window.setTimeout(() => running && requestAnimationFrame(draw), 66);
+    };
+    const draw = () => {
+      if (!running) return;
+      tick();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const w = wrap.offsetWidth;
       if (el.width !== Math.round(w * dpr)) {
@@ -89,22 +121,37 @@ export function GlobeBackdrop({ pins, className = "" }: { pins: GlobePin[]; clas
       ctx.beginPath();
       ctx.arc(c, c, R, 0, Math.PI * 2);
       ctx.fill();
-      // Land dots, fading towards the edge
-      for (let i = 0; i < LAND.length; i += 2) {
-        const p = project([LAND[i], LAND[i + 1]], phi);
-        if (p.z <= 0) continue;
-        ctx.fillStyle = `rgba(150,209,170,${0.15 + p.z * 0.6})`;
-        const s = 1.1 + p.z * 1.1;
-        ctx.fillRect(c + p.x * R - s / 2, c - p.y * R - s / 2, s, s);
+      // Land dots, fading towards the edge: 4 brightness bands, one path and one fill each
+      const cT = Math.cos(TILT), sT = Math.sin(TILT);
+      const bands = [new Path2D(), new Path2D(), new Path2D(), new Path2D()];
+      for (let i = 0; i < DOTS.length; i += 3) {
+        const lo = DOTS[i + 2] + phi;
+        const z0 = DOTS[i + 1] * Math.cos(lo);
+        const y0 = DOTS[i];
+        const z = y0 * sT + z0 * cT;
+        if (z <= 0) continue;
+        const x = DOTS[i + 1] * Math.sin(lo);
+        const y = y0 * cT - z0 * sT;
+        const b = Math.min(3, (z * 4) | 0);
+        const sz = 1.2 + b * 0.35;
+        bands[b].rect(c + x * R - sz / 2, c - y * R - sz / 2, sz, sz);
       }
+      bands.forEach((path, b) => {
+        ctx.fillStyle = `rgba(150,209,170,${0.2 + b * 0.18})`;
+        ctx.fill(path);
+      });
       // Pins: move the HTML elements directly (no React state per frame)
       groups.forEach((g, i) => {
         const d = pinEls.current[i];
         if (!d) return;
         const p = project(g.location, phi);
-        const front = p.z > 0.08;
+        // Pins show only once well onto the front (z > 0.45), fade in to 0.65, and pulse only
+        // near the centre (z > 0.75): the globe may show no pins at all for a while.
+        const front = p.z > 0.45;
+        const live = p.z > 0.75;
+        if (d.dataset.live !== String(live)) d.dataset.live = String(live);
         d.style.transform = `translate(${c + p.x * R}px, ${c - p.y * R}px) translate(-50%, -50%)`;
-        d.style.opacity = front ? String(Math.round(Math.min(1, p.z * 2.5) * 10) / 10) : "0";
+        d.style.opacity = front ? String(Math.round(Math.min(1, (p.z - 0.45) * 5) * 10) / 10) : "0";
         // Only touch focusability when a pin turns to the front or the back
         if (d.dataset.front !== String(front)) {
           d.dataset.front = String(front);
@@ -115,9 +162,10 @@ export function GlobeBackdrop({ pins, className = "" }: { pins: GlobePin[]; clas
       });
       if (!reduce && !paused.current) phi += SPEED;
     };
-    raf = requestAnimationFrame(draw);
+    start();
     return () => {
-      cancelAnimationFrame(raf);
+      stop();
+      document.removeEventListener("visibilitychange", onVis);
       io.disconnect();
     };
   }, [groups]);
@@ -135,14 +183,14 @@ export function GlobeBackdrop({ pins, className = "" }: { pins: GlobePin[]; clas
         >
           <button
             type="button"
-            className="relative grid size-7 place-items-center"
+            className="group relative grid size-7 place-items-center"
             aria-label={`${g.pins.length} project${g.pins.length > 1 ? "s" : ""} in ${g.place}`}
             aria-expanded={open === i}
             onMouseEnter={() => setOpen(i)}
             onFocus={() => setOpen(i)}
             onClick={() => setOpen(open === i ? null : i)}
           >
-            <span className="absolute size-3 animate-ping bg-accent/60" aria-hidden />
+            <span className="absolute size-4 bg-accent/40 opacity-0 group-hover:scale-150 [[data-live=true]_&]:animate-ping [[data-live=true]_&]:opacity-100" aria-hidden />
             <span className="size-2.5 bg-accent ring-2 ring-ink" aria-hidden />
           </button>
           {open === i && (
