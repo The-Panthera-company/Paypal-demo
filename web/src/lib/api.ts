@@ -4,7 +4,7 @@
 // turn the API's snake_case / *_cents fields into the shapes in ./types, so pages never change.
 import { cache } from "react";
 import { backerStories, categories, impactUpdates, projects, sponsors } from "./mock-data";
-import type { BackerStory, Category, DonorReport, ImpactUpdate, Leaderboard, LeaderboardRow, Project, ProjectFilters, Sponsor } from "./types";
+import type { BackerStory, Category, DonorReport, ImpactUpdate, Leaderboard, LeaderboardRow, Money, Project, ProjectFilters, Sponsor } from "./types";
 
 // In Docker the website's server reaches the API by its service name (API_INTERNAL_URL, e.g. http://api:8000),
 // while the browser uses the public address (NEXT_PUBLIC_API_URL). Elsewhere both are the same.
@@ -328,12 +328,12 @@ function sampleLeaderboard(): Leaderboard {
 }
 
 /** The current matching round (name and end date) for countdowns */
-export async function getRound(): Promise<{ name: string; endsAt: string }> {
+export async function getRound(): Promise<{ name: string; endsAt: string; pool?: Money }> {
   if (!API_URL) return { name: "Sample round", endsAt: projects[0]?.endsAt ?? new Date(Date.now() + 7 * 86_400_000).toISOString() };
   // No round open (or API unreachable): keep the page up with a placeholder countdown
   try {
     const r = await get<ApiRound>("/rounds/current");
-    return { name: r.name, endsAt: r.ends_at };
+    return { name: r.name, endsAt: r.ends_at, pool: money(r.matching_pool_cents, r.currency) };
   } catch {
     return { name: "Next round", endsAt: new Date(Date.now() + 30 * 86_400_000).toISOString() };
   }
