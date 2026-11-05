@@ -113,7 +113,9 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
     return () => clearInterval(t);
   }, [refreshSeconds, router]);
 
-  useEffect(() => grid.current?.api?.onFilterChanged(), [category, show]);
+  useEffect(() => {
+    grid.current?.api?.onFilterChanged();
+  }, [category, show]);
 
   const columns = useMemo<ColDef<LeaderboardRow>[]>(
     () => [

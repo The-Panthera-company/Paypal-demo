@@ -51,6 +51,23 @@ export function MosaicCard({ project: p, photo, size }: { project: Project; phot
               <span>{p.backerCount} backers</span>
               <span>{daysLeft(p)} days left</span>
             </p>
+            <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-white/15 pt-3 text-xs">
+              <div>
+                <dt className="text-white/60">Cause</dt>
+                <dd className="capitalize">{p.facets.cause}</dd>
+              </div>
+              <div>
+                <dt className="text-white/60">Who it helps</dt>
+                <dd className="capitalize">{p.facets.group}</dd>
+              </div>
+              {p.tags.length > 0 && (
+                <div className="col-span-2 flex flex-wrap gap-1">
+                  {p.tags.slice(0, 4).map((t) => (
+                    <span key={t} className="bg-white/15 px-2 leading-5">#{t}</span>
+                  ))}
+                </div>
+              )}
+            </dl>
             <p className="mt-3 text-xs font-bold uppercase tracking-[2px] text-accent">View project →</p>
           </div>
         </div>
