@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LeaderboardRow } from "@/lib/types";
+import { notify } from "./Status";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -235,7 +236,10 @@ export function LeaderboardGrid({ rows, refreshSeconds }: { rows: LeaderboardRow
         </div>
         <button
           type="button"
-          onClick={() => grid.current?.api?.exportDataAsCsv({ fileName: "leaderboard.csv", skipPinnedBottom: true })}
+          onClick={() => {
+            grid.current?.api?.exportDataAsCsv({ fileName: "leaderboard.csv", skipPinnedBottom: true });
+            notify("Leaderboard downloaded as leaderboard.csv", "success");
+          }}
           className="min-h-12 border border-line bg-white px-4 text-sm text-ink hover:border-primary"
         >
           Export CSV

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { getGlobePins } from "@/lib/globe";
+
 import { AuditGrid, CasesGrid, MilestonesGrid, VerificationGrid } from "@/components/admin/AdminGrids";
 import { PageTitle } from "@/components/PageTitle";
 import { getAdminData } from "@/lib/admin";
@@ -16,7 +18,7 @@ type Tab = (typeof tabs)[number]["id"];
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab: raw } = await searchParams;
   const tab: Tab = tabs.some((t) => t.id === raw) ? (raw as Tab) : "cases";
-  const data = await getAdminData();
+  const [data, globe] = await Promise.all([getAdminData(), getGlobePins()]);
   const counts: Record<Tab, number> = {
     cases: data.cases.filter((c) => c.status === "open").length,
     verify: data.queue.length,
@@ -26,7 +28,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   return (
     <>
-      <PageTitle title="Admin console" crumb="Admin" />
+      <PageTitle title="Admin console" crumb="Admin" globe={globe} />
       <section className="section">
         <div className="container-k space-y-8">
           <p className="max-w-[70ch] text-lg leading-8">

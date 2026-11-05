@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { notify } from "./Status";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 
@@ -8,13 +9,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 export function LeaderboardOptIn({ donorId, initial, sample }: { donorId: string; initial: boolean; sample: boolean }) {
   const [on, setOn] = useState(initial);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function toggle() {
     const next = !on;
     if (sample || !API_URL) {
       setOn(next);
-      setMsg({ ok: true, text: "Sample mode: nothing saved." });
+      notify("Sample mode: nothing saved.", "info");
       return;
     }
     setBusy(true);
@@ -26,9 +26,9 @@ export function LeaderboardOptIn({ donorId, initial, sample }: { donorId: string
       });
       if (!r.ok) throw new Error();
       setOn(next);
-      setMsg({ ok: true, text: next ? "Your name can now appear on public pages." : "You're anonymous again." });
+      notify(next ? "Your name can now appear on public pages." : "You're anonymous again.", "success");
     } catch {
-      setMsg({ ok: false, text: "Couldn't save. Check your connection and try again." });
+      notify("Couldn't save. Check your connection and try again.", "error");
     } finally {
       setBusy(false);
     }
@@ -52,11 +52,6 @@ export function LeaderboardOptIn({ donorId, initial, sample }: { donorId: string
           <span className="text-sm text-text">Off by default. Public pages only ever show how many people backed a project.</span>
         </span>
       </button>
-      {msg && (
-        <p role={msg.ok ? "status" : "alert"} className={`text-sm ${msg.ok ? "text-ink" : "font-medium text-danger"}`}>
-          {msg.text}
-        </p>
-      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { getGlobePins } from "@/lib/globe";
 import { MandateSetup } from "@/components/MandateSetup";
 import { PageTitle } from "@/components/PageTitle";
 import { getCategories, getProjects } from "@/lib/api";
@@ -5,11 +6,11 @@ import { getCategories, getProjects } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export default async function MandatePage() {
-  const [categories, projects] = await Promise.all([getCategories(), getProjects()]);
+  const [categories, projects, globe] = await Promise.all([getCategories(), getProjects(), getGlobePins()]);
   const tags = [...new Set(projects.flatMap((p) => p.tags))].sort();
   return (
     <>
-      <PageTitle title="Your Giving Agent" crumb="Giving Agent" />
+      <PageTitle title="Your Giving Agent" crumb="Giving Agent" globe={globe} />
       <section className="section bg-surface-alt">
         <div className="container-k space-y-8">
           <p className="max-w-[70ch] text-lg leading-8">

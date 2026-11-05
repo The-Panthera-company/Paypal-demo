@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { getGlobePins } from "@/lib/globe";
+
 import { Countdown } from "@/components/Countdown";
 import { LeaderboardGrid } from "@/components/LeaderboardGrid";
 import { PageTitle } from "@/components/PageTitle";
@@ -8,7 +10,7 @@ import { formatMoney, getLeaderboard } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export default async function LeaderboardPage() {
-  const lb = await getLeaderboard();
+  const [lb, globe] = await Promise.all([getLeaderboard(), getGlobePins()]);
   const matched = lb.rows.reduce((s, r) => s + r.match.amount, 0);
   const backers = lb.rows.reduce((s, r) => s + r.backerCount, 0);
   const days = Math.max(0, Math.ceil((new Date(lb.endsAt).getTime() - Date.now()) / 86_400_000));
@@ -16,7 +18,7 @@ export default async function LeaderboardPage() {
 
   return (
     <>
-      <PageTitle title="Leaderboard" crumb="Leaderboard" />
+      <PageTitle title="Leaderboard" crumb="Leaderboard" globe={globe} />
       <section className="section">
         <div className="container-k space-y-10">
           <div className="flex flex-wrap items-end justify-between gap-6">

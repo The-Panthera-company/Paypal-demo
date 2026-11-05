@@ -1,5 +1,6 @@
 "use client";
 
+import { Banner } from "@/components/Status";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Category, Project } from "@/lib/types";
@@ -129,7 +130,7 @@ export function CategoryCheckout({ category, projects }: { category: Category; p
 
         <section aria-live="polite">
           <h2 className="mb-3 text-xl text-ink">3. Where your {fmt(cents)} may go</h2>
-          {error && <p role="alert" className="border-l-4 border-danger bg-white p-3 text-sm text-ink">{error}</p>}
+          {error && <Banner tone="error">{error}</Banner>}
           {nothingLeft ? (
             <p className="border border-dashed border-line bg-white p-6">
               Every project in {category.name} matches something you excluded. Remove an exclusion to continue.
