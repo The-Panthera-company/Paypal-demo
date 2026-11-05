@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { LeaderboardRow } from "@/lib/types";
 import { Avatar } from "./Avatar";
+import { RollingNumber } from "./RollingNumber";
 
 const fmt = (c: number, cur: string) => new Intl.NumberFormat(undefined, { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(c / 100);
 const MEDAL = ["#FFEFAE", "#D9E8DF", "#C9A27A"]; // gold (lemon), silver (mint grey), bronze
@@ -49,7 +50,7 @@ export function Podium({ entries, wallpaper, title, animKey = "" }: { entries: P
       <ol key={animKey} className="mx-auto flex max-w-3xl items-end justify-center gap-3 sm:gap-6">
         {order.map((r) => (
           <li key={r.key} className="flex w-1/3 max-w-[230px] flex-col items-center text-center">
-            <div className="flex flex-col items-center opacity-0 animate-[podium-drop_.6s_ease-out_forwards]" style={{ animationDelay: `${delay[r.rank] + 700}ms` }}>
+            <div className="flex flex-col items-center opacity-0 animate-[podium-up_.7s_cubic-bezier(.2,.9,.3,1.1)_forwards]" style={{ animationDelay: `${delay[r.rank] + 700}ms` }}>
               <div className="relative">
                 <span className={`block overflow-hidden ring-4 ${r.rank === 1 ? "ring-accent" : "ring-white/30"}`}>
                   <Avatar name={r.avatar.name} seed={r.avatar.seed} anonymous={r.avatar.anonymous} size={r.rank === 1 ? 96 : 72} label={r.title} />
@@ -71,7 +72,7 @@ export function Podium({ entries, wallpaper, title, animKey = "" }: { entries: P
               )}
               {/* Plaque, button-style */}
               <p className={`corner relative mt-3 px-4 py-2 ${r.rank === 1 ? "bg-accent text-ink" : "bg-white/10 text-white ring-1 ring-white/25"}`} style={{ ["--corner-size" as string]: "10px" }}>
-                <span className="tabular block font-display text-2xl leading-7">{r.value}</span>
+                <span className="block font-display text-2xl leading-7"><RollingNumber value={r.value} delay={delay[r.rank] + 900} /></span>
                 <span className={`block text-[11px] font-bold uppercase tracking-[2px] ${r.rank === 1 ? "text-ink/70" : "text-cobalt-green"}`}>{r.label}</span>
               </p>
             </div>
