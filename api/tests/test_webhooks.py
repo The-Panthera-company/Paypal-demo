@@ -40,7 +40,7 @@ def _capture_resource(order_id, donation_id, status="COMPLETED"):
 
 def _refund_resource(capture_id, value="20.00"):
     return {
-        "id": "REF-1",
+        "id": f"REF-{capture_id}-{value}",  # PayPal gives every refund its own id
         "status": "COMPLETED",
         "amount": {"currency_code": "USD", "value": value},
         "links": [{"rel": "up", "href": f"https://api.sandbox.paypal.com/v2/payments/captures/{capture_id}"}],

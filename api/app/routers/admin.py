@@ -7,31 +7,40 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import payouts, reconciliation, round_close
+from app.money import to_paypal
+from app.refunds import book_refund, refunded_total
 from app.auth import require_admin
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.models import (
     AuditLog,
     CaseStatus,
+    Donation,
+    DonationStatus,
     Milestone,
     MilestoneStatus,
     Payout,
     PayoutAccount,
     Project,
+    ProjectDocument,
     ProjectStatus,
     Round,
+    RoundStatus,
     WatchdogCase,
     WebhookEvent,
 )
 from app.paypal import PayPalClient, PayPalError, get_paypal
-from app.routers.catalogue import _summaries, milestone_out, project_detail
+from app.auth import new_owner_token
+from app.routers.catalogue import _summaries, document_out, milestone_out, project_detail
 from app.routers.internal import case_out, release_milestone
-from app.routers.rounds import leaderboard
+from app.routers.rounds import _out as round_out, leaderboard, _sponsored
 from app.schemas import (
     AuditOut,
     CaseOut,
     CaseResolveIn,
+    DocumentOut,
     ErrorOut,
+    OwnerTokenOut,
     LeaderboardOut,
     MilestoneOut,
     MilestoneReviewIn,
@@ -42,6 +51,11 @@ from app.schemas import (
     ProjectDetail,
     ProjectSummary,
     ReconciliationOut,
+    RefundIn,
+    RefundOut,
+    RoundIn,
+    RoundOut,
+    RoundUpdateIn,
     SweepOut,
     VerifyIn,
     WebhookEventOut,
@@ -312,3 +326,128 @@ def close_round(
         cases = round_close.open_cases(db)
         raise _error(409, "WAITING_FOR_CASES", f"Resolve the open Watchdog cases first: {cases}")
     return leaderboard(round_id, db, settings)
+
+
+def _aware(at: datetime) -> datetime:
+    return at.replace(tzinfo=timezone.utc) if at.tzinfo is None else at
+
+
+def _check_round(db: Session, round_: Round) -> None:
+    """Dates in order, and no other unfinished round overlapping it (one round runs at a time)."""
+    start, end = _aware(round_.starts_at), _aware(round_.ends_at)
+    if end <= start:
+        raise _error(422, "BAD_DATES", "ends_at must be after starts_at")
+    for other in db.scalars(select(Round).where(Round.status != RoundStatus.closed, Round.id != (round_.id or 0))):
+        if start < _aware(other.ends_at) and _aware(other.starts_at) < end:
+            raise _error(409, "ROUND_OVERLAP", f"Overlaps {other.name} (round {other.id}, {other.status.value})")
+
+
+@router.post("/rounds", response_model=RoundOut, status_code=201,
+             responses={409: {"model": ErrorOut}, 422: {"model": ErrorOut, "description": "Dates out of order or in the past"}})
+def create_round(body: RoundIn, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+    """Schedule a round. It opens on its own at starts_at (now, if that has passed) and closes at ends_at."""
+    now = datetime.now(timezone.utc)
+    if _aware(body.ends_at) <= now:
+        raise _error(422, "BAD_DATES", "ends_at is in the past")
+    round_ = Round(
+        name=body.name, starts_at=body.starts_at, ends_at=body.ends_at, matching_pool=body.matching_pool_cents,
+        currency=settings.currency, project_cap_pct=body.project_cap_pct, floor_pct=body.floor_pct,
+        per_person_cap=body.per_person_cap_cents, status=RoundStatus.scheduled,
+    )
+    _check_round(db, round_)
+    db.add(round_)
+    db.flush()
+    db.add(AuditLog(actor="admin", action="round_created", inputs={"round_id": round_.id, **body.model_dump(mode="json")},
+                    rule_result="scheduled", reason=None))
+    round_close.open_due(db, now)
+    db.commit()
+    return round_out(round_)
+
+
+@router.patch("/rounds/{round_id}", response_model=RoundOut,
+              responses={**ERRORS, 422: {"model": ErrorOut, "description": "Dates out of order, or the pool below what sponsors added"}})
+def update_round(round_id: int, body: RoundUpdateIn, db: Session = Depends(get_db)):
+    """Change a scheduled or open round: name, dates, pool, cap, floor or per-person cap. A closed
+    round is final. An open round keeps its start, and its pool can't drop below what sponsors added."""
+    round_ = db.get(Round, round_id)
+    if round_ is None:
+        raise _error(404, "ROUND_NOT_FOUND", "No such round")
+    if round_.status in (RoundStatus.closing, RoundStatus.closed):
+        raise _error(409, "ROUND_CLOSED", f"The round is {round_.status.value}")
+    changes = body.model_dump(exclude_unset=True)
+    if round_.status == RoundStatus.open and "starts_at" in changes:
+        raise _error(409, "ROUND_STARTED", "An open round's start can't change")
+    if changes.get("matching_pool_cents") is not None and changes["matching_pool_cents"] < _sponsored(db, round_.id):
+        raise _error(422, "POOL_BELOW_SPONSORED", "The pool can't be less than what sponsors added")
+    fields = {"matching_pool_cents": "matching_pool", "per_person_cap_cents": "per_person_cap"}
+    for key, value in changes.items():
+        if value is not None:
+            setattr(round_, fields.get(key, key), value)
+    _check_round(db, round_)
+    if round_.status == RoundStatus.open and _aware(round_.ends_at) <= datetime.now(timezone.utc):
+        raise _error(422, "BAD_DATES", "ends_at is in the past (close the round instead)")
+    db.add(AuditLog(actor="admin", action="round_updated", inputs={"round_id": round_.id, **body.model_dump(mode="json", exclude_unset=True)},
+                    rule_result=round_.status.value, reason=None))
+    round_close.open_due(db)
+    db.commit()
+    return round_out(round_)
+
+
+@router.get("/projects/{project_id}/documents", response_model=list[DocumentOut], responses={404: {"model": ErrorOut}})
+def project_documents(project_id: int, db: Session = Depends(get_db)):
+    """Everything the project uploaded (registration and plan for verification, milestone evidence)."""
+    if db.get(Project, project_id) is None:
+        raise _error(404, "PROJECT_NOT_FOUND", "No such project")
+    docs = db.scalars(select(ProjectDocument).where(ProjectDocument.project_id == project_id).order_by(ProjectDocument.id))
+    return [document_out(d) for d in docs]
+
+
+@router.post("/projects/{project_id}/owner-token", response_model=OwnerTokenOut, responses={404: {"model": ErrorOut}})
+def reset_owner_token(project_id: int, db: Session = Depends(get_db)):
+    """A new X-Project-Token for the project's owner (lost token, or a seeded project). The old one stops working."""
+    project = db.get(Project, project_id)
+    if project is None:
+        raise _error(404, "PROJECT_NOT_FOUND", "No such project")
+    token, project.owner_token_hash = new_owner_token()
+    db.add(AuditLog(actor="admin", action="owner_token_reset", inputs={"project_id": project_id}, rule_result="reset",
+                    reason=None))
+    db.commit()
+    return OwnerTokenOut(project_id=project_id, owner_token=token)
+
+
+@router.post("/donations/{donation_id}/refund", response_model=RefundOut,
+             responses={**ERRORS, 422: {"model": ErrorOut, "description": "More than is left to refund"},
+                        502: {"model": ErrorOut}})
+def refund_donation(donation_id: int, body: RefundIn, db: Session = Depends(get_db),
+                    paypal: PayPalClient = Depends(get_paypal)):
+    """Refund a PayPal-paid donation in full or in part. A completed refund is booked now (a full
+    refund takes the gift out of totals and matching, and a sponsor's POOL contribution out of the
+    open round's pool); a pending one is booked when PayPal's PAYMENT.CAPTURE.REFUNDED webhook arrives.
+    Agent gifts from a funded balance never went through PayPal on their own and can't be refunded here."""
+    donation = db.get(Donation, donation_id)
+    if donation is None:
+        raise _error(404, "DONATION_NOT_FOUND", "No such donation")
+    if donation.status != DonationStatus.captured or not donation.paypal_capture_id:
+        raise _error(409, "NOT_REFUNDABLE", f"Only captured PayPal payments can be refunded (this one is {donation.status.value})")
+    left = donation.amount - refunded_total(db, donation.id)
+    amount = body.amount_cents or left
+    if amount > left:
+        raise _error(422, "REFUND_TOO_LARGE", f"Only {left} cents are left to refund")
+    done = refunded_total(db, donation.id)
+    try:
+        refund = paypal.refund_capture(
+            donation.paypal_capture_id,
+            amount=None if amount == donation.amount else to_paypal(amount, donation.currency),
+            currency=donation.currency, note=body.reason, request_id=f"refund-{donation.id}-{done}-{amount}",
+        )
+    except PayPalError as e:
+        raise HTTPException(502, detail={"error": e.issue, "message": "PayPal could not refund the payment"})
+    status = refund.get("status", "PENDING")
+    if status == "COMPLETED":
+        book_refund(db, donation, amount, refund.get("id"))
+    db.add(AuditLog(actor="admin", action="refund", inputs={"donation_id": donation.id, "amount_cents": amount,
+                                                            "refund_id": refund.get("id")},
+                    rule_result=status.lower(), reason=body.reason))
+    db.commit()
+    return RefundOut(donation_id=donation.id, refund_id=refund.get("id", ""), paypal_status=status, amount_cents=amount,
+                     refunded_total_cents=refunded_total(db, donation.id), donation_status=donation.status)

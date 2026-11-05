@@ -36,7 +36,8 @@ def donor_board(db: Session, round_: Round, me: int | None = None) -> DonorBoard
     start, end = _aware(round_.starts_at), _aware(round_.ends_at)
     gifts = [
         d for d in db.scalars(select(Donation).where(Donation.status == DonationStatus.captured, Donation.donor_id.is_not(None)))
-        if d.captured_at and start <= _aware(d.captured_at) < end and not (d.target_type == TargetType.AGENT and d.project_id is None)
+        if d.captured_at and start <= _aware(d.captured_at) < end and d.target_type != TargetType.POOL
+        and not (d.target_type == TargetType.AGENT and d.project_id is None)
     ]
     by_donor: dict[int, list[Donation]] = defaultdict(list)
     for g in gifts:

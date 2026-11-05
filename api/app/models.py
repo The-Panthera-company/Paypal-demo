@@ -22,6 +22,7 @@ class TargetType(str, enum.Enum):
     PROJECT = "PROJECT"
     CATEGORY = "CATEGORY"
     AGENT = "AGENT"
+    POOL = "POOL"  # a sponsor's contribution to the open round's matching pool
 
 
 class DonationStatus(str, enum.Enum):
@@ -131,6 +132,8 @@ class LedgerEntry(Base):
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"))
     donation_id: Mapped[int | None] = mapped_column(ForeignKey("donations.id"))
     payout_item_id: Mapped[str | None] = mapped_column(String(64))
+    # Refunds: PayPal's refund id, so an admin refund and its webhook are booked once.
+    paypal_refund_id: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -167,6 +170,8 @@ class Project(Base):
     region: Mapped[str | None] = mapped_column(String(60))
     # The group running the project on the ground, e.g. "Lanet Community Library Group".
     facilitator: Mapped[str | None] = mapped_column(String(120))
+    # sha256 of the token handed to the applicant; it authorises their document uploads.
+    owner_token_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -368,3 +373,15 @@ class AgentSubscription(Base):
     # APPROVAL_PENDING until the donor approves in PayPal, then ACTIVE, SUSPENDED, CANCELLED or EXPIRED
     status: Mapped[str] = mapped_column(String(30), default="APPROVAL_PENDING")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PoolContribution(Base):
+    """A POOL donation's round and how the sponsor wants to be credited. It raises the round's
+    matching_pool when captured (and lowers it again if refunded while the round is open)."""
+
+    __tablename__ = "pool_contributions"
+
+    donation_id: Mapped[int] = mapped_column(ForeignKey("donations.id"), primary_key=True)
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id"))
+    sponsor_name: Mapped[str | None] = mapped_column(String(80))  # None = anonymous
+    added_to_pool: Mapped[bool] = mapped_column(Boolean, default=False)

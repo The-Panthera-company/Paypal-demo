@@ -149,6 +149,13 @@ While a round is open its projected match is recomputed every `PROJECTION_INTERV
 - **Then, once:** final results (`is_final=True` rows, which the leaderboard shows from then on); each project's match is added to the `match_amount` of its first unreleased milestone (a "Matching funds (<round>)" milestone is created if it has none), so it's paid out with that tranche's evidence; a `match` ledger entry per project; status `closed`. A closed round is never recomputed (409 `ROUND_CLOSED`).
 - Whatever the caps left unallocated stays unspent; the audit log's `round_closed` line says how much.
 
+### Match preview, round controls, results and sponsors
+
+- **Match preview:** `GET /rounds/{id}/match-preview?amount_cents=500` (optional `project_id`, `donor_id`). It runs the engine on the round's live inputs with and without one more gift, and returns per project `match_before_cents`, `match_after_cents` and `match_added_cents`, the biggest effect first. Pass `donor_id` so the donor's earlier gifts count: a second gift from the same person adds less, and nothing beyond the per-person cap. 409 `ROUND_NOT_OPEN`, 404 for an unlisted or frozen project. It's an estimate: other gifts change the final match.
+- **Rounds (admin):** `POST /admin/rounds` schedules one (`name`, `starts_at`, `ends_at`, `matching_pool_cents`, `project_cap_pct`, `floor_pct`, `per_person_cap_cents`). It opens on its own at `starts_at`, through the background loop or the next `GET /rounds/current`. One round runs at a time (409 `ROUND_OVERLAP`). `PATCH /admin/rounds/{id}` changes a scheduled or open round: an open round keeps its start, a closed one is final, and the pool can't drop below what sponsors added. Close with `POST /admin/rounds/{id}/close` as before.
+- **Results:** `GET /rounds` lists every round, newest first. `GET /rounds/{id}/results` shows each project's last projected match next to its final match (null until close), plus the pool (including sponsors), matched, unspent, raised and backers.
+- **Sponsors:** `POST /donations/orders` with `{"target_type": "POOL", "amount_cents": ..., "sponsor_name": "..."}` (name optional, up to `MAX_POOL_CONTRIBUTION_CENTS`, default 10,000 USD), then the usual capture. Once captured it raises the open round's `matching_pool` (a `pool_contributions` row records which round). It isn't a gift to a project: no backer, no ladder entry. `GET /rounds/{id}/sponsors` lists them. A full refund while the round is open takes it out of the pool again.
+
 ## Giving Agent mandates
 
 The agent never moves money itself: it asks `POST /internal/checked-donations`, and the API re-checks the mandate every time.
@@ -190,6 +197,17 @@ Instead of one-off top-ups, a donor can fund the agent monthly ([`app/subscripti
 - Admin: `GET /admin/milestones/held`, then `POST /admin/milestones/{id}/review` `{"approve": true}` releases it, `false` sends it back to `open` for new evidence.
 - Released = milestone `released`, a `tranche` ledger entry (amount + match), and a PayPal payout (next section).
 - `POST /admin/projects/{id}/verify` `{"approve": true}` lists a project under review (`verified`); `false` sends it back to `draft`.
+
+### Applications and evidence
+
+- `POST /projects`: a project owner applies with its details, `facilitator`, a `milestones` plan (title, `amount_cents`, `due_date`; the amounts add up to `goal_cents`) and an optional `payout_email`. The project starts `pending_review` (not public). The answer includes an `owner_token`, shown once.
+- `POST /projects/{id}/documents` with header `X-Project-Token: <owner_token>`: a registration, plan, receipt or photo, as an https link to the hosted file. A receipt or photo with a `milestone_id` is evidence: the tranche moves to `evidence_submitted` (409 if it's held or released).
+- The Milestone Agent reads `GET /internal/milestones/evidence` (tranches with evidence and their documents), then calls `POST /internal/payout-requests` as above.
+- Admin: `GET /admin/projects/{id}/documents` for verification; `POST /admin/projects/{id}/owner-token` issues a new token (lost token, or seeded projects, which have none).
+
+### Refunds
+
+`POST /admin/donations/{id}/refund` `{"amount_cents": 500, "reason": "..."}` (leave out `amount_cents` for everything left) refunds a PayPal-paid donation through PayPal. A `COMPLETED` refund is booked at once; a `PENDING` one when the `PAYMENT.CAPTURE.REFUNDED` webhook arrives. Each refund is booked once per PayPal refund id, so the webhook for an admin refund changes nothing. Agent gifts from a funded balance can't be refunded this way (409 `NOT_REFUNDABLE`).
 
 ## Payouts
 

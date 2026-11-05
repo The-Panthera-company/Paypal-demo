@@ -10,6 +10,9 @@ Step 1  category pools: M_c = M * S_c / sum(S), S from each person's total to th
 Step 2  project scores: P from project donations only.
 Step 3  floor_pct of M_c equally, the rest by P (all equally when nobody has a score).
 Step 4  caps: project_cap_pct of M_c and the project's remaining goal; excess re-shared.
+
+`preview` answers "what would a gift of X to this project add?": the same inputs, computed with
+and without one more gift.
 """
 
 from collections import defaultdict
@@ -201,3 +204,32 @@ def run_round(db: Session, round_: Round, *, is_final: bool = False) -> list[Pro
         for r in results
     )
     return results
+
+
+def _compute(round_: Round, gifts: list[Gift], projects: list[ProjectIn]) -> dict[int, int]:
+    results = compute(round_.matching_pool, gifts, projects, floor_pct=round_.floor_pct,
+                      cap_pct=round_.project_cap_pct, per_person_cap=round_.per_person_cap)
+    return {r.project_id: r.final_amount for r in results}
+
+
+def preview(
+    db: Session, round_: Round, amount: int, project_ids: list[int] | None = None, donor_id: int | None = None
+) -> dict[int, tuple[int, int]]:
+    """Each project's match now and with one more gift of `amount` to it: {project_id: (before, after)}.
+
+    The gift is from `donor_id` (their earlier gifts count: the per-person cap and the square root
+    apply to their total) or from a new person. Frozen and unlisted projects are left out.
+    """
+    gifts, projects = gather(db, round_)
+    before = _compute(round_, gifts, projects)
+    donor = db.get(Donor, donor_id) if donor_id else None
+    person = f"donor:{donor.id}" if donor else "preview:new"
+    weight = GUEST_WEIGHT if donor and donor.is_guest else 1.0
+    out = {}
+    for p in projects:
+        if project_ids is not None and p.id not in project_ids:
+            continue
+        others = [q if q.id != p.id else ProjectIn(q.id, q.category_id, max(q.remaining_goal - amount, 0)) for q in projects]
+        after = _compute(round_, gifts + [Gift(person, weight, amount, p.category_id, p.id)], others)
+        out[p.id] = (before.get(p.id, 0), after.get(p.id, 0))
+    return out

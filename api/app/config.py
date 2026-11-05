@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     currency: str = "USD"
     min_donation_cents: int = 100
     max_donation_cents: int = 100_000
+    # Sponsors adding to the matching pool (a POOL donation) may give more than a donor.
+    max_pool_contribution_cents: int = 1_000_000
 
     cors_origins: str = "http://localhost:3000"
 

@@ -50,11 +50,12 @@ def refresh_if_stale(db: Session, round_: Round, max_age_seconds: int) -> None:
 
 def run_loop(stop: threading.Event, interval_seconds: int) -> None:
     """Every interval until `stop` is set: close rounds that have ended (once no Watchdog case is
-    open), then refresh the open round's projection."""
+    open), open a scheduled round whose start has come, then refresh the open round's projection."""
     while not stop.wait(interval_seconds):
         try:
             with SessionLocal() as db:
                 round_close.close_due(db)
+                round_close.open_due(db)
                 db.commit()
                 round_ = db.scalar(select(Round).where(Round.status == RoundStatus.open))
                 if round_ is not None:

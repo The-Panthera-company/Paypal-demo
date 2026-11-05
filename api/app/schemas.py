@@ -146,6 +146,12 @@ class FundingPoint(BaseModel):
     backer_count: int
 
 
+class MilestonePlanIn(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    amount_cents: int = Field(gt=0)
+    due_date: date
+
+
 class ProjectApplicationIn(BaseModel):
     title: str
     facilitator: str | None = Field(None, max_length=120, description="The group running the project on the ground")
@@ -158,11 +164,17 @@ class ProjectApplicationIn(BaseModel):
     hide_location: bool = False
     goal_cents: int = Field(gt=0)
     urgency: int = Field(3, ge=1, le=5)
+    milestones: list[MilestonePlanIn] = Field(
+        min_length=1, max_length=12, description="The tranches, in order; their amounts add up to goal_cents"
+    )
+    payout_email: str | None = Field(
+        None, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="PayPal account the tranches are paid to"
+    )
 
 
 class DocumentIn(BaseModel):
     kind: DocumentKind
-    file_url: str
+    file_url: str = Field(pattern=r"^https://", max_length=500, description="Where the file is hosted (https)")
     milestone_id: int | None = None
 
 
@@ -768,3 +780,183 @@ class DonorBoardOut(BaseModel):
     round_id: int
     currency: str
     rows: list[DonorBoardRow]
+
+
+# --- Quadratic funding workflow: match preview, rounds, sponsors, applications, refunds ----
+
+
+class MatchPreviewItem(BaseModel):
+    project_id: int
+    title: str
+    match_before_cents: int = Field(description="The project's projected match now")
+    match_after_cents: int = Field(description="Its projected match with your gift added")
+    match_added_cents: int = Field(description="What your gift adds to its match (after minus before)")
+
+
+class MatchPreviewOut(BaseModel):
+    model_config = _example(
+        {
+            "round_id": 1,
+            "amount_cents": 500,
+            "currency": "USD",
+            "items": [
+                {"project_id": 4, "title": "New Reading Corner", "match_before_cents": 72000,
+                 "match_after_cents": 75800, "match_added_cents": 3800}
+            ],
+        }
+    )
+    round_id: int
+    amount_cents: int
+    currency: str
+    items: list[MatchPreviewItem] = Field(description="One per project asked about, biggest match added first")
+
+
+class RoundIn(BaseModel):
+    model_config = _example(
+        {
+            "name": "December round",
+            "starts_at": "2026-12-01T00:00:00Z",
+            "ends_at": "2026-12-15T18:00:00Z",
+            "matching_pool_cents": 1000000,
+            "project_cap_pct": 40.0,
+            "floor_pct": 20.0,
+            "per_person_cap_cents": 5000,
+        }
+    )
+    name: str = Field(min_length=1, max_length=80)
+    starts_at: datetime
+    ends_at: datetime
+    matching_pool_cents: int = Field(ge=0)
+    project_cap_pct: float = Field(30.0, gt=0, le=100)
+    floor_pct: float = Field(20.0, ge=0, le=100)
+    per_person_cap_cents: int = Field(5000, gt=0)
+
+
+class RoundUpdateIn(BaseModel):
+    model_config = _example({"ends_at": "2026-12-20T18:00:00Z", "matching_pool_cents": 1500000})
+    name: str | None = Field(None, min_length=1, max_length=80)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    matching_pool_cents: int | None = Field(None, ge=0)
+    project_cap_pct: float | None = Field(None, gt=0, le=100)
+    floor_pct: float | None = Field(None, ge=0, le=100)
+    per_person_cap_cents: int | None = Field(None, gt=0)
+
+
+class RoundResultRow(BaseModel):
+    project_id: int
+    title: str
+    category: str
+    raised_cents: int
+    backer_count: int
+    projected_match_cents: int = Field(description="The last projection before close (the live one while open)")
+    final_match_cents: int | None = Field(description="Null until the round closes")
+    capped: bool
+
+
+class RoundResultsOut(BaseModel):
+    model_config = _example(
+        {
+            "round_id": 1,
+            "name": "November round",
+            "status": "closed",
+            "is_final": True,
+            "currency": "USD",
+            "matching_pool_cents": 1000000,
+            "sponsored_cents": 25000,
+            "matched_cents": 1000000,
+            "unspent_cents": 0,
+            "raised_cents": 51250,
+            "backers": 29,
+            "rows": [
+                {"project_id": 1, "title": "Lanet Library", "category": "Education", "raised_cents": 20000,
+                 "backer_count": 16, "projected_match_cents": 400000, "final_match_cents": 400000, "capped": True}
+            ],
+        }
+    )
+    round_id: int
+    name: str
+    status: RoundStatus
+    is_final: bool
+    currency: str
+    matching_pool_cents: int = Field(description="Including what sponsors added during the round")
+    sponsored_cents: int = Field(description="The part of the pool sponsors added through PayPal")
+    matched_cents: int
+    unspent_cents: int = Field(description="Pool not matched (caps and goals can leave some over)")
+    raised_cents: int = Field(description="Gifts to projects during the round")
+    backers: int = Field(description="People who gave to projects during the round")
+    rows: list[RoundResultRow]
+
+
+class SponsorOut(BaseModel):
+    name: str = Field(description="As the sponsor asked to be credited, or Anonymous sponsor")
+    amount_cents: int
+    given_at: datetime
+
+
+class SponsorsOut(BaseModel):
+    model_config = _example(
+        {
+            "round_id": 1,
+            "currency": "USD",
+            "total_cents": 25000,
+            "sponsors": [{"name": "Nakuru Rotary Club", "amount_cents": 25000, "given_at": "2026-11-04T09:30:00Z"}],
+        }
+    )
+    round_id: int
+    currency: str
+    total_cents: int
+    sponsors: list[SponsorOut] = Field(description="Largest first")
+
+
+class ProjectApplicationOut(BaseModel):
+    model_config = _example(
+        {
+            "project_id": 15,
+            "status": "pending_review",
+            "owner_token": "q3bX0n2R9w-example-token-k1",
+            "milestone_ids": [41, 42, 43],
+        }
+    )
+    project_id: int
+    status: ProjectStatus
+    owner_token: str = Field(description="Shown once: send it as X-Project-Token to upload documents and evidence")
+    milestone_ids: list[int]
+
+
+class EvidenceMilestone(BaseModel):
+    milestone: MilestoneOut
+    project_id: int
+    project_title: str
+    documents: list[DocumentOut]
+
+
+class RefundIn(BaseModel):
+    model_config = _example({"amount_cents": 1000, "reason": "Donor asked for a refund"})
+    amount_cents: int | None = Field(None, gt=0, description="Leave out to refund everything not refunded yet")
+    reason: str = Field(min_length=1, max_length=300)
+
+
+class RefundOut(BaseModel):
+    model_config = _example(
+        {
+            "donation_id": 4,
+            "refund_id": "1JU08902781691411",
+            "paypal_status": "COMPLETED",
+            "amount_cents": 1000,
+            "refunded_total_cents": 1000,
+            "donation_status": "captured",
+        }
+    )
+    donation_id: int
+    refund_id: str
+    paypal_status: str = Field(description="COMPLETED is booked now; PENDING is booked when PayPal's webhook confirms it")
+    amount_cents: int
+    refunded_total_cents: int
+    donation_status: DonationStatus
+
+
+class OwnerTokenOut(BaseModel):
+    model_config = _example({"project_id": 1, "owner_token": "q3bX0n2R9w-example-token-k1"})
+    project_id: int
+    owner_token: str = Field(description="Shown once: the project's new X-Project-Token")

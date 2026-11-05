@@ -1,4 +1,5 @@
-"""Flow 1: a donor gives to a project or a category through the PayPal button.
+"""Flow 1: a donor gives to a project or a category through the PayPal button. The same flow tops
+up a Giving Agent budget (AGENT) and adds a sponsor's money to the open round's matching pool (POOL).
 
 The browser never decides the amount, currency or target that gets recorded:
 create stores a pending donation first, and capture checks PayPal's answer against it.
@@ -8,14 +9,28 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.allocation import allocate_category_donation, category_split
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.models import Category, CategoryGift, Donation, DonationStatus, Donor, LedgerEntry, LedgerType, Project, TargetType
+from app.models import (
+    Category,
+    CategoryGift,
+    Donation,
+    DonationStatus,
+    Donor,
+    LedgerEntry,
+    LedgerType,
+    PoolContribution,
+    Project,
+    Round,
+    RoundStatus,
+    TargetType,
+)
+from app.refunds import add_to_pool
 from app.money import from_paypal, to_paypal
 from app.paypal import PayPalClient, PayPalError, get_paypal
 from app.routers.catalogue import LISTED
@@ -33,6 +48,8 @@ class CreateOrderIn(BaseModel):
     # CATEGORY only: how the gift is split across the category's projects (see /donations/category-preview).
     rule: Literal["crowd", "equal", "closest_to_goal"] = "crowd"
     excluded_tags: list[str] = []
+    # POOL only: how the sponsor is credited on the round's sponsor list (leave out to be anonymous).
+    sponsor_name: str | None = Field(None, max_length=80)
 
     @model_validator(mode="after")
     def one_target(self):
@@ -42,6 +59,10 @@ class CreateOrderIn(BaseModel):
             raise ValueError("CATEGORY donations need category_id only")
         if self.target_type == TargetType.AGENT and (self.project_id is not None or self.category_id is not None):
             raise ValueError("AGENT top-ups take no project_id or category_id")
+        if self.target_type == TargetType.POOL and (self.project_id is not None or self.category_id is not None):
+            raise ValueError("POOL contributions take no project_id or category_id")
+        if self.sponsor_name is not None and self.target_type != TargetType.POOL:
+            raise ValueError("sponsor_name is for POOL contributions only")
         return self
 
 
@@ -79,13 +100,20 @@ def create_order(
     paypal: PayPalClient = Depends(get_paypal),
     settings: Settings = Depends(get_settings),
 ):
-    if not settings.min_donation_cents <= body.amount_cents <= settings.max_donation_cents:
+    most = settings.max_pool_contribution_cents if body.target_type == TargetType.POOL else settings.max_donation_cents
+    if not settings.min_donation_cents <= body.amount_cents <= most:
         raise _error(
             422,
             "AMOUNT_OUT_OF_RANGE",
-            f"Amount must be between {settings.min_donation_cents} and {settings.max_donation_cents} cents",
+            f"Amount must be between {settings.min_donation_cents} and {most} cents",
         )
-    if body.project_id is not None:
+    round_ = None
+    if body.target_type == TargetType.POOL:
+        round_ = db.scalar(select(Round).where(Round.status == RoundStatus.open))
+        if round_ is None:
+            raise _error(422, "NO_OPEN_ROUND", "No round is open to add to")
+        target = f"the {round_.name} matching pool"
+    elif body.project_id is not None:
         project = db.get(Project, body.project_id)
         if project is None or project.status not in LISTED:
             raise _error(422, "PROJECT_NOT_OPEN", "Project does not exist or is not accepting donations")
@@ -111,13 +139,16 @@ def create_order(
     db.flush()  # assigns donation.id for custom_id
     if body.target_type == TargetType.CATEGORY:
         db.add(CategoryGift(donation_id=donation.id, rule=body.rule, excluded_tags=body.excluded_tags))
+    if round_ is not None:
+        db.add(PoolContribution(donation_id=donation.id, round_id=round_.id, sponsor_name=body.sponsor_name))
 
     try:
         order = paypal.create_order(
             amount=to_paypal(donation.amount, donation.currency),
             currency=donation.currency,
             custom_id=custom_id_for(donation),
-            description=f"Top-up of {target}" if body.target_type == TargetType.AGENT else f"Donation to {target}",
+            description=f"Top-up of {target}" if body.target_type == TargetType.AGENT
+            else f"Contribution to {target}" if body.target_type == TargetType.POOL else f"Donation to {target}",
             request_id=f"create-{custom_id_for(donation)}",
         )
     except PayPalError as e:
@@ -230,6 +261,8 @@ def mark_captured(db: Session, donation: Donation, capture: dict) -> None:
     donation.captured_at = datetime.now(timezone.utc)
     if donation.target_type == TargetType.CATEGORY:
         allocate_category_donation(db, donation)
+    if donation.target_type == TargetType.POOL:
+        add_to_pool(db, donation)
     db.add(
         LedgerEntry(
             type=LedgerType.donation,

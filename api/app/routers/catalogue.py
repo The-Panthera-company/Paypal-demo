@@ -3,19 +3,26 @@
 from collections import defaultdict
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.auth import check_owner_token, new_owner_token
+from app.config import Settings, get_settings
 from app.db import get_db
 from app.models import (
+    AuditLog,
     CategoryAllocation,
     Category,
+    DocumentKind,
     Donation,
     DonationStatus,
     MatchResult,
     Milestone,
+    MilestoneStatus,
+    PayoutAccount,
     Project,
+    ProjectDocument,
     ProjectStatus,
     Round,
     RoundStatus,
@@ -26,12 +33,13 @@ from app.schemas import (
     DocumentOut,
     FundingPoint,
     MilestoneOut,
+    ErrorOut,
     ProjectApplicationIn,
+    ProjectApplicationOut,
     ProjectDetail,
     ProjectSummary,
     StoryOut,
 )
-from app.stubs import PLANNED, planned
 
 router = APIRouter(tags=["catalogue"])
 
@@ -152,16 +160,93 @@ def project_stories(project_id: int, db: Session = Depends(get_db)):
     return stories(db, [project_id])
 
 
-@router.post("/projects", response_model=ProjectDetail, status_code=201, responses=PLANNED)
-def apply_project(body: ProjectApplicationIn):
-    """A project owner applies; the project starts as pending_review until an admin verifies it."""
-    planned("project applications")
+EVIDENCE = (DocumentKind.receipt, DocumentKind.photo)
 
 
-@router.post("/projects/{project_id}/documents", response_model=DocumentOut, status_code=201, responses=PLANNED)
-def add_document(project_id: int, body: DocumentIn):
-    """Registration, plan, receipt or photo. Receipts and photos with a milestone_id are milestone evidence."""
-    planned("document uploads")
+def document_out(d: ProjectDocument) -> DocumentOut:
+    return DocumentOut(id=d.id, project_id=d.project_id, milestone_id=d.milestone_id, kind=d.kind,
+                       file_url=d.file_url, extracted_fields=d.extracted_fields, flags=d.flags or [])
+
+
+@router.post(
+    "/projects",
+    response_model=ProjectApplicationOut,
+    status_code=201,
+    responses={422: {"model": ErrorOut, "description": "Unknown category, or milestones that don't add up to the goal"}},
+)
+def apply_project(body: ProjectApplicationIn, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+    """A project owner applies with a milestone plan. The project starts as pending_review (not
+    public) until an admin verifies it. Keep the owner_token: it is shown once and authorises
+    document and evidence uploads."""
+    if db.get(Category, body.category_id) is None:
+        raise HTTPException(422, detail={"error": "CATEGORY_NOT_FOUND", "message": "No such category"})
+    planned = sum(m.amount_cents for m in body.milestones)
+    if planned != body.goal_cents:
+        raise HTTPException(422, detail={"error": "MILESTONES_DONT_ADD_UP",
+                                         "message": f"Milestones add up to {planned} cents, the goal is {body.goal_cents}"})
+    token, token_hash = new_owner_token()
+    project = Project(
+        title=body.title, facilitator=body.facilitator, summary=body.summary, category_id=body.category_id,
+        tags=body.tags, cause=body.cause, beneficiary_group=body.beneficiary_group, region=body.region,
+        hide_location=body.hide_location, goal_amount=body.goal_cents, urgency=body.urgency,
+        currency=settings.currency, status=ProjectStatus.pending_review, owner_token_hash=token_hash,
+    )
+    db.add(project)
+    db.flush()
+    milestones = [
+        Milestone(project_id=project.id, seq=n, title=m.title, amount=m.amount_cents, currency=settings.currency,
+                  due_date=m.due_date)
+        for n, m in enumerate(body.milestones, start=1)
+    ]
+    db.add_all(milestones)
+    if body.payout_email:
+        db.add(PayoutAccount(project_id=project.id, paypal_email=body.payout_email))
+    db.add(AuditLog(actor="project-owner", action="project_applied", inputs={"project_id": project.id},
+                    rule_result="pending_review", reason=f"{body.title}: {len(milestones)} milestones"))
+    db.commit()
+    return ProjectApplicationOut(project_id=project.id, status=project.status, owner_token=token,
+                                 milestone_ids=[m.id for m in milestones])
+
+
+@router.post(
+    "/projects/{project_id}/documents",
+    response_model=DocumentOut,
+    status_code=201,
+    responses={401: {"model": ErrorOut}, 404: {"model": ErrorOut}, 409: {"model": ErrorOut}},
+)
+def add_document(
+    project_id: int,
+    body: DocumentIn,
+    x_project_token: str | None = Header(None, description="The owner_token from the application"),
+    db: Session = Depends(get_db),
+):
+    """Registration, plan, receipt or photo, as a link to the hosted file. A receipt or photo with a
+    milestone_id is evidence for that tranche: the milestone moves to evidence_submitted, where the
+    Milestone Agent picks it up (GET /internal/milestones/evidence)."""
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(404, detail={"error": "PROJECT_NOT_FOUND", "message": "No such project"})
+    check_owner_token(x_project_token, project.owner_token_hash)
+    milestone = None
+    if body.milestone_id is not None:
+        milestone = db.get(Milestone, body.milestone_id)
+        if milestone is None or milestone.project_id != project.id:
+            raise HTTPException(404, detail={"error": "MILESTONE_NOT_FOUND", "message": "No such milestone on this project"})
+        if body.kind in EVIDENCE:
+            if milestone.status not in (MilestoneStatus.open, MilestoneStatus.evidence_submitted):
+                raise HTTPException(409, detail={"error": "MILESTONE_NOT_OPEN",
+                                                 "message": f"Milestone is {milestone.status.value}"})
+            milestone.status = MilestoneStatus.evidence_submitted
+    doc = ProjectDocument(project_id=project.id, milestone_id=body.milestone_id, kind=body.kind, file_url=body.file_url,
+                          flags=[])
+    db.add(doc)
+    db.flush()
+    db.add(AuditLog(actor="project-owner", action="document_added",
+                    inputs={"project_id": project.id, "document_id": doc.id, "milestone_id": body.milestone_id},
+                    rule_result=body.kind.value,
+                    reason="Evidence submitted" if milestone is not None and body.kind in EVIDENCE else None))
+    db.commit()
+    return document_out(doc)
 
 
 def project_gifts(db: Session, project_ids: list[int]) -> list[tuple[int, int | None, int, datetime]]:

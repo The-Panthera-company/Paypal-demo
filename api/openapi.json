@@ -277,7 +277,7 @@
           "catalogue"
         ],
         "summary": "Apply Project",
-        "description": "A project owner applies; the project starts as pending_review until an admin verifies it.",
+        "description": "A project owner applies with a milestone plan. The project starts as pending_review (not\npublic) until an admin verifies it. Keep the owner_token: it is shown once and authorises\ndocument and evidence uploads.",
         "operationId": "apply_project",
         "requestBody": {
           "required": true,
@@ -300,7 +300,25 @@
                 "region": "Nakuru",
                 "hide_location": false,
                 "goal_cents": 600000,
-                "urgency": 4
+                "urgency": 4,
+                "milestones": [
+                  {
+                    "title": "Shelves for three schools",
+                    "amount_cents": 200000,
+                    "due_date": "2026-12-15"
+                  },
+                  {
+                    "title": "400 books",
+                    "amount_cents": 250000,
+                    "due_date": "2027-01-31"
+                  },
+                  {
+                    "title": "Librarian, first term",
+                    "amount_cents": 150000,
+                    "due_date": "2027-03-31"
+                  }
+                ],
+                "payout_email": "lanet.library@example.com"
               }
             }
           },
@@ -312,71 +330,23 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectDetail"
+                  "$ref": "#/components/schemas/ProjectApplicationOut"
                 },
                 "example": {
-                  "backer_count": 16,
-                  "beneficiary_group": "children",
-                  "category": "Education",
-                  "category_id": 2,
-                  "cause": "literacy",
-                  "currency": "USD",
-                  "facilitator": "Lanet Community Library Group",
-                  "goal_cents": 120000,
-                  "id": 1,
-                  "matching_frozen": false,
-                  "milestones": [
-                    {
-                      "amount_cents": 30000,
-                      "currency": "USD",
-                      "due_date": "2026-11-30",
-                      "id": 7,
-                      "match_amount_cents": 0,
-                      "seq": 1,
-                      "status": "open",
-                      "title": "Buy 40 books"
-                    }
+                  "milestone_ids": [
+                    41,
+                    42,
+                    43
                   ],
-                  "projected_match_cents": 4000,
-                  "raised_cents": 40000,
-                  "region": "Nakuru",
-                  "status": "active",
-                  "summary": "A community library for 300 pupils in Lanet.",
-                  "tags": [
-                    "books",
-                    "literacy"
-                  ],
-                  "title": "Lanet Library",
-                  "urgency": 4,
-                  "verified_at": "2026-11-01T10:00:00Z"
+                  "owner_token": "q3bX0n2R9w-example-token-k1",
+                  "project_id": 15,
+                  "status": "pending_review"
                 }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                },
-                "example": {
-                  "detail": [
-                    {
-                      "loc": [
-                        "body",
-                        "amount_cents"
-                      ],
-                      "msg": "Field required",
-                      "type": "missing"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "In the spec, not built yet",
+            "description": "Unknown category, or milestones that don't add up to the goal",
             "content": {
               "application/json": {
                 "schema": {
@@ -690,7 +660,7 @@
           "catalogue"
         ],
         "summary": "Add Document",
-        "description": "Registration, plan, receipt or photo. Receipts and photos with a milestone_id are milestone evidence.",
+        "description": "Registration, plan, receipt or photo, as a link to the hosted file. A receipt or photo with a\nmilestone_id is evidence for that tranche: the milestone moves to evidence_submitted, where the\nMilestone Agent picks it up (GET /internal/milestones/evidence).",
         "operationId": "add_document",
         "parameters": [
           {
@@ -704,6 +674,19 @@
             },
             "description": "Project id.",
             "example": 1
+          },
+          {
+            "name": "x-project-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "The owner_token from the application",
+              "nullable": true,
+              "example": "x-project-token"
+            },
+            "description": "The owner_token from the application",
+            "example": "x-project-token"
           }
         ],
         "requestBody": {
@@ -746,6 +729,54 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Conflict"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -764,22 +795,6 @@
                       "type": "missing"
                     }
                   ]
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "In the spec, not built yet",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorOut"
-                },
-                "example": {
-                  "detail": {
-                    "error": "NOT_IMPLEMENTED",
-                    "message": "Planned: matching engine"
-                  }
                 }
               }
             }
@@ -2226,6 +2241,60 @@
         }
       }
     },
+    "/rounds": {
+      "get": {
+        "tags": [
+          "rounds"
+        ],
+        "summary": "List Rounds",
+        "description": "Every round, newest first: scheduled, open, closing and closed.",
+        "operationId": "list_rounds",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoundOut"
+                  },
+                  "type": "array",
+                  "description": "List of: A matching round and its rules.",
+                  "example": [
+                    {
+                      "currency": "USD",
+                      "ends_at": "2026-11-09T18:00:00Z",
+                      "floor_pct": 20.0,
+                      "id": 1,
+                      "matching_pool_cents": 1000000,
+                      "name": "November round",
+                      "per_person_cap_cents": 5000,
+                      "project_cap_pct": 30.0,
+                      "starts_at": "2026-11-01T00:00:00Z",
+                      "status": "open"
+                    }
+                  ]
+                },
+                "example": [
+                  {
+                    "currency": "USD",
+                    "ends_at": "2026-11-09T18:00:00Z",
+                    "floor_pct": 20.0,
+                    "id": 1,
+                    "matching_pool_cents": 1000000,
+                    "name": "November round",
+                    "per_person_cap_cents": 5000,
+                    "project_cap_pct": 30.0,
+                    "starts_at": "2026-11-01T00:00:00Z",
+                    "status": "open"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/rounds/current": {
       "get": {
         "tags": [
@@ -2432,6 +2501,327 @@
                       "impact_points": 1
                     }
                   ]
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rounds/{round_id}/match-preview": {
+      "get": {
+        "tags": [
+          "rounds"
+        ],
+        "summary": "Match Preview",
+        "description": "What a gift would add to a project's match: computed with and without it, on the round's\nlive inputs. Small gifts to projects with few backers add the most; a gift beyond the per-person\ncap adds nothing. An estimate: other gifts before the round closes change the final match.",
+        "operationId": "match_preview",
+        "parameters": [
+          {
+            "name": "round_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Round id.",
+              "example": 1
+            },
+            "description": "Round id.",
+            "example": 1
+          },
+          {
+            "name": "amount_cents",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "The gift you are thinking of, in cents",
+              "example": 2500
+            },
+            "description": "The gift you are thinking of, in cents",
+            "example": 2500
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "One project; leave out for every project in the round",
+              "nullable": true,
+              "example": 1
+            },
+            "description": "One project; leave out for every project in the round",
+            "example": 1
+          },
+          {
+            "name": "donor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "Count your earlier gifts (the square root and per-person cap use your total)",
+              "nullable": true,
+              "example": 1
+            },
+            "description": "Count your earlier gifts (the square root and per-person cap use your total)",
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchPreviewOut"
+                },
+                "example": {
+                  "amount_cents": 500,
+                  "currency": "USD",
+                  "items": [
+                    {
+                      "match_added_cents": 3800,
+                      "match_after_cents": 75800,
+                      "match_before_cents": 72000,
+                      "project_id": 4,
+                      "title": "New Reading Corner"
+                    }
+                  ],
+                  "round_id": 1
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Invalid amount",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rounds/{round_id}/results": {
+      "get": {
+        "tags": [
+          "rounds"
+        ],
+        "summary": "Round Results",
+        "description": "The round's outcome: each project's last projected match next to its final match (null until\nclose), and the totals: pool (with sponsors), matched, unspent, raised and backers.",
+        "operationId": "round_results",
+        "parameters": [
+          {
+            "name": "round_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Round id.",
+              "example": 1
+            },
+            "description": "Round id.",
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundResultsOut"
+                },
+                "example": {
+                  "backers": 29,
+                  "currency": "USD",
+                  "is_final": true,
+                  "matched_cents": 1000000,
+                  "matching_pool_cents": 1000000,
+                  "name": "November round",
+                  "raised_cents": 51250,
+                  "round_id": 1,
+                  "rows": [
+                    {
+                      "backer_count": 16,
+                      "capped": true,
+                      "category": "Education",
+                      "final_match_cents": 400000,
+                      "project_id": 1,
+                      "projected_match_cents": 400000,
+                      "raised_cents": 20000,
+                      "title": "Lanet Library"
+                    }
+                  ],
+                  "sponsored_cents": 25000,
+                  "status": "closed",
+                  "unspent_cents": 0
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rounds/{round_id}/sponsors": {
+      "get": {
+        "tags": [
+          "rounds"
+        ],
+        "summary": "Round Sponsors",
+        "description": "Who added to the round's matching pool through PayPal (a POOL donation), largest first.",
+        "operationId": "round_sponsors",
+        "parameters": [
+          {
+            "name": "round_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Round id.",
+              "example": 1
+            },
+            "description": "Round id.",
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SponsorsOut"
+                },
+                "example": {
+                  "currency": "USD",
+                  "round_id": 1,
+                  "sponsors": [
+                    {
+                      "amount_cents": 25000,
+                      "given_at": "2026-11-04T09:30:00Z",
+                      "name": "Nakuru Rotary Club"
+                    }
+                  ],
+                  "total_cents": 25000
                 }
               }
             }
@@ -4196,6 +4586,537 @@
         }
       }
     },
+    "/admin/rounds": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Create Round",
+        "description": "Schedule a round. It opens on its own at starts_at (now, if that has passed) and closes at ends_at.",
+        "operationId": "create_round",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoundIn"
+              },
+              "example": {
+                "ends_at": "2026-12-15T18:00:00Z",
+                "floor_pct": 20.0,
+                "matching_pool_cents": 1000000,
+                "name": "December round",
+                "per_person_cap_cents": 5000,
+                "project_cap_pct": 40.0,
+                "starts_at": "2026-12-01T00:00:00Z"
+              }
+            }
+          },
+          "required": true,
+          "description": "A new matching round: its window, pool and matching rules."
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundOut"
+                },
+                "example": {
+                  "currency": "USD",
+                  "ends_at": "2026-11-09T18:00:00Z",
+                  "floor_pct": 20.0,
+                  "id": 1,
+                  "matching_pool_cents": 1000000,
+                  "name": "November round",
+                  "per_person_cap_cents": 5000,
+                  "project_cap_pct": 30.0,
+                  "starts_at": "2026-11-01T00:00:00Z",
+                  "status": "open"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Dates out of order or in the past",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/rounds/{round_id}": {
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Update Round",
+        "description": "Change a scheduled or open round: name, dates, pool, cap, floor or per-person cap. A closed\nround is final. An open round keeps its start, and its pool can't drop below what sponsors added.",
+        "operationId": "update_round",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "round_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Round id.",
+              "example": 1
+            },
+            "description": "Round id.",
+            "example": 1
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoundUpdateIn"
+              },
+              "example": {
+                "ends_at": "2026-12-20T18:00:00Z",
+                "matching_pool_cents": 1500000
+              }
+            }
+          },
+          "description": "Changes to a scheduled or open round; fields left out stay as they are."
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundOut"
+                },
+                "example": {
+                  "currency": "USD",
+                  "ends_at": "2026-11-09T18:00:00Z",
+                  "floor_pct": 20.0,
+                  "id": 1,
+                  "matching_pool_cents": 1000000,
+                  "name": "November round",
+                  "per_person_cap_cents": 5000,
+                  "project_cap_pct": 30.0,
+                  "starts_at": "2026-11-01T00:00:00Z",
+                  "status": "open"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Dates out of order, or the pool below what sponsors added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/projects/{project_id}/documents": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Project Documents",
+        "description": "Everything the project uploaded (registration and plan for verification, milestone evidence).",
+        "operationId": "project_documents",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Project id.",
+              "example": 1
+            },
+            "description": "Project id.",
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentOut"
+                  },
+                  "description": "List of: A stored project document with the fields extracted from it.",
+                  "example": [
+                    {
+                      "extracted_fields": {
+                        "date": "2026-11-07",
+                        "supplier": "Nakuru Books Ltd",
+                        "total_cents": 29500
+                      },
+                      "file_url": "https://files.example.com/receipt-7.jpg",
+                      "flags": [],
+                      "id": 11,
+                      "kind": "receipt",
+                      "milestone_id": 7,
+                      "project_id": 1
+                    }
+                  ]
+                },
+                "example": [
+                  {
+                    "extracted_fields": {
+                      "date": "2026-11-07",
+                      "supplier": "Nakuru Books Ltd",
+                      "total_cents": 29500
+                    },
+                    "file_url": "https://files.example.com/receipt-7.jpg",
+                    "flags": [],
+                    "id": 11,
+                    "kind": "receipt",
+                    "milestone_id": 7,
+                    "project_id": 1
+                  }
+                ]
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/projects/{project_id}/owner-token": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Reset Owner Token",
+        "description": "A new X-Project-Token for the project's owner (lost token, or a seeded project). The old one stops working.",
+        "operationId": "reset_owner_token",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Project id.",
+              "example": 1
+            },
+            "description": "Project id.",
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerTokenOut"
+                },
+                "example": {
+                  "owner_token": "q3bX0n2R9w-example-token-k1",
+                  "project_id": 1
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/donations/{donation_id}/refund": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Refund Donation",
+        "description": "Refund a PayPal-paid donation in full or in part. A completed refund is booked now (a full\nrefund takes the gift out of totals and matching, and a sponsor's POOL contribution out of the\nopen round's pool); a pending one is booked when PayPal's PAYMENT.CAPTURE.REFUNDED webhook arrives.\nAgent gifts from a funded balance never went through PayPal on their own and can't be refunded here.",
+        "operationId": "refund_donation",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "donation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Donation id.",
+              "example": 4
+            },
+            "description": "Donation id.",
+            "example": 4
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefundIn"
+              },
+              "example": {
+                "amount_cents": 1000,
+                "reason": "Donor asked for a refund"
+              }
+            }
+          },
+          "description": "An admin's refund: how much (default: all that's left) and why."
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundOut"
+                },
+                "example": {
+                  "amount_cents": 1000,
+                  "donation_id": 4,
+                  "donation_status": "captured",
+                  "paypal_status": "COMPLETED",
+                  "refund_id": "1JU08902781691411",
+                  "refunded_total_cents": 1000
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "More than is left to refund",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        }
+      }
+    },
     "/internal/mandates/active": {
       "get": {
         "tags": [
@@ -4752,6 +5673,99 @@
                     }
                   ]
                 }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/internal/milestones/evidence": {
+      "get": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Evidence Queue",
+        "description": "Milestone Agent: tranches whose owners submitted evidence, oldest first, with all their\ndocuments. Check them, then POST /internal/payout-requests.",
+        "operationId": "evidence_queue",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvidenceMilestone"
+                  },
+                  "type": "array",
+                  "description": "List of: A tranche with evidence waiting for the Milestone Agent, and its documents.",
+                  "example": [
+                    {
+                      "milestone": {
+                        "amount_cents": 30000,
+                        "currency": "USD",
+                        "due_date": "2026-11-30",
+                        "id": 7,
+                        "match_amount_cents": 0,
+                        "seq": 1,
+                        "status": "open",
+                        "title": "Buy 40 books"
+                      },
+                      "project_id": 1,
+                      "project_title": "Lanet Library",
+                      "documents": [
+                        {
+                          "extracted_fields": {
+                            "date": "2026-11-07",
+                            "supplier": "Nakuru Books Ltd",
+                            "total_cents": 29500
+                          },
+                          "file_url": "https://files.example.com/receipt-7.jpg",
+                          "flags": [],
+                          "id": 11,
+                          "kind": "receipt",
+                          "milestone_id": 7,
+                          "project_id": 1
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "example": [
+                  {
+                    "milestone": {
+                      "amount_cents": 30000,
+                      "currency": "USD",
+                      "due_date": "2026-11-30",
+                      "id": 7,
+                      "match_amount_cents": 0,
+                      "seq": 1,
+                      "status": "open",
+                      "title": "Buy 40 books"
+                    },
+                    "project_id": 1,
+                    "project_title": "Lanet Library",
+                    "documents": [
+                      {
+                        "extracted_fields": {
+                          "date": "2026-11-07",
+                          "supplier": "Nakuru Books Ltd",
+                          "total_cents": 29500
+                        },
+                        "file_url": "https://files.example.com/receipt-7.jpg",
+                        "flags": [],
+                        "id": 11,
+                        "kind": "receipt",
+                        "milestone_id": 7,
+                        "project_id": 1
+                      }
+                    ]
+                  }
+                ]
               }
             }
           }
@@ -5679,6 +6693,13 @@
             "example": [
               "excluded tag"
             ]
+          },
+          "sponsor_name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "POOL only: the name on the round's sponsor list; leave out to be anonymous.",
+            "nullable": true,
+            "example": "sponsor name"
           }
         },
         "type": "object",
@@ -5726,7 +6747,9 @@
           },
           "file_url": {
             "type": "string",
-            "description": "Where the document is stored.",
+            "maxLength": 500,
+            "pattern": "^https://",
+            "description": "Where the file is hosted (https)",
             "example": "https://files.example.com/receipt-7.jpg"
           },
           "milestone_id": {
@@ -6305,6 +7328,83 @@
         },
         "title": "ErrorOut",
         "description": "Every error: detail.error is a stable code to branch on, detail.message is for people."
+      },
+      "EvidenceMilestone": {
+        "properties": {
+          "milestone": {
+            "$ref": "#/components/schemas/MilestoneOut"
+          },
+          "project_id": {
+            "type": "integer",
+            "description": "Project id.",
+            "example": 1
+          },
+          "project_title": {
+            "type": "string",
+            "description": "The project's title.",
+            "example": "Lanet Library"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentOut"
+            },
+            "type": "array",
+            "description": "Everything uploaded for this tranche, oldest first.",
+            "example": [
+              {
+                "extracted_fields": {
+                  "date": "2026-11-07",
+                  "supplier": "Nakuru Books Ltd",
+                  "total_cents": 29500
+                },
+                "file_url": "https://files.example.com/receipt-7.jpg",
+                "flags": [],
+                "id": 11,
+                "kind": "receipt",
+                "milestone_id": 7,
+                "project_id": 1
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "milestone",
+          "project_id",
+          "project_title",
+          "documents"
+        ],
+        "title": "EvidenceMilestone",
+        "description": "A tranche with evidence waiting for the Milestone Agent, and its documents.",
+        "example": {
+          "milestone": {
+            "amount_cents": 30000,
+            "currency": "USD",
+            "due_date": "2026-11-30",
+            "id": 7,
+            "match_amount_cents": 0,
+            "seq": 1,
+            "status": "open",
+            "title": "Buy 40 books"
+          },
+          "project_id": 1,
+          "project_title": "Lanet Library",
+          "documents": [
+            {
+              "extracted_fields": {
+                "date": "2026-11-07",
+                "supplier": "Nakuru Books Ltd",
+                "total_cents": 29500
+              },
+              "file_url": "https://files.example.com/receipt-7.jpg",
+              "flags": [],
+              "id": 11,
+              "kind": "receipt",
+              "milestone_id": 7,
+              "project_id": 1
+            }
+          ]
+        }
       },
       "ExcludedProject": {
         "properties": {
@@ -6932,6 +8032,110 @@
         "title": "MandateRunOut",
         "description": "A recorded Giving Agent run: candidates, scores, choices and the report."
       },
+      "MatchPreviewItem": {
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "description": "Project id.",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "description": "Title.",
+            "example": "Lanet Library"
+          },
+          "match_before_cents": {
+            "type": "integer",
+            "description": "The project's projected match now",
+            "example": 2500
+          },
+          "match_after_cents": {
+            "type": "integer",
+            "description": "Its projected match with your gift added",
+            "example": 2500
+          },
+          "match_added_cents": {
+            "type": "integer",
+            "description": "What your gift adds to its match (after minus before)",
+            "example": 2500
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "title",
+          "match_before_cents",
+          "match_after_cents",
+          "match_added_cents"
+        ],
+        "title": "MatchPreviewItem",
+        "description": "What one gift would add to one project's match.",
+        "example": {
+          "project_id": 1,
+          "title": "Lanet Library",
+          "match_before_cents": 2500,
+          "match_after_cents": 2500,
+          "match_added_cents": 2500
+        }
+      },
+      "MatchPreviewOut": {
+        "properties": {
+          "round_id": {
+            "type": "integer",
+            "description": "Round id.",
+            "example": 1
+          },
+          "amount_cents": {
+            "type": "integer",
+            "description": "Amount in cents (minor units of currency).",
+            "example": 500
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 currency code. All PayPal money moves in USD.",
+            "example": "USD"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MatchPreviewItem"
+            },
+            "type": "array",
+            "description": "One per project asked about, biggest match added first",
+            "example": [
+              {
+                "match_added_cents": 3800,
+                "match_after_cents": 75800,
+                "match_before_cents": 72000,
+                "project_id": 4,
+                "title": "New Reading Corner"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "round_id",
+          "amount_cents",
+          "currency",
+          "items"
+        ],
+        "example": {
+          "amount_cents": 500,
+          "currency": "USD",
+          "items": [
+            {
+              "match_added_cents": 3800,
+              "match_after_cents": 75800,
+              "match_before_cents": 72000,
+              "project_id": 4,
+              "title": "New Reading Corner"
+            }
+          ],
+          "round_id": 1
+        },
+        "title": "MatchPreviewOut",
+        "description": "Estimated matching a gift would add, per project, on the round's live inputs."
+      },
       "MilestoneChecks": {
         "properties": {
           "receipt_total_within_10pct": {
@@ -7038,6 +8242,42 @@
         "title": "MilestoneOut",
         "description": "A project milestone: a tranche of money released with evidence."
       },
+      "MilestonePlanIn": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "description": "Title.",
+            "example": "Lanet Library"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "description": "Amount in cents (minor units of currency).",
+            "minimum": 1.0,
+            "example": 2500
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date",
+            "description": "When the milestone should be reached.",
+            "example": "due date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "amount_cents",
+          "due_date"
+        ],
+        "title": "MilestonePlanIn",
+        "description": "One tranche in a project's application: what it pays for, how much, and when.",
+        "example": {
+          "title": "Lanet Library",
+          "amount_cents": 2500,
+          "due_date": "due date"
+        }
+      },
       "MilestoneReviewIn": {
         "properties": {
           "approve": {
@@ -7074,6 +8314,31 @@
         "title": "MilestoneStatus",
         "description": "open: waiting for evidence; evidence_submitted: evidence uploaded; held: sent to an admin; released: paid out.",
         "example": "open"
+      },
+      "OwnerTokenOut": {
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "description": "Project id.",
+            "example": 1
+          },
+          "owner_token": {
+            "type": "string",
+            "description": "Shown once: the project's new X-Project-Token",
+            "example": "q3bX0n2R9w-example-token-k1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "owner_token"
+        ],
+        "example": {
+          "owner_token": "q3bX0n2R9w-example-token-k1",
+          "project_id": 1
+        },
+        "title": "OwnerTokenOut",
+        "description": "A project's new owner token for document uploads."
       },
       "PayoutAccountIn": {
         "properties": {
@@ -7456,6 +8721,39 @@
             "default": 3,
             "description": "1 (low) to 5 (urgent), set at verification.",
             "example": 4
+          },
+          "milestones": {
+            "items": {
+              "$ref": "#/components/schemas/MilestonePlanIn"
+            },
+            "type": "array",
+            "maxItems": 12,
+            "minItems": 1,
+            "description": "The tranches, in order; their amounts add up to goal_cents",
+            "example": [
+              {
+                "title": "Shelves for three schools",
+                "amount_cents": 200000,
+                "due_date": "2026-12-15"
+              },
+              {
+                "title": "400 books",
+                "amount_cents": 250000,
+                "due_date": "2027-01-31"
+              },
+              {
+                "title": "Librarian, first term",
+                "amount_cents": 150000,
+                "due_date": "2027-03-31"
+              }
+            ]
+          },
+          "payout_email": {
+            "type": "string",
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "description": "PayPal account the tranches are paid to",
+            "nullable": true,
+            "example": "lanet.library@example.com"
           }
         },
         "type": "object",
@@ -7463,7 +8761,8 @@
           "title",
           "summary",
           "category_id",
-          "goal_cents"
+          "goal_cents",
+          "milestones"
         ],
         "title": "ProjectApplicationIn",
         "description": "A new project's application, reviewed by an admin before it is listed.",
@@ -7481,8 +8780,76 @@
           "region": "Nakuru",
           "hide_location": false,
           "goal_cents": 600000,
-          "urgency": 4
+          "urgency": 4,
+          "milestones": [
+            {
+              "title": "Shelves for three schools",
+              "amount_cents": 200000,
+              "due_date": "2026-12-15"
+            },
+            {
+              "title": "400 books",
+              "amount_cents": 250000,
+              "due_date": "2027-01-31"
+            },
+            {
+              "title": "Librarian, first term",
+              "amount_cents": 150000,
+              "due_date": "2027-03-31"
+            }
+          ],
+          "payout_email": "lanet.library@example.com"
         }
+      },
+      "ProjectApplicationOut": {
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "description": "Project id.",
+            "example": 15
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProjectStatus"
+          },
+          "owner_token": {
+            "type": "string",
+            "description": "Shown once: send it as X-Project-Token to upload documents and evidence",
+            "example": "q3bX0n2R9w-example-token-k1"
+          },
+          "milestone_ids": {
+            "items": {
+              "type": "integer",
+              "description": "One item of: The tranches created from the plan, in order.",
+              "example": 41
+            },
+            "type": "array",
+            "description": "The tranches created from the plan, in order.",
+            "example": [
+              41,
+              42,
+              43
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "status",
+          "owner_token",
+          "milestone_ids"
+        ],
+        "example": {
+          "milestone_ids": [
+            41,
+            42,
+            43
+          ],
+          "owner_token": "q3bX0n2R9w-example-token-k1",
+          "project_id": 15,
+          "status": "pending_review"
+        },
+        "title": "ProjectApplicationOut",
+        "description": "The new project (pending review) and its owner token."
       },
       "ProjectDetail": {
         "properties": {
@@ -7971,6 +9338,85 @@
         "title": "ReconciliationOut",
         "description": "Money in and out, and every check that the records add up."
       },
+      "RefundIn": {
+        "properties": {
+          "amount_cents": {
+            "type": "integer",
+            "minimum": 1.0,
+            "description": "Leave out to refund everything not refunded yet",
+            "nullable": true,
+            "example": 1000
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "description": "Why, in plain words.",
+            "example": "Donor asked for a refund"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "example": {
+          "amount_cents": 1000,
+          "reason": "Donor asked for a refund"
+        },
+        "title": "RefundIn",
+        "description": "An admin's refund: how much (default: all that's left) and why."
+      },
+      "RefundOut": {
+        "properties": {
+          "donation_id": {
+            "type": "integer",
+            "description": "Donation id.",
+            "example": 4
+          },
+          "refund_id": {
+            "type": "string",
+            "description": "PayPal's refund id.",
+            "example": "1JU08902781691411"
+          },
+          "paypal_status": {
+            "type": "string",
+            "description": "COMPLETED is booked now; PENDING is booked when PayPal's webhook confirms it",
+            "example": "COMPLETED"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "description": "Amount in cents (minor units of currency).",
+            "example": 1000
+          },
+          "refunded_total_cents": {
+            "type": "integer",
+            "description": "Everything refunded on this donation so far (booked refunds only).",
+            "example": 1000
+          },
+          "donation_status": {
+            "$ref": "#/components/schemas/DonationStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "donation_id",
+          "refund_id",
+          "paypal_status",
+          "amount_cents",
+          "refunded_total_cents",
+          "donation_status"
+        ],
+        "example": {
+          "amount_cents": 1000,
+          "donation_id": 4,
+          "donation_status": "captured",
+          "paypal_status": "COMPLETED",
+          "refund_id": "1JU08902781691411",
+          "refunded_total_cents": 1000
+        },
+        "title": "RefundOut",
+        "description": "What PayPal did with the refund and where the donation stands."
+      },
       "ReportGift": {
         "properties": {
           "donation_id": {
@@ -8028,6 +9474,77 @@
           "status": "created",
           "match_unlocked_cents": 2500
         }
+      },
+      "RoundIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "description": "Name.",
+            "example": "December round"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the round starts (UTC).",
+            "example": "2026-12-01T00:00:00Z"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the round ends (UTC); donations after this go to the next round.",
+            "example": "2026-12-15T18:00:00Z"
+          },
+          "matching_pool_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "description": "The round's matching pool in cents.",
+            "example": 1000000
+          },
+          "project_cap_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "default": 30.0,
+            "description": "No project gets more than this percent of its category pool.",
+            "minimum": 0.0,
+            "exclusiveMinimum": true,
+            "example": 40.0
+          },
+          "floor_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "default": 20.0,
+            "description": "Percent of each category pool shared equally among its projects.",
+            "example": 20.0
+          },
+          "per_person_cap_cents": {
+            "type": "integer",
+            "default": 5000,
+            "description": "Only this much of one person's giving to one project counts for matching.",
+            "minimum": 1.0,
+            "example": 5000
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "starts_at",
+          "ends_at",
+          "matching_pool_cents"
+        ],
+        "example": {
+          "ends_at": "2026-12-15T18:00:00Z",
+          "floor_pct": 20.0,
+          "matching_pool_cents": 1000000,
+          "name": "December round",
+          "per_person_cap_cents": 5000,
+          "project_cap_pct": 40.0,
+          "starts_at": "2026-12-01T00:00:00Z"
+        },
+        "title": "RoundIn",
+        "description": "A new matching round: its window, pool and matching rules."
       },
       "RoundOut": {
         "properties": {
@@ -8110,6 +9627,192 @@
         "title": "RoundOut",
         "description": "A matching round and its rules."
       },
+      "RoundResultRow": {
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "description": "Project id.",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "description": "Title.",
+            "example": "Lanet Library"
+          },
+          "category": {
+            "type": "string",
+            "description": "The category's name.",
+            "example": "category"
+          },
+          "raised_cents": {
+            "type": "integer",
+            "description": "Raised so far in cents: captured gifts plus category shares, minus refunds.",
+            "example": 12000
+          },
+          "backer_count": {
+            "type": "integer",
+            "description": "Number of different people who gave (one PayPal account = one person).",
+            "example": 5
+          },
+          "projected_match_cents": {
+            "type": "integer",
+            "description": "The last projection before close (the live one while open)",
+            "example": 2500
+          },
+          "final_match_cents": {
+            "type": "integer",
+            "description": "Null until the round closes",
+            "nullable": true,
+            "example": 2500
+          },
+          "capped": {
+            "type": "boolean",
+            "description": "Whether the project hit a cap (its share of the category pool or its remaining goal).",
+            "example": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "title",
+          "category",
+          "raised_cents",
+          "backer_count",
+          "projected_match_cents",
+          "final_match_cents",
+          "capped"
+        ],
+        "title": "RoundResultRow",
+        "description": "One project's outcome in a round: projected and final match.",
+        "example": {
+          "project_id": 1,
+          "title": "Lanet Library",
+          "category": "category",
+          "raised_cents": 12000,
+          "backer_count": 5,
+          "projected_match_cents": 2500,
+          "final_match_cents": 2500,
+          "capped": true
+        }
+      },
+      "RoundResultsOut": {
+        "properties": {
+          "round_id": {
+            "type": "integer",
+            "description": "Round id.",
+            "example": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "Name.",
+            "example": "November round"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RoundStatus"
+          },
+          "is_final": {
+            "type": "boolean",
+            "description": "True once the round has closed and the match is fixed.",
+            "example": true
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 currency code. All PayPal money moves in USD.",
+            "example": "USD"
+          },
+          "matching_pool_cents": {
+            "type": "integer",
+            "description": "Including what sponsors added during the round",
+            "example": 1000000
+          },
+          "sponsored_cents": {
+            "type": "integer",
+            "description": "The part of the pool sponsors added through PayPal",
+            "example": 25000
+          },
+          "matched_cents": {
+            "type": "integer",
+            "description": "Match shared out: final once closed, projected before.",
+            "example": 1000000
+          },
+          "unspent_cents": {
+            "type": "integer",
+            "description": "Pool not matched (caps and goals can leave some over)",
+            "example": 0
+          },
+          "raised_cents": {
+            "type": "integer",
+            "description": "Gifts to projects during the round",
+            "example": 51250
+          },
+          "backers": {
+            "type": "integer",
+            "description": "People who gave to projects during the round",
+            "example": 29
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/RoundResultRow"
+            },
+            "type": "array",
+            "description": "Projects ranked by match.",
+            "example": [
+              {
+                "backer_count": 16,
+                "capped": true,
+                "category": "Education",
+                "final_match_cents": 400000,
+                "project_id": 1,
+                "projected_match_cents": 400000,
+                "raised_cents": 20000,
+                "title": "Lanet Library"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "round_id",
+          "name",
+          "status",
+          "is_final",
+          "currency",
+          "matching_pool_cents",
+          "sponsored_cents",
+          "matched_cents",
+          "unspent_cents",
+          "raised_cents",
+          "backers",
+          "rows"
+        ],
+        "example": {
+          "backers": 29,
+          "currency": "USD",
+          "is_final": true,
+          "matched_cents": 1000000,
+          "matching_pool_cents": 1000000,
+          "name": "November round",
+          "raised_cents": 51250,
+          "round_id": 1,
+          "rows": [
+            {
+              "backer_count": 16,
+              "capped": true,
+              "category": "Education",
+              "final_match_cents": 400000,
+              "project_id": 1,
+              "projected_match_cents": 400000,
+              "raised_cents": 20000,
+              "title": "Lanet Library"
+            }
+          ],
+          "sponsored_cents": 25000,
+          "status": "closed",
+          "unspent_cents": 0
+        },
+        "title": "RoundResultsOut",
+        "description": "A round's outcome: totals and each project's projected and final match."
+      },
       "RoundStatus": {
         "type": "string",
         "enum": [
@@ -8121,6 +9824,157 @@
         "title": "RoundStatus",
         "description": "scheduled; open: taking donations; closing: ended, waiting for open Watchdog cases; closed: final results written.",
         "example": "scheduled"
+      },
+      "RoundUpdateIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "description": "Name.",
+            "nullable": true,
+            "example": "Education"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the round starts (UTC).",
+            "nullable": true,
+            "example": "2026-11-03T09:00:00Z"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the round ends (UTC); donations after this go to the next round.",
+            "nullable": true,
+            "example": "2026-12-20T18:00:00Z"
+          },
+          "matching_pool_cents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "description": "The round's matching pool in cents.",
+            "nullable": true,
+            "example": 1500000
+          },
+          "project_cap_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "exclusiveMinimum": true,
+            "description": "No project gets more than this percent of its category pool.",
+            "nullable": true,
+            "example": 1.0
+          },
+          "floor_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "description": "Percent of each category pool shared equally among its projects.",
+            "nullable": true,
+            "example": 1.0
+          },
+          "per_person_cap_cents": {
+            "type": "integer",
+            "minimum": 1.0,
+            "description": "Only this much of one person's giving to one project counts for matching.",
+            "nullable": true,
+            "example": 2500
+          }
+        },
+        "type": "object",
+        "example": {
+          "ends_at": "2026-12-20T18:00:00Z",
+          "matching_pool_cents": 1500000
+        },
+        "title": "RoundUpdateIn",
+        "description": "Changes to a scheduled or open round; fields left out stay as they are."
+      },
+      "SponsorOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "As the sponsor asked to be credited, or Anonymous sponsor",
+            "example": "Education"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "description": "Amount in cents (minor units of currency).",
+            "example": 2500
+          },
+          "given_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the contribution was captured (UTC).",
+            "example": "2026-11-03T09:00:00Z"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "amount_cents",
+          "given_at"
+        ],
+        "title": "SponsorOut",
+        "description": "One contribution to a round's matching pool.",
+        "example": {
+          "name": "Education",
+          "amount_cents": 2500,
+          "given_at": "2026-11-03T09:00:00Z"
+        }
+      },
+      "SponsorsOut": {
+        "properties": {
+          "round_id": {
+            "type": "integer",
+            "description": "Round id.",
+            "example": 1
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 currency code. All PayPal money moves in USD.",
+            "example": "USD"
+          },
+          "total_cents": {
+            "type": "integer",
+            "description": "Everything sponsors added to the pool.",
+            "example": 25000
+          },
+          "sponsors": {
+            "items": {
+              "$ref": "#/components/schemas/SponsorOut"
+            },
+            "type": "array",
+            "description": "Largest first",
+            "example": [
+              {
+                "amount_cents": 25000,
+                "given_at": "2026-11-04T09:30:00Z",
+                "name": "Nakuru Rotary Club"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "round_id",
+          "currency",
+          "total_cents",
+          "sponsors"
+        ],
+        "example": {
+          "currency": "USD",
+          "round_id": 1,
+          "sponsors": [
+            {
+              "amount_cents": 25000,
+              "given_at": "2026-11-04T09:30:00Z",
+              "name": "Nakuru Rotary Club"
+            }
+          ],
+          "total_cents": 25000
+        },
+        "title": "SponsorsOut",
+        "description": "Who added to a round's matching pool, largest first."
       },
       "StoryOut": {
         "properties": {
@@ -8348,7 +10202,8 @@
         "enum": [
           "PROJECT",
           "CATEGORY",
-          "AGENT"
+          "AGENT",
+          "POOL"
         ],
         "title": "TargetType",
         "description": "PROJECT: one project; CATEGORY: split across a category's projects; AGENT: a Giving Agent gift (with project) or budget top-up (without).",
