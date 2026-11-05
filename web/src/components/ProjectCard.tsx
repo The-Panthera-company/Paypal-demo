@@ -13,12 +13,12 @@ const catColour: Record<string, string> = {
 
 // Photo-first card (Doria-inspired): the photo fills the card, a dark fade carries a few words.
 // On hover or keyboard focus the photo zooms into full colour and "Back this project" slides up.
-export function ProjectCard({ project: p, photo }: { project: Project; photo?: string }) {
+export function ProjectCard({ project: p, photo, fill = false, size = "md" }: { project: Project; photo?: string; fill?: boolean; size?: "sm" | "md" | "lg" }) {
   const pct = Math.min(100, Math.round((p.raised.amount / p.goal.amount) * 100));
   const state = pct >= 100 ? "Funded" : p.backerCount === 0 ? "Just launched" : null;
 
   return (
-    <article className="group relative aspect-[4/5] overflow-hidden bg-ink text-white">
+    <article className={`group relative overflow-hidden bg-ink text-white ${fill ? "h-full min-h-[320px] sm:min-h-0" : "aspect-[4/5]"}`}>
       <div className="absolute inset-0 saturate-[0.55] transition-[transform,filter] duration-700 ease-out group-focus-within:scale-105 group-focus-within:saturate-100 group-hover:scale-105 group-hover:saturate-100">
         <CategoryArt id={p.categoryId} seed={p.id} photo={photo} tint={false} label={`Photo for ${p.title}`} />
       </div>
@@ -35,11 +35,16 @@ export function ProjectCard({ project: p, photo }: { project: Project; photo?: s
         <span className={`inline-block px-3 text-[11px] font-bold uppercase leading-6 tracking-[3px] text-white ${catColour[p.categoryId] ?? "bg-primary"}`}>
           {p.categoryId}
         </span>
-        <h3 className="mt-3 text-2xl leading-8 text-white">
+        <h3 className={`mt-3 text-white ${size === "lg" ? "text-4xl leading-tight" : size === "sm" ? "text-xl leading-7" : "text-2xl leading-8"}`}>
           <Link href={`/projects/${p.id}`} className="after:absolute after:inset-0 focus-visible:outline-none">
             {p.title}
           </Link>
         </h3>
+        {size === "lg" && (
+          <p className="mt-2 line-clamp-2 max-w-lg text-white/85">
+            {p.summary || `${p.facets.cause.charAt(0).toUpperCase()}${p.facets.cause.slice(1)} for ${p.facets.group.toLowerCase()} in ${p.facets.region}.`}
+          </p>
+        )}
         <div className="mt-4 flex items-baseline justify-between text-sm">
           <span className="tabular">
             <strong className="text-accent">{formatMoney(p.raised)}</strong> of {formatMoney(p.goal)}

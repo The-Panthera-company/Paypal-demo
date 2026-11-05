@@ -7,22 +7,23 @@ import { assignPhotos, EmptyState } from "@/components/ui";
 import { getCategories, getFacetOptions, getProjects } from "@/lib/api";
 import type { ProjectFilters } from "@/lib/types";
 
-type Params = ProjectFilters & { layout?: string; tab?: string };
-const field = "min-h-12 w-full border border-line bg-white px-4 text-ink";
+type Params = ProjectFilters & { cards?: string; tab?: string };
+const field = "min-h-11 w-full border border-line bg-white px-3 text-sm text-ink";
 
-// Explore. Two layouts to choose between (owner A/B test): A = fixed filter menu on the side and a
-// two-column grid; B = filters hidden behind a button at the top and a three-column grid.
-// `?layout=b` shows B. Filters are a plain GET form (works without JavaScript, shareable URL).
+// Explore: a slim fixed filter menu on the side. Two card arrangements to choose between:
+// A1 (default) = a two-column grid of large cards; A2 (`?cards=mosaic`) = a mirrored mosaic where
+// cards take different shapes (big, tall, wide) in a repeating symmetrical pattern, the most
+// urgent projects in the big tiles. Filters are a plain GET form (works without JavaScript).
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<Params> }) {
-  const { layout: rawLayout, tab: rawTab, ...filters } = await searchParams;
-  const layout = rawLayout === "b" ? "b" : "a";
+  const { cards: rawCards, tab: rawTab, ...filters } = await searchParams;
+  const mosaic = rawCards === "mosaic";
   const tab = rawTab === "favorites" ? "favorites" : "all";
   const [projects, all, categories, options] = await Promise.all([getProjects(filters), getProjects(), getCategories(), getFacetOptions()]);
   const active = (Object.keys(filters) as (keyof ProjectFilters)[]).filter((k) => filters[k]);
   const photos = assignPhotos(all);
   const keep = (extra: Record<string, string | undefined>) => {
     const q = new URLSearchParams();
-    if (layout === "b") q.set("layout", "b");
+    if (mosaic) q.set("cards", "mosaic");
     for (const [k, v] of Object.entries({ ...filters, ...extra })) if (v) q.set(k, v);
     const s = q.toString();
     return `/projects${s ? `?${s}` : ""}`;
@@ -30,8 +31,8 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const labelOf = (k: keyof ProjectFilters, v: string) => (k === "category" ? categories.find((c) => c.id === v)?.name ?? v : v);
 
   const form = (vertical: boolean) => (
-    <form className={vertical ? "space-y-4" : "grid gap-4 sm:grid-cols-2 lg:grid-cols-5"} role="search" action="/projects">
-      {layout === "b" && <input type="hidden" name="layout" value="b" />}
+    <form className={vertical ? "space-y-3" : "grid gap-4 sm:grid-cols-2 lg:grid-cols-5"} role="search" action="/projects">
+      {mosaic && <input type="hidden" name="cards" value="mosaic" />}
       <label className={`flex flex-col gap-1 text-sm text-ink ${vertical ? "" : "lg:col-span-1"}`}>
         Search
         <input name="q" defaultValue={filters.q} placeholder="e.g. library, clean water" className={field} />
@@ -57,7 +58,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         </label>
       ))}
       <div className={`flex flex-wrap items-center gap-4 ${vertical ? "" : "sm:col-span-2 lg:col-span-5"}`}>
-        <button className={`btn btn-2 ${vertical ? "w-full" : ""}`}>Apply filters</button>
+        <button className={`btn btn-2 ${vertical ? "w-full !px-4" : ""}`}>{vertical ? "Apply" : "Apply filters"}</button>
         {active.length > 0 && (
           <Link href={keep({ q: undefined, category: undefined, cause: undefined, group: undefined, region: undefined })} className="text-sm font-medium text-brand underline-offset-4 hover:underline">
             Clear all
@@ -101,18 +102,22 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     </ul>
   );
 
-  const cols = layout === "a" ? "sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3";
+  const cols = "sm:grid-cols-2";
   const grid =
     tab === "favorites" ? (
       <FavoritesGrid projects={all} photos={photos} cols={cols} />
     ) : projects.length === 0 ? (
       <EmptyState title="No projects match" body="Try removing a filter, or ask the assistant to suggest something close." action={{ href: keep({ q: undefined, category: undefined, cause: undefined, group: undefined, region: undefined }), label: "Clear filters" }} />
     ) : (
-      <div className={`grid gap-[30px] ${cols}`}>
-        {projects.map((p) => (
-          <ProjectCard key={p.id} project={p} photo={photos[p.id]} />
-        ))}
-      </div>
+      mosaic ? (
+        <Mosaic projects={projects} photos={photos} />
+      ) : (
+        <div className={`grid gap-6 ${cols}`}>
+          {projects.map((p) => (
+            <ProjectCard key={p.id} project={p} photo={photos[p.id]} />
+          ))}
+        </div>
+      )
     );
 
   const categoryBanner = filters.category && tab === "all" && (
@@ -129,50 +134,73 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       <PageTitle title="Explore projects" crumb="Explore" />
       <section className="relative pb-16 lg:pb-[120px]">
         <div className="absolute inset-x-0 top-0 h-[600px] bg-surface-alt" aria-hidden />
-        <div className="container-k relative pt-12 lg:pt-16">
-          {layout === "a" ? (
-            // Option A: fixed filter menu on the side, two-column grid
-            <div className="grid gap-8 lg:grid-cols-[290px_1fr]">
-              <aside className="lg:sticky lg:top-32 lg:self-start">
-                <details className="bg-white p-5 shadow-[0_0_30px_rgba(0,0,0,0.05)] lg:[&>summary]:hidden" open>
-                  <summary className="flex min-h-11 cursor-pointer items-center font-medium text-ink">Filters</summary>
-                  <h2 className="mb-4 hidden text-xl lg:block">Filters</h2>
-                  {form(true)}
-                </details>
-              </aside>
-              <div className="space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  {tabs}
-                  {chips}
-                </div>
-                {categoryBanner}
-                {grid}
-              </div>
-            </div>
-          ) : (
-            // Option B: a clean top bar; filters toggle out from a button
+        <div className="container-k relative pt-12 lg:!max-w-[1360px] lg:pt-16">
+          <div className="grid gap-8 lg:grid-cols-[230px_1fr]">
+            <aside className="lg:sticky lg:top-32 lg:self-start">
+              <details className="bg-white p-4 shadow-[0_0_30px_rgba(0,0,0,0.05)] lg:[&>summary]:hidden" open>
+                <summary className="flex min-h-11 cursor-pointer items-center font-medium text-ink">Filters</summary>
+                <h2 className="mb-3 hidden text-lg lg:block">Filters</h2>
+                {form(true)}
+              </details>
+            </aside>
             <div className="space-y-6">
-              <div className="relative flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
                 {tabs}
-                <details className="group">
-                  <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 bg-ink px-5 font-medium text-white hover:bg-primary [&::-webkit-details-marker]:hidden">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-                      <path d="M4 6h16M7 12h10M10 18h4" />
-                    </svg>
-                    <span className="group-open:hidden">Filters{active.length ? ` (${active.length})` : ""}</span>
-                    <span className="hidden group-open:inline">Hide filters</span>
-                  </summary>
-                  <div className="absolute inset-x-0 top-full z-20 mt-3 animate-[showcase-in_.3s_ease-out] bg-white p-5 shadow-[0_20px_40px_rgba(11,46,51,0.18)]">{form(false)}</div>
-                </details>
+                {chips}
               </div>
-              {chips}
               {categoryBanner}
               {grid}
             </div>
-          )}
+          </div>
         </div>
       </section>
       <GivingAssistant projects={all} />
     </>
+  );
+}
+
+// A2: mirrored mosaic on a 4-column grid. Every 8 cards repeat the pattern
+//   [ big  ][tall][tall]      rows 1-2
+//   [ wide ][ wide ]          row 3
+//   [tall][tall][  big ]      rows 4-5 (mirror of the first block)
+// Most urgent projects first, so they land in the big tiles. Phones: one column.
+const PATTERN = [
+  "sm:col-span-2 sm:row-span-2 lg:col-span-2 lg:row-span-2",
+  "lg:col-span-1 lg:row-span-2",
+  "lg:col-span-1 lg:row-span-2",
+  "sm:col-span-1 lg:col-span-2 lg:row-span-1",
+  "sm:col-span-1 lg:col-span-2 lg:row-span-1",
+  "lg:col-span-1 lg:row-span-2",
+  "lg:col-span-1 lg:row-span-2",
+  "sm:col-span-2 sm:row-span-2 lg:col-span-2 lg:row-span-2",
+];
+const SIZES = ["lg", "sm", "sm", "md", "md", "sm", "sm", "lg"] as const;
+
+function Mosaic({ projects, photos }: { projects: import("@/lib/types").Project[]; photos: Record<string, string> }) {
+  const ordered = [...projects].sort((a, b) => b.urgency - a.urgency || a.backerCount - b.backerCount);
+  // Leftovers after the last full 8-card block: the first block (big, tall, tall) if 3+ remain,
+  // then wide pairs, and a full-width card for an odd one out, so the grid always ends flush.
+  const full = Math.floor(ordered.length / PATTERN.length) * PATTERN.length;
+  const rest = ordered.length - full;
+  const tail: { cls: string; size: (typeof SIZES)[number] }[] = [];
+  let left = rest;
+  if (left >= 3) {
+    for (let k = 0; k < 3; k++) tail.push({ cls: PATTERN[k], size: SIZES[k] });
+    left -= 3;
+  }
+  while (left >= 2) {
+    tail.push({ cls: PATTERN[3], size: "md" }, { cls: PATTERN[4], size: "md" });
+    left -= 2;
+  }
+  if (left === 1) tail.push({ cls: "sm:col-span-2 lg:col-span-4 lg:row-span-1", size: "lg" });
+  const shape = (i: number) => (i < full ? { cls: PATTERN[i % PATTERN.length], size: SIZES[i % SIZES.length] } : tail[i - full]);
+  return (
+    <div className="grid auto-rows-[260px] grid-flow-dense gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {ordered.map((p, i) => (
+        <div key={p.id} className={shape(i).cls}>
+          <ProjectCard project={p} photo={photos[p.id]} fill size={shape(i).size} />
+        </div>
+      ))}
+    </div>
   );
 }
