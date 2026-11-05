@@ -13,10 +13,29 @@ const API_URL = (typeof window === "undefined" ? process.env.API_INTERNAL_URL : 
 
 /** Catalogue reads are shared for `revalidate` seconds (projects change rarely; the matching projection
  *  every 5 minutes), so a page view usually needs no API call at all. Admin and donor data use no-store. */
+/** Thrown for a 4xx answer, so callers can tell "not there" from "server down" */
+export class ApiError extends Error {
+  constructor(public status: number, path: string) {
+    super(`GET ${path} failed: ${status}`);
+  }
+}
+
+/**
+ * GET with a time limit and one retry. Render's free API sleeps after 15 minutes idle and the
+ * first request while it wakes can fail; one retry 2 s later usually lands.
+ */
 async function get<T>(path: string, revalidate = 30): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { next: { revalidate } });
-  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
-  return res.json() as Promise<T>;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(`${API_URL}${path}`, { next: { revalidate }, signal: AbortSignal.timeout(25_000) });
+      if (res.status >= 400 && res.status < 500) throw new ApiError(res.status, path);
+      if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+      return (await res.json()) as T;
+    } catch (e) {
+      if (e instanceof ApiError || attempt >= 1) throw e;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
 }
 
 /** Like get(), but routes Person 1 hasn't built yet (X-Stub header = example data) count as empty */
@@ -222,7 +241,14 @@ export function formatDate(iso: string) {
 /** Matching leaderboard for the current round: projected while open, final after close. */
 export async function getLeaderboard(): Promise<Leaderboard> {
   if (!API_URL) return sampleLeaderboard();
-  const round = await get<ApiRound>("/rounds/current");
+  let round: ApiRound;
+  try {
+    round = await get<ApiRound>("/rounds/current");
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 404)) throw e;
+    // No matching round open yet: an empty board, not an error page
+    return { roundId: "", roundName: "No round open yet", endsAt: new Date().toISOString(), pool: money(0, "USD"), isFinal: false, computedAt: new Date().toISOString(), rows: [], sample: false };
+  }
   const lb = await get<ApiLeaderboard>(`/rounds/${round.id}/leaderboard`, 60);
   const c = lb.currency;
   return {
@@ -304,8 +330,13 @@ function sampleLeaderboard(): Leaderboard {
 /** The current matching round (name and end date) for countdowns */
 export async function getRound(): Promise<{ name: string; endsAt: string }> {
   if (!API_URL) return { name: "Sample round", endsAt: projects[0]?.endsAt ?? new Date(Date.now() + 7 * 86_400_000).toISOString() };
-  const r = await get<ApiRound>("/rounds/current");
-  return { name: r.name, endsAt: r.ends_at };
+  // No round open (or API unreachable): keep the page up with a placeholder countdown
+  try {
+    const r = await get<ApiRound>("/rounds/current");
+    return { name: r.name, endsAt: r.ends_at };
+  } catch {
+    return { name: "Next round", endsAt: new Date(Date.now() + 30 * 86_400_000).toISOString() };
+  }
 }
 
 type ApiReport = {
