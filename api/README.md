@@ -138,6 +138,7 @@ While a round is open its projected match is recomputed every `PROJECTION_INTERV
 - `GET /rounds/{id}/leaderboard`: projects ranked by match, with score, floor, crowd, capped, backers and raised. `is_final` is true once round close has written final rows; those always win and are never recomputed. A closed round without final rows returns no rows.
 - Projects whose matching is frozen are listed with a match of 0 and `matching_frozen: true`.
 - `projected_match_cents` on `GET /projects` reads the same rows.
+- `GET /rounds/{id}/donors?me=`: the donor ladders ([`app/donor_board.py`](app/donor_board.py)). Names only for donors who opted in; everyone else gets an alias such as `Donor 3FA9C10B`, an HMAC of their id under `ALIAS_SECRET` (default: `ADMIN_TOKEN`), so aliases can't be traced back to ids. Changing that secret changes every alias. `me` only marks a row (there's no login yet), so anyone can pass any id.
 - If the pool is bigger than what projects still need, every project hits its goal cap and the rest stays in the pool.
 
 ### Round close

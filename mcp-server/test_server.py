@@ -88,3 +88,13 @@ def test_read_tools_are_marked_read_only():
     tools = {t.name: t for t in asyncio.run(server.server.list_tools())}
     assert tools["search_projects"].annotations.read_only_hint is True
     assert tools["request_checked_donation"].annotations.read_only_hint is False
+
+
+def test_evidence_queue_reads_the_internal_route(api):
+    api.reply = (200, [{"milestone": {"id": 41, "status": "evidence_submitted"}, "project_id": 15,
+                        "project_title": "Mama Lishe Kitchen", "documents": [{"kind": "receipt"}]}])
+    assert payload(call("list_evidence_queue"))[0]["milestone"]["id"] == 41
+    assert api.requests[-1].url.path == "/internal/milestones/evidence"
+    assert api.requests[-1].headers["Authorization"] == "Bearer t0ken"
+    tools = {t.name: t for t in asyncio.run(server.server.list_tools())}
+    assert tools["list_evidence_queue"].annotations.read_only_hint is True

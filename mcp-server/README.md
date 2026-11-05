@@ -14,6 +14,7 @@ no database access, so an agent can't do more through it than the API allows.
 | `record_mandate_run` | `POST /internal/mandate-runs` | records the run |
 | `request_checked_donation` | `POST /internal/checked-donations` | gives from the funded balance, if the API agrees |
 | `open_watchdog_case` | `POST /internal/watchdog/cases` | freezes a project's matching |
+| `list_evidence_queue` | `GET /internal/milestones/evidence` (tranches with uploaded evidence, and their documents) | no |
 | `request_milestone_payout` | `POST /internal/payout-requests` | releases a tranche, or holds it for an admin |
 | `log_decision` | `POST /internal/audit` | writes to the agent log |
 
