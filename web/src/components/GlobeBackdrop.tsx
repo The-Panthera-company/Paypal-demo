@@ -9,7 +9,7 @@ export type GlobePin = { id: string; title: string; categoryId: string; location
 type Group = { key: string; location: [number, number]; place: string; pins: GlobePin[] };
 
 const SPEED = 0.0025; // radians per frame (~30 fps): slow, a backdrop not a show
-const TILT = 0.32; // lean the north pole towards the viewer a little
+const TILT = -0.3; // lift the equator (where most projects are) above the faded bottom edge
 
 // Orthographic projection shared by the dots and the HTML pins, so pins sit exactly on the globe.
 function project([lat, lng]: [number, number], phi: number) {

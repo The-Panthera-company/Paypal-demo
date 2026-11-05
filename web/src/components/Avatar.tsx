@@ -16,7 +16,7 @@ const GLYPHS: Record<string, string[]> = {
   J: ["00111", "00010", "00010", "00010", "00010", "10010", "01100"],
   K: ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
   L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
-  M: ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+  M: ["10001", "11011", "11111", "10101", "10001", "10001", "10001"],
   N: ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
   O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
   P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
@@ -26,7 +26,7 @@ const GLYPHS: Record<string, string[]> = {
   T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
   U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
   V: ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
-  W: ["10001", "10001", "10001", "10101", "10101", "11011", "10001"],
+  W: ["10001", "10001", "10001", "10101", "11111", "11011", "10001"],
   X: ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
   Y: ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
   Z: ["11111", "00001", "00010", "00100", "01000", "10000", "11111"],
@@ -52,13 +52,20 @@ const SCHEMES = [
   { bg: "#b4533a", fg: "#ffffff", doodle: "#bf6049" },
 ];
 
-// Tiny cause doodles in a 24x24 box: water drop, leaf, heart, book
-const DOODLES = [
-  "M12 4c3 4 5 6.5 5 9a5 5 0 01-10 0c0-2.5 2-5 5-9z",
-  "M6 18C6 10 11 6 18 6c0 7-4 12-12 12zm0 0l6-6",
-  "M12 19s-7-4.3-7-9a4 4 0 017-2.6A4 4 0 0119 10c0 4.7-7 9-7 9z",
-  "M5 6h6a2 2 0 012 2v10a2 2 0 00-2-2H5zm14 0h-6a2 2 0 00-2 2v10a2 2 0 012-2h6z",
+import { DOODLES, rng } from "@/lib/doodles";
+
+// Line-drawn characters for anonymous donors (100x100), in the style of the wallpaper's doodles
+const CHARACTERS: { name: string; d: string; dots: [number, number][] }[] = [
+  { name: "cat", d: "M31 42L28 21l16 11q6-2 12 0l16-11-3 21q8 12 0 25-9 11-19 11T31 67q-8-13 0-25zM47 58l3 3 3-3M20 57h15M21 64l14-2M80 57H65M79 64l-14-2", dots: [[41, 50], [59, 50]] },
+  { name: "bear", d: "M50 30a24 24 0 110 48 24 24 0 010-48zM31 24a8 8 0 110 16 8 8 0 010-16zM69 24a8 8 0 110 16 8 8 0 010-16zM40 63q10-9 20 0-4 8-10 8t-10-8zM47 62h6", dots: [[42, 50], [58, 50]] },
+  { name: "owl", d: "M30 32q20-14 40 0v32q-20 22-40 0zM41 36a8 8 0 110 16 8 8 0 010-16zM59 36a8 8 0 110 16 8 8 0 010-16zM47 55l3 5 3-5zM30 32l-2-8 8 5M70 32l2-8-8 5M40 70v8M60 70v8", dots: [[41, 44], [59, 44]] },
+  { name: "robot", d: "M32 34h36v34H32zM50 34V24M50 18a3 3 0 110 6 3 3 0 010-6zM42 59h16M26 45v12M74 45v12M38 74v6M62 74v6", dots: [[42, 47], [58, 47]] },
+  { name: "astronaut", d: "M50 22a28 28 0 110 56 28 28 0 010-56zM36 40h28a8 8 0 018 8v4a8 8 0 01-8 8H36a8 8 0 01-8-8v-4a8 8 0 018-8zM40 47q3-3 7-3M36 78l-4 6M64 78l4 6", dots: [] },
+  { name: "monkey", d: "M50 30a22 22 0 110 44 22 22 0 010-44zM25 44a8 8 0 110 16 8 8 0 010-16zM75 44a8 8 0 110 16 8 8 0 010-16zM37 53q13-12 26 0 4 15-13 19-17-4-13-19zM45 63q5 4 10 0", dots: [[44, 50], [56, 50]] },
 ];
+
+// Dotted speech bubble for the giving assistant (dot matrix, 9x7)
+const BUBBLE = ["011111110", "111111111", "110101011", "111111111", "011111110", "000110000", "000100000"];
 
 const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 
@@ -68,47 +75,67 @@ export function initialsOf(name: string) {
   return (parts.length === 1 ? parts[0].slice(0, 2) : parts[0][0] + parts[parts.length - 1][0]).replace(/[^A-Z0-9]/g, "");
 }
 
+function dotGrid(rows: string[], box: number) {
+  const cols = rows[0].length;
+  const cell = Math.min(box / cols, box / rows.length);
+  const ox = (100 - cols * cell) / 2;
+  const oy = (100 - rows.length * cell) / 2;
+  const out: { x: number; y: number; r: number }[] = [];
+  rows.forEach((row, r) => [...row].forEach((b, c) => b === "1" && out.push({ x: ox + (c + 0.5) * cell, y: oy + (r + 0.5) * cell, r: cell * 0.4 })));
+  return out;
+}
+
 export function Avatar({
   name,
   seed,
   size = 48,
   anonymous = false,
+  kind = "person",
   label,
 }: {
   /** Display name: its initials are drawn */
   name?: string;
-  /** Stable id for colour and pattern (defaults to the name) */
+  /** Stable id for colour, pattern and character (defaults to the name) */
   seed?: string;
   size?: number;
-  /** Pattern only, no initials (privacy-first default for donors) */
+  /** A doodle character instead of initials (privacy-first default for donors) */
   anonymous?: boolean;
+  /** "assistant" draws a dotted speech bubble */
+  kind?: "person" | "assistant";
   label?: string;
 }) {
   const key = seed ?? name ?? "anon";
   const h = hash(key);
   const sc = SCHEMES[h % SCHEMES.length];
-  const text = anonymous || !name ? "" : initialsOf(name);
-  const glyphs = text.split("").map((ch) => GLYPHS[ch]).filter(Boolean);
+  const light = sc.bg === "#eef6f1";
+  const text = anonymous || !name || kind === "assistant" ? "" : initialsOf(name);
 
-  // Dot matrix: each glyph 5 columns + 1 gap, 7 rows; fitted into the middle 60% of the tile
-  const cols = glyphs.length * 6 - 1;
-  const cell = glyphs.length ? Math.min(60 / cols, 60 / 7) : 0;
-  const ox = (100 - cols * cell) / 2;
-  const oy = (100 - 7 * cell) / 2;
-  const dots: { x: number; y: number }[] = [];
-  glyphs.forEach((g, gi) =>
-    g.forEach((row, r) =>
-      [...row].forEach((bit, c) => {
-        if (bit === "1") dots.push({ x: ox + (gi * 6 + c + 0.5) * cell, y: oy + (r + 0.5) * cell });
-      }),
-    ),
-  );
+  // Dense doodle wallpaper behind everything (4x4 small doodles, turned and sized by the seed)
+  const r = rng(h);
+  const wallpaper = Array.from({ length: 16 }, (_, i) => ({
+    d: DOODLES[Math.floor(r() * DOODLES.length)],
+    x: (i % 4) * 25 - 2 + r() * 6,
+    y: Math.floor(i / 4) * 25 - 2 + r() * 6,
+    rot: Math.round(r() * 60 - 30),
+  }));
 
-  // Doodle wallpaper: a 3x3 grid of small symbols, rotated and picked by the seed
-  const doodles = Array.from({ length: 9 }, (_, i) => {
-    const v = hash(key + i);
-    return { d: DOODLES[v % DOODLES.length], x: (i % 3) * 36 - 4 + (v % 7), y: Math.floor(i / 3) * 36 - 4 + ((v >> 3) % 7), r: (v % 8) * 45 };
-  });
+  let foreground: React.ReactNode;
+  if (kind === "assistant") {
+    foreground = <g fill={sc.fg}>{dotGrid(BUBBLE, 58).map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={p.r} />)}</g>;
+  } else if (text) {
+    // Initials: glyphs side by side with one blank column between
+    const glyphs = text.split("").map((ch) => GLYPHS[ch]).filter(Boolean);
+    const rows = Array.from({ length: 7 }, (_, row) => glyphs.map((g) => g[row]).join("0"));
+    foreground = <g fill={sc.fg}>{dotGrid(rows, 62).map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={p.r} />)}</g>;
+  } else {
+    const ch = CHARACTERS[hash(`${key}:character`) % CHARACTERS.length];
+    foreground = (
+      <g>
+        <path d={ch.d} fill={sc.bg} stroke={sc.fg} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+        {ch.dots.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="3" fill={sc.fg} />)}
+      </g>
+    );
+  }
 
   return (
     <svg
@@ -116,29 +143,16 @@ export function Avatar({
       height={size}
       viewBox="0 0 100 100"
       role="img"
-      aria-label={label ?? (text && name ? `${name}'s avatar` : "Anonymous donor")}
+      aria-label={label ?? (kind === "assistant" ? "Giving assistant" : text && name ? `${name}'s avatar` : "Anonymous donor")}
       className="shrink-0"
     >
       <rect width="100" height="100" fill={sc.bg} />
-      <g fill="none" stroke={sc.doodle} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        {doodles.map((d, i) => (
-          <path key={i} d={d.d} transform={`translate(${d.x} ${d.y}) rotate(${d.r} 12 12) scale(1.15)`} />
-        ))}
+      <g fill="none" stroke={sc.doodle} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        {wallpaper.map((w, i) => <path key={i} d={w.d} transform={`translate(${w.x.toFixed(1)} ${w.y.toFixed(1)}) rotate(${w.rot} 12 12) scale(0.78)`} />)}
       </g>
-      {dots.length > 0 ? (
-        <g fill={sc.fg}>
-          {dots.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r={cell * 0.38} />
-          ))}
-        </g>
-      ) : (
-        // Anonymous: a single dot-matrix heart
-        <g fill={sc.fg}>
-          {["01010", "11111", "11111", "01110", "00100"].flatMap((row, r) =>
-            [...row].map((b, c) => (b === "1" ? <circle key={`${r}-${c}`} cx={35 + c * 7.5} cy={36 + r * 7.5} r={2.8} /> : null)),
-          )}
-        </g>
-      )}
+      {foreground}
+      {/* Light tiles get an edge so they don't melt into light pages */}
+      {light && <rect x="1" y="1" width="98" height="98" fill="none" stroke="#9fb8ad" strokeWidth="2" />}
     </svg>
   );
 }

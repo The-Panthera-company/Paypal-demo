@@ -12,8 +12,8 @@ export type Tone = "success" | "error" | "warning" | "info";
 
 const toneStyle: Record<Tone, { bar: string; icon: string; label: string }> = {
   success: { bar: "border-growth", icon: "M5 12l4 4 10-10", label: "Done" },
-  error: { bar: "border-danger", icon: "M12 8v5m0 3h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z", label: "Problem" },
-  warning: { bar: "border-[#b88a00]", icon: "M12 8v5m0 3h.01M12 3a9 9 0 100 18 9 9 0 000-18z", label: "Heads up" },
+  error: { bar: "border-cat-health", icon: "M12 8v5m0 3h.01M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z", label: "Problem" },
+  warning: { bar: "border-cat-education", icon: "M12 8v5m0 3h.01M12 3a9 9 0 100 18 9 9 0 000-18z", label: "Heads up" },
   info: { bar: "border-primary", icon: "M12 16v-5m0-3h.01M12 3a9 9 0 100 18 9 9 0 000-18z", label: "Note" },
 };
 
@@ -41,7 +41,7 @@ export function Banner({
 }) {
   return (
     <div role={tone === "error" ? "alert" : "status"} className={`flex gap-3 border-l-4 bg-white p-4 text-sm text-ink ${toneStyle[tone].bar} ${className}`}>
-      <span className={tone === "error" ? "text-danger" : tone === "success" ? "text-growth" : "text-primary"}>
+      <span className={tone === "error" ? "text-cat-health" : tone === "success" ? "text-growth" : tone === "warning" ? "text-cat-education" : "text-primary"}>
         <ToneIcon tone={tone} />
       </span>
       <div className="flex-1">
@@ -105,7 +105,7 @@ export function StatusProvider({ children }: { children: React.ReactNode }) {
     <Ctx.Provider value={notify}>
       {children}
       {offline && (
-        <div role="alert" className="fixed inset-x-0 top-0 z-[60] bg-danger px-4 py-2 text-center text-sm font-medium text-white">
+        <div role="alert" className="fixed inset-x-0 top-0 z-[60] bg-cat-health px-4 py-2 text-center text-sm font-medium text-white">
           You&apos;re offline. Nothing will be charged; we&apos;ll reconnect when your internet is back.
         </div>
       )}
@@ -114,9 +114,9 @@ export function StatusProvider({ children }: { children: React.ReactNode }) {
           <div
             key={t.id}
             role={t.tone === "error" ? "alert" : "status"}
-            className={`pointer-events-auto flex w-full max-w-md animate-[toast-in_.25s_ease-out] items-start gap-3 border-l-4 bg-ink p-4 text-sm text-white shadow-[0_12px_30px_rgba(0,0,0,0.25)] sm:w-[420px] ${toneStyle[t.tone].bar}`}
+            className={`pointer-events-auto flex w-full max-w-md animate-[toast-in_.25s_ease-out] items-start gap-3 border-l-[6px] p-4 bg-ink text-sm text-white shadow-[0_12px_30px_rgba(0,0,0,0.25)] sm:w-[420px] ${toneStyle[t.tone].bar}`}
           >
-            <span className={t.tone === "error" ? "text-[#ff9a8f]" : t.tone === "success" ? "text-cobalt-green" : "text-accent"}>
+            <span className={t.tone === "success" ? "text-cobalt-green" : t.tone === "error" ? "text-white" : "text-accent"}>
               <ToneIcon tone={t.tone} />
             </span>
             <p className="flex-1">
@@ -181,7 +181,7 @@ export function Confirm({
         <button type="button" onClick={onCancel} className="min-h-12 px-5 font-medium text-ink underline">
           {cancelLabel}
         </button>
-        <button type="button" onClick={onConfirm} className={`min-h-12 px-5 font-bold text-white ${danger ? "bg-danger" : "bg-primary"}`} autoFocus>
+        <button type="button" onClick={onConfirm} className={`min-h-12 px-5 font-bold text-white ${danger ? "bg-cat-health" : "bg-primary"}`} autoFocus>
           {confirmLabel}
         </button>
       </div>
