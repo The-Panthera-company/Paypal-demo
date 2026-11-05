@@ -3,7 +3,8 @@ import { CategoryCheckout } from "@/components/CategoryCheckout";
 import { PageTitle } from "@/components/PageTitle";
 import { getCategories, getProjects } from "@/lib/api";
 
-export const dynamic = "force-dynamic";
+// Rebuilt in the background at most every 30 s, so tab switches serve a ready page.
+export const revalidate = 30;
 
 // Category checkout (#20): give to a whole category, preview the split, exclude tags, pay with PayPal.
 export default async function GiveToCategory({ params }: { params: Promise<{ category: string }> }) {
