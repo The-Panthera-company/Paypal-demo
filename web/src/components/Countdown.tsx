@@ -14,7 +14,7 @@ const parts = (ms: number) => {
 
 // Time left in the matching round (from the round's end date). Screen readers get one sentence,
 // not a number that changes every second.
-export function Countdown({ endsAt, label = "Matching round closes in", small = false }: { endsAt: string; label?: string; small?: boolean }) {
+export function Countdown({ endsAt, label = "Matching round closes in", small = false, onDark = !small }: { endsAt: string; label?: string; small?: boolean; onDark?: boolean }) {
   const end = new Date(endsAt).getTime();
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
@@ -27,7 +27,7 @@ export function Countdown({ endsAt, label = "Matching round closes in", small = 
 
   return (
     <div>
-      <p className={`mb-3 font-medium ${small ? "text-sm text-ink" : "text-white"}`}>{label}</p>
+      <p className={`mb-3 font-medium ${small ? "text-sm" : ""} ${onDark ? "text-white" : "text-ink"}`}>{label}</p>
       <p className="sr-only">
         {label} about {days} days.
       </p>
@@ -41,7 +41,7 @@ export function Countdown({ endsAt, label = "Matching round closes in", small = 
             >
               {now === null ? "--" : String(v).padStart(2, "0")}
             </span>
-            <span className={`mt-2 block text-[11px] font-bold uppercase tracking-wider ${small ? "text-ink" : "text-white"}`}>{l}</span>
+            <span className={`mt-2 block text-[11px] font-bold uppercase tracking-wider ${onDark ? "text-white" : "text-ink"}`}>{l}</span>
           </div>
         ))}
       </div>

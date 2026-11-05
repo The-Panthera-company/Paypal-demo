@@ -30,6 +30,11 @@ export type Project = {
   status: ProjectStatus;
   /** ISO date the current round of funding ends */
   endsAt: string;
+  /** When an admin verified the project (ISO), if known */
+  verifiedAt?: string;
+  /** This round's projected matching for the project */
+  projectedMatch?: Money;
+  matchingFrozen?: boolean;
   /** Funding tranches, released only with evidence (project page only) */
   milestones?: Milestone[];
 };
