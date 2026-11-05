@@ -27,6 +27,14 @@ MUTATING_TOOLS = {
     "log_decision",
 }
 
+# Tools that always answer with a list. The decision is made here, by tool name, never by
+# counting content blocks: "0 blocks -> []" and "1 block -> [one item]" would otherwise be
+# indistinguishable from an object tool's empty/unary answer.
+LIST_TOOLS = {
+    "search_projects",
+    "list_active_mandates",
+}
+
 WAKE_TIMEOUT_SECONDS = 120
 
 
@@ -45,9 +53,9 @@ class FakeMcpClient:
         self.calls.append((tool, args))
         if tool in self.responses:
             value = self.responses[tool]
-            # Queued responses use the same {"result": ...} envelope the real client unwraps,
+            # Queued responses go through the same per-tool shape rule as the real client,
             # so tests exercise the identical path.
-            return _normalize(value(args) if callable(value) else value)
+            return _coerce_shape(tool, value(args) if callable(value) else value)
         defaults: dict[str, Any] = {
             "list_active_mandates": [],
             "search_projects": [],
@@ -59,7 +67,7 @@ class FakeMcpClient:
             "request_milestone_payout": {"status": "held"},
             "log_decision": {"id": 1},
         }
-        return _normalize(defaults.get(tool, {}))
+        return _coerce_shape(tool, defaults.get(tool, {}))
 
     async def aclose(self) -> None:
         return None
@@ -130,7 +138,7 @@ class McpClient:
                 result = await asyncio.wait_for(
                     session.call_tool(tool, arguments=args), timeout=WAKE_TIMEOUT_SECONDS
                 )
-                return _unwrap(result)
+                return _unwrap(result, tool)
             except asyncio.TimeoutError as exc:  # Render wake-up
                 last = exc
                 log.warning("MCP call %s timed out, retrying", tool)
@@ -155,23 +163,58 @@ def _normalize(value: Any) -> Any:
     return value
 
 
-def _unwrap(result: Any) -> Any:
-    """MCP returns content blocks; the server always answers with one JSON text block."""
+def _coerce_shape(tool: str, value: Any) -> Any:
+    """Apply the per-tool shape rule to an already-decoded value.
+
+    List tools always get a list; object tools always get a dict (or None). Used by
+    FakeMcpClient so tests and the real client agree on shape.
+    """
+    value = _normalize(value)
+    if tool in LIST_TOOLS:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+    return value
+
+
+def _unwrap(result: Any, tool: str | None = None) -> Any:
+    """MCP returns content blocks; the server answers with one JSON text block per item.
+
+    Shape is decided by the tool name (LIST_TOOLS), not by counting blocks: a list tool
+    must return a list even for 0 or 1 results, and an object tool must return a dict.
+    """
     if getattr(result, "isError", False):
         texts = [getattr(c, "text", "") for c in getattr(result, "content", [])]
         raise McpUnavailable("; ".join(t for t in texts if t) or "MCP tool error")
     content = getattr(result, "content", None)
     if content is None:
         return _normalize(getattr(result, "structuredContent", None))
+
+    # mcp 2.x emits ONE content block per list item, so a 3-item search_projects
+    # answer arrives as 3 blocks. Parsing only the first silently dropped the rest.
+    parsed: list[Any] = []
     for block in content:
         text = getattr(block, "text", None)
         if text is None:
             continue
         try:
-            return _normalize(json.loads(text))
+            parsed.append(json.loads(text))
         except ValueError:
-            return text
-    return None
+            parsed.append(text)
+
+    items = [_normalize(item) for item in parsed]
+    if tool in LIST_TOOLS:
+        # A single block may still carry the whole list; anything else is one item.
+        if len(items) == 1 and isinstance(items[0], list):
+            return items[0]
+        return items
+    if not items:
+        return None
+    if len(items) == 1:
+        return items[0]
+    return items
 
 
 def build_client(cfg: Settings | None = None) -> Any:
