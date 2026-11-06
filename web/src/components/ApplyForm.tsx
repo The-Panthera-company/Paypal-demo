@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { saveOwner } from "@/lib/owner-tokens";
 import { Banner, notify } from "./Status";
 
@@ -16,7 +16,18 @@ const MESSAGES: Record<string, string> = {
 };
 
 // Apply for funding: POST /projects. The project stays hidden until an admin verifies it.
-export function ApplyForm({ categories }: { categories: { apiId: number; name: string }[] }) {
+export function ApplyForm({ categories: initial }: { categories: { apiId: number; name: string }[] }) {
+  const [categories, setCategories] = useState(initial);
+  useEffect(() => {
+    if (initial.length || !API_URL) return;
+    fetch(`${API_URL}/categories`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { id: number; name: string }[]) => {
+        setCategories(rows.map((c) => ({ apiId: c.id, name: c.name })));
+        setF((f) => (f.category_id ? f : { ...f, category_id: String(rows[0]?.id ?? "") }));
+      })
+      .catch(() => undefined);
+  }, [initial]);
   const [f, setF] = useState({ title: "", facilitator: "", summary: "", category_id: String(categories[0]?.apiId ?? ""), goal: "", cause: "", group: "", region: "", hide: false, urgency: "3", tags: "", email: "" });
   const [rows, setRows] = useState<Row[]>([{ title: "", dollars: "", due: "" }]);
   const [busy, setBusy] = useState(false);

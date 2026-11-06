@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from "next/cache";
 // One place for every call to the core API (Person 1, api/openapi.json).
 // With NEXT_PUBLIC_API_URL unset, the app uses local mock data. Set it to the API URL
 // (http://localhost:8000 locally, the Render URL when deployed) and the adapters below
@@ -24,15 +25,29 @@ export class ApiError extends Error {
  * GET with a time limit and one retry. Render's free API sleeps after 15 minutes idle and the
  * first request while it wakes can fail; one retry 2 s later usually lands.
  */
+const BUILDING = process.env.NEXT_PHASE === "phase-production-build";
+
+/**
+ * During `next build` a page is pre-rendered once. If the API is slow or asleep (Render), a failed
+ * call would fail the whole deploy. Instead the page opts out of pre-rendering (noStore marks it
+ * dynamic) and is rendered on the first visit. Outside the build this does nothing.
+ */
+function bailOutOfBuild() {
+  if (BUILDING) noStore();
+}
+
 async function get<T>(path: string, revalidate = 30): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
-      const res = await fetch(`${API_URL}${path}`, { next: { revalidate }, signal: AbortSignal.timeout(25_000) });
+      const res = await fetch(`${API_URL}${path}`, { next: { revalidate }, signal: AbortSignal.timeout(BUILDING ? 10_000 : 25_000) });
       if (res.status >= 400 && res.status < 500) throw new ApiError(res.status, path);
       if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
       return (await res.json()) as T;
     } catch (e) {
-      if (e instanceof ApiError || attempt >= 1) throw e;
+      if (e instanceof ApiError || attempt >= 1) {
+        bailOutOfBuild();
+        throw e;
+      }
       await new Promise((r) => setTimeout(r, 2000));
     }
   }
@@ -40,7 +55,10 @@ async function get<T>(path: string, revalidate = 30): Promise<T> {
 
 /** Like get(), but routes Person 1 hasn't built yet (X-Stub header = example data) count as empty */
 async function getBuilt<T>(path: string, empty: T): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { next: { revalidate: 30 } });
+  const res = await fetch(`${API_URL}${path}`, { next: { revalidate: 30 } }).catch((e) => {
+    bailOutOfBuild();
+    throw e;
+  });
   if (!res.ok || res.headers.has("x-stub")) return empty;
   return res.json() as Promise<T>;
 }

@@ -2,10 +2,12 @@ import { ApplyForm } from "@/components/ApplyForm";
 import { PageTitle } from "@/components/PageTitle";
 import { getCategories } from "@/lib/api";
 
-export const revalidate = 300;
+// Rendered per request, never at build time: a slow API (Render waking up) once timed out the
+// build here. If the categories can't be read, the form loads them itself in the browser.
+export const dynamic = "force-dynamic";
 
 export default async function ApplyPage() {
-  const categories = (await getCategories()).filter((c) => c.apiId !== undefined).map((c) => ({ apiId: c.apiId!, name: c.name }));
+  const categories = (await getCategories().catch(() => [])).filter((c) => c.apiId !== undefined).map((c) => ({ apiId: c.apiId!, name: c.name }));
   return (
     <>
       <PageTitle title="Apply for funding" crumb="Apply" />
