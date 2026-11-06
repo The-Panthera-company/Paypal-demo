@@ -11,6 +11,8 @@ import logging
 from collections import defaultdict, deque
 from time import monotonic
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -18,6 +20,8 @@ from pydantic import BaseModel, Field
 from .agents.discovery import DiscoveryAgent
 from .agents.giving import GivingAgent
 from .config import settings
+from .llm import build_llm
+from .mcp_client import McpClient, build_client
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -26,7 +30,7 @@ MAX_MESSAGE = 1000
 RATE_LIMIT = 30
 RATE_WINDOW = 60.0
 
-app = FastAPI(title="Community Giving agents", version="0.1.0")
+app = FastAPI(title="Community Giving agents", version="0.1.0", lifespan=lifespan)
 
 cfg = settings()
 app.add_middleware(
@@ -36,18 +40,66 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+_shared_mcp: McpClient | None = None
+
+
+def shared_mcp() -> McpClient:
+    """One long-lived MCP client for the whole app.
+
+    McpClient reconnects internally when a call fails (call() retries once after _reset()),
+    so a dead subprocess heals on the next request without a new client per request.
+    Per-call timeouts live in McpClient.call, unchanged.
+    """
+    global _shared_mcp
+    if _shared_mcp is None:
+        client = build_client(cfg)
+        if not isinstance(client, McpClient):
+            raise HTTPException(status_code=503, detail="chat needs the real MCP client")
+        _shared_mcp = client
+    return _shared_mcp
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Warm the MCP subprocess at startup so the first chat does not pay for it."""
+    try:
+        client = shared_mcp()
+        await client.session()
+    except Exception as exc:  # the service still serves /health and retries per request
+        log.warning("MCP warm-up failed: %s", exc)
+    yield
+    global _shared_mcp
+    if _shared_mcp is not None:
+        await _shared_mcp.aclose()
+        _shared_mcp = None
+
+
 _hits: dict[str, deque] = defaultdict(deque)
 
 
-def _rate_limit(request: Request) -> None:
-    ip = request.client.host if request.client else "unknown"
-    now = monotonic()
-    bucket = _hits[ip]
-    while bucket and now - bucket[0] > RATE_WINDOW:
+def client_key(request: Request) -> str:
+    """First X-Forwarded-For address when present, else the socket peer.
+
+    Behind Render every request shares the proxy IP, so the header is the only per-client
+    signal available. It is client-controlled; that is acceptable for a rate limit and is
+    never used for authentication.
+    """
+    forwarded = request.headers.get("x-forwarded-for") or ""
+    first = forwarded.split(",")[0].strip()
+    if first:
+        return first
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limit(request: Request, now: float | None = None) -> None:
+    """Counts every request, including the ones it rejects, before any work is done."""
+    stamp = monotonic() if now is None else now
+    bucket = _hits[client_key(request)]
+    while bucket and stamp - bucket[0] > RATE_WINDOW:
         bucket.popleft()
-    if len(bucket) >= RATE_LIMIT:
+    bucket.append(stamp)
+    if len(bucket) > cfg.rate_limit_per_min:
         raise HTTPException(status_code=429, detail="too many requests")
-    bucket.append(now)
 
 
 def _require_token(token: str | None) -> None:
@@ -77,15 +129,15 @@ async def health() -> dict:
 
 
 async def _chat(body: ChatIn, request: Request) -> dict:
+    # Before any work: a rejected request still costs a slot.
     _rate_limit(request)
     message = (body.message or "").strip()
+    # Pydantic's max_length already rejects longer bodies with 422; this catches
+    # whitespace-padded input that only exceeds the cap once trimmed.
     if len(message) > MAX_MESSAGE:
         raise HTTPException(status_code=422, detail="message too long")
-    agent = DiscoveryAgent()
-    try:
-        return await agent.chat(message)
-    finally:
-        await agent.mcp.aclose()
+    agent = DiscoveryAgent(mcp=shared_mcp(), llm=build_llm(cfg))
+    return await agent.chat(message)
 
 
 @app.post("/agents/discovery/chat")

@@ -33,6 +33,9 @@ class Settings(BaseSettings):
 
     web_origin: str = "http://localhost:3000"
 
+    # Chat rate limit, per client per minute. Every request counts, including rejected ones.
+    rate_limit_per_min: int = 30
+
     # Off by default: the scheduler must be opted into explicitly.
     scheduler_enabled: bool = False
 
