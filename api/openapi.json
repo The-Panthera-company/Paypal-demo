@@ -5899,6 +5899,371 @@
         "description": "Public PayPal settings for the website: client id, currency, environment and donation limits."
       }
     },
+    "/agents/runs": {
+      "get": {
+        "tags": [
+          "agents (public)"
+        ],
+        "summary": "List Agent Runs",
+        "description": "Newest Giving Agent runs across all mandates, with the same safe projection.",
+        "operationId": "list_agent_runs",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "description": "Most items to return.",
+              "example": 50
+            },
+            "description": "Most items to return.",
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentRunOut"
+                  },
+                  "description": "List of: A public Giving Agent run: ordered trace, chosen projects, skipped projects and the report. No donor identifiers.",
+                  "example": [
+                    {
+                      "chosen": [
+                        {
+                          "amount_cents": 500,
+                          "project_id": 1,
+                          "title": "Lanet Library"
+                        }
+                      ],
+                      "id": 7,
+                      "report_text": "I gave $5 to Lanet Library because three backers had already chosen it.",
+                      "run_at": "2026-11-06T10:00:00Z",
+                      "skipped": [
+                        {
+                          "project_id": 2,
+                          "reason": "Already backed this month",
+                          "title": "Faith School Desks"
+                        }
+                      ],
+                      "trace": [
+                        {
+                          "actor": "giving-agent",
+                          "at": "2026-11-06T10:00:00Z",
+                          "input": {
+                            "amount_cents": 500,
+                            "project_id": 1
+                          },
+                          "reason": "Three backers, 2% funded",
+                          "result": {
+                            "status": "recorded"
+                          },
+                          "rule": "ok",
+                          "seq": 1,
+                          "status": "ok",
+                          "step": "request_donation",
+                          "title": "Asked the rules engine for a $5 gift",
+                          "tool": "request_checked_donation"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "example": [
+                  {
+                    "chosen": [
+                      {
+                        "amount_cents": 500,
+                        "project_id": 1,
+                        "title": "Lanet Library"
+                      }
+                    ],
+                    "id": 7,
+                    "report_text": "I gave $5 to Lanet Library because three backers had already chosen it.",
+                    "run_at": "2026-11-06T10:00:00Z",
+                    "skipped": [
+                      {
+                        "project_id": 2,
+                        "reason": "Already backed this month",
+                        "title": "Faith School Desks"
+                      }
+                    ],
+                    "trace": [
+                      {
+                        "actor": "giving-agent",
+                        "at": "2026-11-06T10:00:00Z",
+                        "input": {
+                          "amount_cents": 500,
+                          "project_id": 1
+                        },
+                        "reason": "Three backers, 2% funded",
+                        "result": {
+                          "status": "recorded"
+                        },
+                        "rule": "ok",
+                        "seq": 1,
+                        "status": "ok",
+                        "step": "request_donation",
+                        "title": "Asked the rules engine for a $5 gift",
+                        "tool": "request_checked_donation"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agents/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "agents (public)"
+        ],
+        "summary": "Get Agent Run",
+        "description": "One Giving Agent run with its ordered trace, chosen projects and skipped projects.",
+        "operationId": "get_agent_run",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Giving Agent run id.",
+              "example": 7
+            },
+            "description": "Giving Agent run id.",
+            "example": 7
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunOut"
+                },
+                "example": {
+                  "chosen": [
+                    {
+                      "amount_cents": 500,
+                      "project_id": 1,
+                      "title": "Lanet Library"
+                    }
+                  ],
+                  "id": 7,
+                  "report_text": "I gave $5 to Lanet Library because three backers had already chosen it.",
+                  "run_at": "2026-11-06T10:00:00Z",
+                  "skipped": [
+                    {
+                      "project_id": 2,
+                      "reason": "Already backed this month",
+                      "title": "Faith School Desks"
+                    }
+                  ],
+                  "trace": [
+                    {
+                      "actor": "giving-agent",
+                      "at": "2026-11-06T10:00:00Z",
+                      "input": {
+                        "amount_cents": 500,
+                        "project_id": 1
+                      },
+                      "reason": "Three backers, 2% funded",
+                      "result": {
+                        "status": "recorded"
+                      },
+                      "rule": "ok",
+                      "seq": 1,
+                      "status": "ok",
+                      "step": "request_donation",
+                      "title": "Asked the rules engine for a $5 gift",
+                      "tool": "request_checked_donation"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No run with that id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agents/activity": {
+      "get": {
+        "tags": [
+          "agents (public)"
+        ],
+        "summary": "Agent Activity",
+        "description": "Recent agent and admin actions, newest first. Pass before_id for the next page.",
+        "operationId": "agent_activity",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "description": "Most items to return.",
+              "example": 50
+            },
+            "description": "Most items to return.",
+            "example": 50
+          },
+          {
+            "name": "before_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "nullable": true,
+              "description": "Return entries older than this audit-log id (cursor paging).",
+              "example": 100
+            },
+            "description": "Return entries older than this audit-log id (cursor paging).",
+            "example": 100
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentActivityOut"
+                  },
+                  "description": "List of: One recent agent or admin action for the public activity feed.",
+                  "example": [
+                    {
+                      "action": "checked_donation",
+                      "actor": "giving-agent",
+                      "at": "2026-11-06T10:00:05Z",
+                      "id": 42,
+                      "project_id": 1,
+                      "project_title": "Lanet Library",
+                      "run_id": 7,
+                      "status": "ok",
+                      "title": "Agent gift recorded for Lanet Library - Three backers, 2% funded"
+                    }
+                  ]
+                },
+                "example": [
+                  {
+                    "action": "checked_donation",
+                    "actor": "giving-agent",
+                    "at": "2026-11-06T10:00:05Z",
+                    "id": 42,
+                    "project_id": 1,
+                    "project_title": "Lanet Library",
+                    "run_id": 7,
+                    "status": "ok",
+                    "title": "Agent gift recorded for Lanet Library - Three backers, 2% funded"
+                  }
+                ]
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -6043,6 +6408,271 @@
         },
         "title": "ActiveMandate",
         "description": "A mandate the Giving Agent should run now, with the donor's remaining funded balance."
+      },
+      "AgentActivityOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Audit-log id; pass it as before_id to fetch older entries",
+            "example": 42
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the action was logged (UTC)",
+            "example": "2026-11-06T10:00:05Z"
+          },
+          "actor": {
+            "type": "string",
+            "description": "Who acted: giving-agent, milestone-agent, watchdog-agent or admin",
+            "example": "giving-agent"
+          },
+          "action": {
+            "type": "string",
+            "description": "What was done, e.g. checked_donation, case_opened, payout_request",
+            "example": "checked_donation"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short human sentence for the public feed",
+            "example": "Agent gift recorded for Lanet Library - Three backers, 2% funded"
+          },
+          "status": {
+            "type": "string",
+            "description": "ok, pending, blocked or error",
+            "example": "ok"
+          },
+          "rule": {
+            "type": "string",
+            "description": "The rule that fired, when the result names one",
+            "nullable": true,
+            "example": "crowd"
+          },
+          "project_id": {
+            "type": "integer",
+            "description": "Project this action concerns, when known",
+            "nullable": true,
+            "example": 1
+          },
+          "project_title": {
+            "type": "string",
+            "description": "Project title, joined for display",
+            "nullable": true,
+            "example": "Lanet Library"
+          },
+          "run_id": {
+            "type": "integer",
+            "description": "Giving Agent run this entry belongs to, when known",
+            "nullable": true,
+            "example": 7
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "at",
+          "actor",
+          "action",
+          "title",
+          "status"
+        ],
+        "example": {
+          "action": "checked_donation",
+          "actor": "giving-agent",
+          "at": "2026-11-06T10:00:05Z",
+          "id": 42,
+          "project_id": 1,
+          "project_title": "Lanet Library",
+          "run_id": 7,
+          "status": "ok",
+          "title": "Agent gift recorded for Lanet Library - Three backers, 2% funded"
+        },
+        "title": "AgentActivityOut",
+        "description": "One recent agent or admin action for the public activity feed."
+      },
+      "AgentRunChoice": {
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "description": "Project the agent chose",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "description": "Project title, joined for display",
+            "nullable": true,
+            "example": "Lanet Library"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "description": "What the agent asked the rules engine to give, in cents",
+            "example": 500
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "amount_cents"
+        ],
+        "example": {
+          "amount_cents": 500,
+          "project_id": 1,
+          "title": "Lanet Library"
+        },
+        "title": "AgentRunChoice",
+        "description": "A project the agent chose and the amount it asked the rules engine for."
+      },
+      "AgentRunOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Agent run id",
+            "example": 7
+          },
+          "run_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the run happened (UTC)",
+            "example": "2026-11-06T10:00:00Z"
+          },
+          "report_text": {
+            "type": "string",
+            "description": "The run's report for the donor",
+            "nullable": true,
+            "example": "I gave $5 to Lanet Library because three backers had already chosen it."
+          },
+          "trace": {
+            "items": {
+              "$ref": "#/components/schemas/TraceStep"
+            },
+            "type": "array",
+            "description": "Ordered steps the agent took",
+            "example": [
+              {
+                "actor": "giving-agent",
+                "at": "2026-11-06T10:00:00Z",
+                "input": {
+                  "amount_cents": 500,
+                  "project_id": 1
+                },
+                "reason": "Three backers, 2% funded",
+                "result": {
+                  "status": "recorded"
+                },
+                "rule": "ok",
+                "seq": 1,
+                "status": "ok",
+                "step": "request_donation",
+                "title": "Asked the rules engine for a $5 gift",
+                "tool": "request_checked_donation"
+              }
+            ]
+          },
+          "chosen": {
+            "items": {
+              "$ref": "#/components/schemas/AgentRunChoice"
+            },
+            "type": "array",
+            "description": "Projects the agent chose and the amounts it asked for",
+            "example": [
+              {
+                "amount_cents": 500,
+                "project_id": 1,
+                "title": "Lanet Library"
+              }
+            ]
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/AgentRunSkip"
+            },
+            "type": "array",
+            "description": "Projects the agent left out, with reasons",
+            "example": [
+              {
+                "project_id": 2,
+                "reason": "Already backed this month",
+                "title": "Faith School Desks"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "run_at"
+        ],
+        "example": {
+          "chosen": [
+            {
+              "amount_cents": 500,
+              "project_id": 1,
+              "title": "Lanet Library"
+            }
+          ],
+          "id": 7,
+          "report_text": "I gave $5 to Lanet Library because three backers had already chosen it.",
+          "run_at": "2026-11-06T10:00:00Z",
+          "skipped": [
+            {
+              "project_id": 2,
+              "reason": "Already backed this month",
+              "title": "Faith School Desks"
+            }
+          ],
+          "trace": [
+            {
+              "actor": "giving-agent",
+              "at": "2026-11-06T10:00:00Z",
+              "input": {
+                "amount_cents": 500,
+                "project_id": 1
+              },
+              "reason": "Three backers, 2% funded",
+              "result": {
+                "status": "recorded"
+              },
+              "rule": "ok",
+              "seq": 1,
+              "status": "ok",
+              "step": "request_donation",
+              "title": "Asked the rules engine for a $5 gift",
+              "tool": "request_checked_donation"
+            }
+          ]
+        },
+        "title": "AgentRunOut",
+        "description": "A public Giving Agent run: ordered trace, chosen projects, skipped projects and the report. No donor identifiers."
+      },
+      "AgentRunSkip": {
+        "properties": {
+          "project_id": {
+            "type": "integer",
+            "description": "Project the agent left out, when the decision names one",
+            "nullable": true,
+            "example": 2
+          },
+          "title": {
+            "type": "string",
+            "description": "Project title, joined for display",
+            "nullable": true,
+            "example": "Faith School Desks"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why the agent skipped it",
+            "nullable": true,
+            "example": "Already backed this month"
+          }
+        },
+        "type": "object",
+        "example": {
+          "project_id": 2,
+          "reason": "Already backed this month",
+          "title": "Faith School Desks"
+        },
+        "title": "AgentRunSkip",
+        "description": "A project the agent left out, with the reason."
       },
       "Allocation": {
         "properties": {
@@ -10187,6 +10817,108 @@
         "description": "PROJECT: one project; CATEGORY: split across a category's projects; AGENT: a Giving Agent gift (with project) or budget top-up (without).",
         "example": "PROJECT"
       },
+      "TraceStep": {
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "description": "Order of the step in the run; the API returns steps sorted by it",
+            "example": 1
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the step happened (UTC), when the agent recorded it",
+            "nullable": true,
+            "example": "2026-11-06T10:00:00Z"
+          },
+          "actor": {
+            "type": "string",
+            "description": "Agent that took the step, e.g. giving-agent",
+            "nullable": true,
+            "example": "giving-agent"
+          },
+          "step": {
+            "type": "string",
+            "description": "Machine-readable step name, e.g. score or request_donation",
+            "example": "request_donation"
+          },
+          "tool": {
+            "type": "string",
+            "description": "Tool the agent called, e.g. search_projects, when it called one",
+            "nullable": true,
+            "example": "request_checked_donation"
+          },
+          "status": {
+            "type": "string",
+            "description": "ok, skipped, blocked or error",
+            "default": "ok",
+            "example": "ok"
+          },
+          "title": {
+            "type": "string",
+            "description": "One line describing what happened, safe to show on the public page",
+            "example": "Asked the rules engine for a $5 gift"
+          },
+          "input": {
+            "description": "Safe summary of what the step saw; donor and payer fields are removed",
+            "example": {
+              "amount_cents": 500,
+              "project_id": 1
+            }
+          },
+          "result": {
+            "description": "Safe summary of what the step returned; donor and payer fields are removed",
+            "example": {
+              "status": "recorded"
+            }
+          },
+          "rule": {
+            "type": "string",
+            "description": "The rule that decided the step, when one did",
+            "nullable": true,
+            "example": "ok"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why, in plain words",
+            "nullable": true,
+            "example": "Three backers, 2% funded"
+          },
+          "ref": {
+            "additionalProperties": true,
+            "type": "object",
+            "description": "Optional pointer to a project, run or case",
+            "nullable": true,
+            "example": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "seq",
+          "step",
+          "title"
+        ],
+        "example": {
+          "actor": "giving-agent",
+          "at": "2026-11-06T10:00:00Z",
+          "input": {
+            "amount_cents": 500,
+            "project_id": 1
+          },
+          "reason": "Three backers, 2% funded",
+          "result": {
+            "status": "recorded"
+          },
+          "rule": "ok",
+          "seq": 1,
+          "status": "ok",
+          "step": "request_donation",
+          "title": "Asked the rules engine for a $5 gift",
+          "tool": "request_checked_donation"
+        },
+        "title": "TraceStep",
+        "description": "One step an agent took: the tool it called, the rule result and a short reason. No prompts and no donor identifiers."
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -10447,6 +11179,10 @@
     {
       "name": "internal (agents)",
       "description": "For the agent service only: every money action is re-checked here. Bearer INTERNAL_TOKEN."
+    },
+    {
+      "name": "agents (public)",
+      "description": "Public, read-only trace of what the agents did: runs, ordered steps and the activity feed. No auth; donor and payer identifiers never leave the API."
     },
     {
       "name": "webhooks",

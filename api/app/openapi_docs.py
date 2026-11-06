@@ -18,6 +18,7 @@ TAGS = [
     {"name": "rounds", "description": "Matching rounds and the leaderboard (projected while open, final after close)."},
     {"name": "admin", "description": "Admin console: verification, Watchdog cases, milestones, payouts, round close, reconciliation, logs. Bearer ADMIN_TOKEN."},
     {"name": "internal (agents)", "description": "For the agent service only: every money action is re-checked here. Bearer INTERNAL_TOKEN."},
+    {"name": "agents (public)", "description": "Public, read-only trace of what the agents did: runs, ordered steps and the activity feed. No auth; donor and payer identifiers never leave the API."},
     {"name": "webhooks", "description": "PayPal calls these; authenticated by PayPal's signature, not a token."},
     {"name": "paypal", "description": "Public PayPal settings for the website's JS SDK, and the sandbox test checkout."},
     {"name": "system", "description": "Service health, for uptime checks and waking the free Render instance."},
@@ -115,6 +116,11 @@ SCHEMAS = {
     "RoundUpdateIn": "Changes to a scheduled or open round; fields left out stay as they are.",
     "SponsorOut": "One contribution to a round's matching pool.",
     "SponsorsOut": "Who added to a round's matching pool, largest first.",
+    "TraceStep": "One step an agent took: the tool it called, the rule result and a short reason. No prompts and no donor identifiers.",
+    "AgentRunChoice": "A project the agent chose and the amount it asked the rules engine for.",
+    "AgentRunSkip": "A project the agent left out, with the reason.",
+    "AgentRunOut": "A public Giving Agent run: ordered trace, chosen projects, skipped projects and the report. No donor identifiers.",
+    "AgentActivityOut": "One recent agent or admin action for the public activity feed.",
 }
 
 # --- fields: by name, with per-schema wording where a name means different things ------------
@@ -346,6 +352,8 @@ PARAMS = {
     "status": "Only items in this status.",
     "actor": "Only entries by this actor, e.g. giving-agent.",
     "early": "Close before the round's end time.",
+    "run_id": "Giving Agent run id.",
+    "before_id": "Return entries older than this audit-log id (cursor paging).",
 }
 
 # --- examples for schemas that have none ------------------------------------------------------
@@ -443,6 +451,9 @@ OPERATIONS = {
     "get_payout_account": "The PayPal email a project's tranches are paid to.",
     "paypal_config": "Public PayPal settings for the website: client id, currency, environment and donation limits.",
     "health": "Returns ok when the API is up. Use it to wake the free Render instance before a demo.",
+    "list_agent_runs": "Newest Giving Agent runs across all mandates, with the same safe projection. Public: no auth and no donor identifiers.",
+    "get_agent_run": "One Giving Agent run with its ordered trace, chosen projects and skipped projects. 404 when the run is unknown. Public: no auth and no donor identifiers.",
+    "agent_activity": "Recent agent and admin actions for the public activity feed, newest first. Pass before_id to page. No raw inputs and no donor identifiers.",
 }
 
 PARAM_EXAMPLES = {
@@ -450,6 +461,7 @@ PARAM_EXAMPLES = {
     "exclude_tags": "faith-based,stem", "q": "library", "sort": "urgency", "limit": 50, "offset": 0,
     "project_id": 1, "donation_id": 4, "donor_id": 1, "order_id": "8E825560D88497210", "payout_id": 1,
     "round_id": 1, "milestone_id": 7, "case_id": 2, "actor": "giving-agent", "early": True,
+    "run_id": 7, "before_id": 100,
 }
 
 # Literal fields become named enums (APIMatic flags inline enums); same values share one name.

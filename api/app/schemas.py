@@ -5,7 +5,7 @@ Each response model carries an example so the Postman mock returns realistic dat
 """
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -960,3 +960,115 @@ class OwnerTokenOut(BaseModel):
     model_config = _example({"project_id": 1, "owner_token": "q3bX0n2R9w-example-token-k1"})
     project_id: int
     owner_token: str = Field(description="Shown once: the project's new X-Project-Token")
+
+
+# --- Public agent trace: safe, read-only views ------------------------------------------------
+
+
+class TraceStep(BaseModel):
+    model_config = _example(
+        {
+            "seq": 1,
+            "at": "2026-11-06T10:00:00Z",
+            "actor": "giving-agent",
+            "step": "request_donation",
+            "tool": "request_checked_donation",
+            "status": "ok",
+            "title": "Asked the rules engine for a $5 gift",
+            "input": {"project_id": 1, "amount_cents": 500},
+            "result": {"status": "recorded"},
+            "rule": "ok",
+            "reason": "Three backers, 2% funded",
+        }
+    )
+
+    seq: int = Field(description="Order of the step in the run; the API returns steps sorted by it")
+    at: datetime | None = Field(None, description="When the step happened (UTC), when the agent recorded it")
+    actor: str | None = Field(None, description="Agent that took the step, e.g. giving-agent")
+    step: str = Field(description="Machine-readable step name, e.g. score or request_donation")
+    tool: str | None = Field(None, description="Tool the agent called, e.g. search_projects, when it called one")
+    status: str = Field("ok", description="ok, skipped, blocked or error")
+    title: str = Field(description="One line describing what happened, safe to show on the public page")
+    input: Any = Field(None, description="Safe summary of what the step saw; donor and payer fields are removed")
+    result: Any = Field(None, description="Safe summary of what the step returned; donor and payer fields are removed")
+    rule: str | None = Field(None, description="The rule that decided the step, when one did")
+    reason: str | None = Field(None, description="Why, in plain words")
+    ref: dict | None = Field(None, description="Optional pointer to a project, run or case")
+
+
+class AgentRunChoice(BaseModel):
+    model_config = _example({"project_id": 1, "title": "Lanet Library", "amount_cents": 500})
+
+    project_id: int = Field(description="Project the agent chose")
+    title: str | None = Field(None, description="Project title, joined for display")
+    amount_cents: int = Field(description="What the agent asked the rules engine to give, in cents")
+
+
+class AgentRunSkip(BaseModel):
+    model_config = _example({"project_id": 2, "title": "Faith School Desks", "reason": "Already backed this month"})
+
+    project_id: int | None = Field(None, description="Project the agent left out, when the decision names one")
+    title: str | None = Field(None, description="Project title, joined for display")
+    reason: str | None = Field(None, description="Why the agent skipped it")
+
+
+class AgentRunOut(BaseModel):
+    model_config = _example(
+        {
+            "id": 7,
+            "run_at": "2026-11-06T10:00:00Z",
+            "report_text": "I gave $5 to Lanet Library because three backers had already chosen it.",
+            "trace": [
+                {
+                    "seq": 1,
+                    "at": "2026-11-06T10:00:00Z",
+                    "actor": "giving-agent",
+                    "step": "request_donation",
+                    "tool": "request_checked_donation",
+                    "status": "ok",
+                    "title": "Asked the rules engine for a $5 gift",
+                    "input": {"project_id": 1, "amount_cents": 500},
+                    "result": {"status": "recorded"},
+                    "rule": "ok",
+                    "reason": "Three backers, 2% funded",
+                }
+            ],
+            "chosen": [{"project_id": 1, "title": "Lanet Library", "amount_cents": 500}],
+            "skipped": [{"project_id": 2, "title": "Faith School Desks", "reason": "Already backed this month"}],
+        }
+    )
+
+    id: int = Field(description="Agent run id")
+    run_at: datetime = Field(description="When the run happened (UTC)")
+    report_text: str | None = Field(None, description="The run's report for the donor")
+    trace: list[TraceStep] = Field(default_factory=list, description="Ordered steps the agent took")
+    chosen: list[AgentRunChoice] = Field(default_factory=list, description="Projects the agent chose and the amounts it asked for")
+    skipped: list[AgentRunSkip] = Field(default_factory=list, description="Projects the agent left out, with reasons")
+
+
+class AgentActivityOut(BaseModel):
+    model_config = _example(
+        {
+            "id": 42,
+            "at": "2026-11-06T10:00:05Z",
+            "actor": "giving-agent",
+            "action": "checked_donation",
+            "title": "Agent gift recorded for Lanet Library - Three backers, 2% funded",
+            "status": "ok",
+            "rule": None,
+            "project_id": 1,
+            "project_title": "Lanet Library",
+            "run_id": 7,
+        }
+    )
+
+    id: int = Field(description="Audit-log id; pass it as before_id to fetch older entries")
+    at: datetime = Field(description="When the action was logged (UTC)")
+    actor: str = Field(description="Who acted: giving-agent, milestone-agent, watchdog-agent or admin")
+    action: str = Field(description="What was done, e.g. checked_donation, case_opened, payout_request")
+    title: str = Field(description="Short human sentence for the public feed")
+    status: str = Field(description="ok, pending, blocked or error")
+    rule: str | None = Field(None, description="The rule that fired, when the result names one")
+    project_id: int | None = Field(None, description="Project this action concerns, when known")
+    project_title: str | None = Field(None, description="Project title, joined for display")
+    run_id: int | None = Field(None, description="Giving Agent run this entry belongs to, when known")
