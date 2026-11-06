@@ -9,7 +9,7 @@ from app import projections
 from app.config import get_settings
 from app.db import create_schema, engine
 from app.openapi_docs import document
-from app.routers import admin, catalogue, donations, donors, internal, paypal_config, rounds, webhooks
+from app.routers import admin, agent_public, catalogue, donations, donors, internal, paypal_config, rounds, webhooks
 from app.stubs import Planned, planned_handler
 
 DESCRIPTION = """
@@ -48,7 +48,7 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Stub"],
 )
-for module in (catalogue, donations, donors, rounds, admin, internal, webhooks, paypal_config):
+for module in (catalogue, donations, donors, rounds, admin, internal, webhooks, paypal_config, agent_public):
     app.include_router(module.router)
 
 
