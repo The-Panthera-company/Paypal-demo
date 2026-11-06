@@ -126,9 +126,10 @@ async def main() -> int:
                 continue
             stories = await core.stories(int(project["id"]))
             history = await core.funding_history(int(project["id"]))
-            score, factors = score_project(project, weights, bool(stories),
-                                           days_since_last_funding(history))
-            candidates.append({"project": project, "score": score, "factors": factors})
+            days = days_since_last_funding(history)
+            score, factors = score_project(project, weights, bool(stories), days)
+            candidates.append({"project": project, "score": score, "factors": factors,
+                               "days": days})
 
         candidates.sort(key=lambda c: (-c["score"], int(c["project"]["id"])))
 
@@ -157,7 +158,7 @@ async def main() -> int:
                                 "reason": "no_room" if room <= 0 else "budget_exhausted"})
                 continue
             chosen.append({"project": p, "amount": int(amount), "score": cand["score"],
-                           "factors": cand["factors"]})
+                           "factors": cand["factors"], "days": cand["days"]})
             remaining -= int(amount)
             balance -= int(amount)
 
@@ -186,7 +187,7 @@ async def main() -> int:
             "planned": [
                 {"title": c["project"].get("title"), "amount_cents": c["amount"],
                  "reason": reason_for(c["project"], c["factors"]),
-                 "why": reason_detail(c["project"], c["factors"])}
+                 "why": reason_detail(c["project"], c["factors"], c.get("days"))}
                 for c in chosen
             ],
             "skipped": skipped[:10],

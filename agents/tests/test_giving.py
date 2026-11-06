@@ -9,6 +9,7 @@ from app.agents.giving import (
     days_since_last_funding,
     merge_weights,
     passes_hard_filters,
+    reason_detail,
     reason_for,
     score_project,
 )
@@ -247,3 +248,117 @@ def test_reason_mentions_backers_and_progress():
     _, factors = score_project(project(1, backer_count=4, raised_cents=60000), WEIGHTS, True, None)
     text = reason_for(project(1, backer_count=4, raised_cents=60000), factors)
     assert "4 backers" in text and "60% funded" in text and "receipts" in text
+
+
+# --- days_since_last_funding: 0, 1 and 2+ points ------------------------------
+
+
+def _point(date_str, raised):
+    return {"date": date_str, "raised_cents": raised}
+
+
+def test_days_no_points_returns_none():
+    assert days_since_last_funding([]) is None
+
+
+def test_days_ignores_non_dict_points():
+    assert days_since_last_funding(["junk", 42]) is None
+
+
+def test_days_single_point_above_zero_counts_as_a_raise():
+    # The API only writes a point once money arrives, so one point means funded once.
+    days = days_since_last_funding([_point("2026-10-17T00:00:00Z", 5000)])
+    assert days is not None
+    assert 19.0 <= days <= 21.0
+
+
+def test_days_single_point_at_zero_is_never_funded():
+    assert days_since_last_funding([_point("2026-10-17T00:00:00Z", 0)]) is None
+
+
+def test_days_multi_point_uses_latest_increase():
+    history = [
+        _point("2026-01-01T00:00:00Z", 1000),
+        _point("2026-10-17T00:00:00Z", 5000),
+        _point("2026-10-20T00:00:00Z", 5000),  # flat, not a raise
+    ]
+    days = days_since_last_funding(history)
+    assert days is not None
+    assert 19.0 <= days <= 21.0
+
+
+def test_days_multi_point_flat_history_is_never_funded():
+    history = [_point("2026-01-01T00:00:00Z", 0), _point("2026-02-01T00:00:00Z", 0)]
+    assert days_since_last_funding(history) is None
+
+
+def test_days_unparseable_date_logs_and_returns_none(caplog):
+    import logging
+
+    with caplog.at_level(logging.WARNING, logger="app.agents.giving"):
+        days = days_since_last_funding([_point("not-a-date", 5000)])
+    assert days is None
+    assert any("unparseable" in r.message for r in caplog.records)
+
+
+# --- reason_detail wording ----------------------------------------------------
+
+
+def _factors():
+    _, factors = score_project(project(1), WEIGHTS, False, None)
+    return factors
+
+
+def test_reason_detail_zero_backers():
+    text = reason_detail(project(1, backer_count=0), _factors(), None)
+    assert "0 backers" in text
+
+
+def test_reason_detail_one_backer_is_singular():
+    text = reason_detail(project(1, backer_count=1), _factors(), None)
+    assert "1 backer," in text
+
+
+def test_reason_detail_many_backers():
+    text = reason_detail(project(1, backer_count=7), _factors(), None)
+    assert "7 backers" in text
+
+
+def test_reason_detail_never_funded_wording():
+    text = reason_detail(project(1), _factors(), None)
+    assert "not funded yet" in text
+
+
+def test_reason_detail_funded_wording():
+    text = reason_detail(project(1), _factors(), 12.4)
+    assert "last funded 12 days ago" in text
+
+
+def test_reason_detail_one_day_singular():
+    text = reason_detail(project(1), _factors(), 1.0)
+    assert "last funded 1 day ago" in text
+
+
+def test_reason_detail_drops_old_few_backers_wording():
+    text = reason_detail(project(1, backer_count=1), _factors(), None)
+    assert "few backers" not in text
+
+
+@pytest.mark.asyncio
+async def test_report_prompt_carries_rule_built_why(tmp_path):
+    llm = FakeLLM(texts=["Report."])
+    a = agent([project(1, backer_count=1)], mandate(), llm=llm, tmp_path=tmp_path)
+    await a.run(1)
+    _, _, user = llm.calls[0]
+    assert "why" in user
+    assert "1 backer" in user
+
+
+@pytest.mark.asyncio
+async def test_report_prompt_forbids_changing_amounts(tmp_path):
+    llm = FakeLLM(texts=["Report."])
+    a = agent([project(1)], mandate(), llm=llm, tmp_path=tmp_path)
+    await a.run(1)
+    system, _, _ = llm.calls[0]
+    assert "Never change, round or recompute an amount" in system
+

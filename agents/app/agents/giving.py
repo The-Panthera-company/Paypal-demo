@@ -64,21 +64,31 @@ def passes_hard_filters(project: dict) -> bool:
 
 
 def days_since_last_funding(history: list) -> float | None:
+    """Days since the most recent point where raised_cents went up.
+
+    A single point above zero counts as a raise from 0: the API only writes a point after
+    money arrives, so one point means the project has been funded once. Returns None only
+    when the project has never raised anything.
+    """
     points = [p for p in history if isinstance(p, dict)]
-    if len(points) < 2:
+    if not points:
         return None
     rising = None
-    prev = None
+    prev = 0
     for point in points:
         raised = point.get("raised_cents")
-        if prev is not None and isinstance(raised, int) and raised > prev:
+        if not isinstance(raised, int):
+            continue
+        if raised > prev:
             rising = point
-        prev = raised if isinstance(raised, int) else prev
+        prev = raised
     if rising is None:
         return None
+    raw_date = str(rising.get("date"))
     try:
-        when = datetime.fromisoformat(str(rising.get("date")).replace("Z", "+00:00"))
+        when = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
     except ValueError:
+        log.warning("unparseable funding date %r, using default", raw_date)
         return None
     if when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
@@ -93,24 +103,27 @@ def merge_weights(overrides: dict | None) -> dict:
     return weights
 
 
-def reason_detail(project: dict, factors: dict) -> str:
-    """Rule-built explanation handed to the LLM, e.g. "few backers (1), 2% funded, urgency 4/5".
+def reason_detail(project: dict, factors: dict, days: float | None = None) -> str:
+    """Rule-built explanation handed to the LLM, e.g. "3 backers, 2% funded, urgency 4/5".
 
     Built from the same numbers that produced the score, so the report explains the
-    decision instead of inventing a rationale.
+    decision instead of inventing a rationale. days is days_since_last_funding: None means
+    the project has never raised anything.
     """
     backers = project.get("backer_count") or 0
     goal = project.get("goal_cents") or 0
     pct = int(100 * (project.get("raised_cents") or 0) / goal) if goal else 0
     bits = [
-        "few backers (" + str(backers) + ")",
+        str(backers) + " backer" + ("" if backers == 1 else "s"),
         str(pct) + "% funded",
         "urgency " + str(project.get("urgency") or 1) + "/5",
     ]
     if factors.get("evidence") == 1.0:
         bits.append("receipts uploaded")
-    if factors.get("days_since_funded") == 1.0:
-        bits.append("no funding in " + str(DAYS_SCALE) + "+ days")
+    if days is None:
+        bits.append("not funded yet")
+    else:
+        bits.append("last funded " + str(int(days)) + " day" + ("" if int(days) == 1 else "s") + " ago")
     return ", ".join(bits)
 
 
@@ -189,9 +202,10 @@ class GivingAgent:
                 continue
             stories = await self.core.stories(int(project["id"]))
             history = await self.core.funding_history(int(project["id"]))
-            score, factors = score_project(project, weights, bool(stories),
-                                           days_since_last_funding(history))
-            candidates.append({"project": project, "score": score, "factors": factors})
+            days = days_since_last_funding(history)
+            score, factors = score_project(project, weights, bool(stories), days)
+            candidates.append({"project": project, "score": score, "factors": factors,
+                               "days": days})
 
         candidates.sort(key=lambda c: (-c["score"], int(c["project"]["id"])))
 
@@ -208,7 +222,7 @@ class GivingAgent:
                                 "reason": "no_room" if room <= 0 else "budget_exhausted"})
                 continue
             chosen.append({"project": p, "amount": int(amount), "score": cand["score"],
-                           "factors": cand["factors"]})
+                           "factors": cand["factors"], "days": cand["days"]})
             remaining -= int(amount)
             balance -= int(amount)
 
@@ -261,7 +275,7 @@ class GivingAgent:
             "planned": [
                 {"title": c["project"].get("title"), "amount_cents": c["amount"],
                  "reason": reason_for(c["project"], c["factors"]),
-                 "why": reason_detail(c["project"], c["factors"])}
+                 "why": reason_detail(c["project"], c["factors"], c.get("days"))}
                 for c in chosen
             ],
             "skipped": skipped[:10],
@@ -283,7 +297,7 @@ class GivingAgent:
         head = "Planned " + str(len(chosen)) + " gift" + ("" if len(chosen) == 1 else "s") + " this month:"
         body = [
             "- " + str(c["project"].get("title")) + ": $" + format(c["amount"] / 100, ".2f")
-            + " (" + reason_detail(c["project"], c["factors"]) + ")"
+            + " (" + reason_detail(c["project"], c["factors"], c.get("days")) + ")"
             for c in chosen
         ]
         return chr(10).join([head] + body)
