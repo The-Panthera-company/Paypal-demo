@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FavoritesCount, FavoritesGrid } from "@/components/FavoritesGrid";
+import { FurthestFive } from "@/components/FurthestFive";
 import { RecommendedGrid } from "@/components/RecommendedGrid";
 import { GivingAssistant } from "@/components/GivingAssistant";
 import { PageTitle } from "@/components/PageTitle";
@@ -139,6 +140,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                 {chips}
               </div>
               {categoryBanner}
+              {tab === "all" && <FurthestFive projectIds={projects.map((p) => p.id)} />}
               {grid}
             </div>
           </div>

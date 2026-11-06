@@ -1,6 +1,7 @@
 "use client";
 
 import { Banner, notify } from "@/components/Status";
+import { MatchPreview } from "./MatchPreview";
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
 import { useEffect, useState } from "react";
 
@@ -45,12 +46,15 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
 export type DonationTarget =
   | { kind: "PROJECT"; projectId: string }
   | { kind: "CATEGORY"; categoryApiId: number; rule: "crowd" | "equal" | "closest_to_goal"; excludedTags: string[] }
-  | { kind: "AGENT" };
+  | { kind: "AGENT" }
+  | { kind: "POOL"; sponsorName?: string };
 
 function orderBody(target: DonationTarget, amountCents: number) {
   if (target.kind === "PROJECT") return { target_type: "PROJECT", project_id: Number(target.projectId), amount_cents: amountCents };
   if (target.kind === "CATEGORY")
     return { target_type: "CATEGORY", category_id: target.categoryApiId, amount_cents: amountCents, rule: target.rule, excluded_tags: target.excludedTags };
+  if (target.kind === "POOL")
+    return { target_type: "POOL", amount_cents: amountCents, ...(target.sponsorName?.trim() ? { sponsor_name: target.sponsorName.trim() } : {}) };
   return { target_type: "AGENT", amount_cents: amountCents };
 }
 
@@ -59,11 +63,14 @@ export function DonatePanel({
   projectTitle,
   target,
   onAmountChange,
+  onDone,
 }: {
   projectId?: string;
   projectTitle: string;
   target?: DonationTarget;
   onAmountChange?: (cents: number) => void;
+  /** called after a successful capture (e.g. to re-read the matching pool) */
+  onDone?: () => void;
 }) {
   const what: DonationTarget = target ?? { kind: "PROJECT", projectId: projectId ?? "" };
   const [config, setConfig] = useState<PayPalConfig | null>(null);
@@ -84,7 +91,8 @@ export function DonatePanel({
     onAmountChange?.(amountCents);
   }, [amountCents, onAmountChange]);
   const min = config?.min_donation_cents ?? 100;
-  const max = config?.max_donation_cents ?? 100_000;
+  // Sponsor gifts to the matching pool may go up to 10,000 USD (the API's POOL limit)
+  const max = what.kind === "POOL" ? 1_000_000 : (config?.max_donation_cents ?? 100_000);
   const amountOk = Number.isFinite(amountCents) && amountCents >= min && amountCents <= max;
   const currency = config?.currency ?? "USD";
   const fmt = (cents: number) =>
@@ -95,8 +103,14 @@ export function DonatePanel({
       <div className="corner border border-line bg-white p-6" role="status">
         <p className="font-display text-2xl text-ink">Thank you!</p>
         <p className="mt-2">
-          Your {fmt(status.amountCents)} gift to {projectTitle} is confirmed. It counts toward this round&apos;s matching
-          pool, and you&apos;ll see receipts here when the next milestone is released.
+          {what.kind === "POOL" ? (
+            <>Your {fmt(status.amountCents)} is now part of this round&apos;s matching pool. It will be shared by how many people back each project.</>
+          ) : (
+            <>
+              Your {fmt(status.amountCents)} gift to {projectTitle} is confirmed. It counts toward this round&apos;s matching
+              pool, and you&apos;ll see receipts here when the next milestone is released.
+            </>
+          )}
         </p>
         <button type="button" className="btn btn-2 mt-4" onClick={() => setStatus({ kind: "idle" })}>
           Give again
@@ -147,6 +161,9 @@ export function DonatePanel({
         </p>
       </fieldset>
 
+      {what.kind === "PROJECT" && what.projectId && (
+        <MatchPreview projectId={what.projectId} title={projectTitle} amountCents={amountCents} valid={amountOk} />
+      )}
       {status.kind === "error" && <Banner tone="error">{status.message} Nothing was charged.</Banner>}
       {status.kind === "cancelled" && <Banner tone="info">Payment cancelled. Nothing was charged.</Banner>}
 
@@ -178,6 +195,7 @@ export function DonatePanel({
                   `/donations/orders/${data.orderID}/capture`,
                 );
                 setStatus({ kind: "done", amountCents: donation.amount_cents });
+                onDone?.();
                 notify("Thank you! Your gift went through. PayPal will email your receipt.", "success");
               } catch (e) {
                 const err = e as Error & { code?: string };

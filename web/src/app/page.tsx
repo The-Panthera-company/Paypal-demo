@@ -5,10 +5,11 @@ import { CountUp } from "@/components/CountUp";
 import { PlatformIdentity } from "@/components/PlatformIdentity";
 import { FeaturedStrip } from "@/components/FeaturedStrip";
 import { BackerStories, SponsorStrip } from "@/components/Sections";
+import { SponsorPool } from "@/components/SponsorPool";
 import { Countdown } from "@/components/Countdown";
 import { Icon } from "@/components/Icon";
 import { assignPhotos, CategoryArt, Eyebrow, photoFor } from "@/components/ui";
-import { daysLeft, formatDate, formatMoney, getBackerStories, getImpactUpdates, getProjects, getRound, getSponsors } from "@/lib/api";
+import { daysLeft, formatDate, formatMoney, getBackerStories, getImpactUpdates, getProjects, getRound, getRoundResults, getSponsors } from "@/lib/api";
 
 const faqs = [
   ["How does matching work?", "A sponsor pool is shared by quadratic funding: a project backed by many people gets a bigger top-up than one backed by a few large gifts. Caps stop any single project taking everything."],
@@ -31,6 +32,7 @@ export default async function Home() {
     getSponsors(),
     getRound(),
   ]);
+  const results = round.id ? await getRoundResults(round.id) : null;
   const galleryItems = updates.slice(0, 3).map((u) => ({ ...u, project: projects.find((p) => p.id === u.projectId) }));
   const dateLabels = Object.fromEntries(updates.map((u) => [u.id, formatDate(u.date)]));
   const raised = projects.reduce((s, p) => s + p.raised.amount, 0);
@@ -77,6 +79,7 @@ export default async function Home() {
               {round.pool ? (
                 <>
                   <span className="tabular">{formatMoney(round.pool)}</span> matching pool, shared by how many people back each project
+                  {results?.sponsored ? <span className="block font-sans text-base text-text">of which sponsors: {formatMoney({ amount: results.sponsored, currency: round.pool.currency })}</span> : null}
                 </>
               ) : (
                 "The matching pool is shared by how many people back each project"
@@ -250,6 +253,13 @@ export default async function Home() {
       </section>
 
       <SponsorStrip sponsors={sponsors} />
+      {round.id && (
+        <section className="section">
+          <div className="container-k">
+            <SponsorPool poolCents={round.pool?.amount} currency={round.pool?.currency} />
+          </div>
+        </section>
+      )}
       <GivingAssistant projects={projects} />
     </>
   );

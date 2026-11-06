@@ -7,7 +7,8 @@ import { doodleTile, doodleUrl } from "@/lib/doodles";
 import { LeaderboardGrid } from "@/components/LeaderboardGrid";
 import { PageTitle } from "@/components/PageTitle";
 import { EmptyState, Eyebrow, StatBox } from "@/components/ui";
-import { formatMoney, getDonorBoard, getLeaderboard } from "@/lib/api";
+import { formatMoney, getDonorBoard, getLeaderboard, getRoundResults, getRounds } from "@/lib/api";
+import { SponsorPool } from "@/components/SponsorPool";
 import { DonorBoard } from "@/components/DonorBoard";
 
 // Rebuilt in the background at most every 30 s, so tab switches serve a ready page.
@@ -19,7 +20,8 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
   const { tab: rawTab } = await searchParams;
   const tab = rawTab === "projects" ? "projects" : "donors";
   const [lb, globe] = await Promise.all([getLeaderboard(), getGlobePins()]);
-  const donors = await getDonorBoard(lb.roundId);
+  const [donors, results, rounds] = await Promise.all([getDonorBoard(lb.roundId), getRoundResults(lb.roundId), getRounds()]);
+  const lastClosed = rounds.find((r) => r.status === "closed");
   const matched = lb.rows.reduce((s, r) => s + r.match.amount, 0);
   const backers = lb.rows.reduce((s, r) => s + r.backerCount, 0);
   const days = Math.max(0, Math.ceil((new Date(lb.endsAt).getTime() - Date.now()) / 86_400_000));
@@ -55,7 +57,7 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
           </div>
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <StatBox value={formatMoney(lb.pool)} label="Matching pool" />
+            <StatBox value={formatMoney(lb.pool)} label={results?.sponsored ? `Matching pool · of which sponsors ${formatMoney({ amount: results.sponsored, currency: lb.pool.currency })}` : "Matching pool"} />
             <StatBox value={formatMoney({ amount: matched, currency: lb.pool.currency })} label={lb.isFinal ? "Matched" : "Projected match"} />
             <StatBox value={String(backers)} label="Backers" />
             <StatBox value={lb.isFinal ? "Closed" : String(days)} label={lb.isFinal ? "Round" : "Days left"} />
@@ -64,6 +66,15 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
           {lb.sample && (
             <p className="border-l-4 border-accent bg-white p-3 text-sm text-ink">
               Sample numbers. Connect the core API (<code>NEXT_PUBLIC_API_URL</code>) to see the real matching engine.
+            </p>
+          )}
+
+          {(lb.isFinal || lastClosed) && (
+            <p className="flex flex-wrap items-center justify-between gap-4 border-l-4 border-accent bg-ink p-4 text-white">
+              <span>{lb.isFinal ? `${lb.roundName} has closed and the results are final.` : `${lastClosed!.name} has closed.`}</span>
+              <Link href={`/rounds/${lb.isFinal ? lb.roundId : lastClosed!.id}`} className="btn !min-h-11">
+                See the final results
+              </Link>
             </p>
           )}
 
@@ -97,6 +108,8 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
           )}
             </>
           )}
+
+          {!lb.isFinal && lb.roundId && <SponsorPool poolCents={lb.pool.amount} currency={lb.pool.currency} />}
 
           <p className="text-sm">
             Want your name on the public leaderboard? It&apos;s off by default.{" "}

@@ -3,7 +3,10 @@ import { getGlobePins } from "@/lib/globe";
 
 import { AuditGrid, CasesGrid, MilestonesGrid, VerificationGrid } from "@/components/admin/AdminGrids";
 import { PageTitle } from "@/components/PageTitle";
-import { getAdminData, getDashboard } from "@/lib/admin";
+import { getAdminData, getDashboard, getProjectDocuments, listRounds } from "@/lib/admin";
+import { OwnerTokenButton } from "@/components/admin/OwnerTokenButton";
+import { RoundsPanel } from "@/components/admin/RoundsPanel";
+import { RefundPanel } from "@/components/admin/RefundPanel";
 import { getCategories, getLeaderboard, getProjects } from "@/lib/api";
 import { Overview } from "@/components/admin/Overview";
 
@@ -14,6 +17,8 @@ const tabs = [
   { id: "cases", label: "Watchdog cases" },
   { id: "verify", label: "Verification queue" },
   { id: "milestones", label: "Held tranches" },
+  { id: "rounds", label: "Rounds" },
+  { id: "refunds", label: "Refunds" },
   { id: "log", label: "Agent log" },
 ] as const;
 type Tab = (typeof tabs)[number]["id"];
@@ -21,9 +26,12 @@ type Tab = (typeof tabs)[number]["id"];
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab: raw } = await searchParams;
   const tab: Tab = tabs.some((t) => t.id === raw) ? (raw as Tab) : "overview";
-  const [data, globe, dash, projects, lb, categories] = await Promise.all([getAdminData(), getGlobePins(), getDashboard(), getProjects(), getLeaderboard(), getCategories()]);
+  const [data, globe, dash, projects, lb, categories, rounds] = await Promise.all([getAdminData(), getGlobePins(), getDashboard(), getProjects(), getLeaderboard(), getCategories(), listRounds()]);
+  const docs = tab === "verify" ? await Promise.all(data.queue.map(async (project) => ({ project, documents: await getProjectDocuments(project.id) }))) : [];
   const counts: Record<Tab, number> = {
     overview: 0,
+    rounds: 0,
+    refunds: 0,
     cases: data.cases.filter((c) => c.status === "open").length,
     verify: data.queue.length,
     milestones: data.milestones.length,
@@ -67,6 +75,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           {tab === "overview" && (
             <Overview data={data} dash={dash} projects={projects} lb={lb} categories={categories} globe={globe} />
           )}
+          {tab === "rounds" && <RoundsPanel rounds={rounds} />}
+          {tab === "refunds" && <RefundPanel />}
           {tab === "cases" && (
             <div className="space-y-3">
               <p>The Watchdog freezes a project&apos;s <strong>matching</strong> (never its donations) and opens a case. Clear a false alarm, or confirm it.</p>
@@ -77,6 +87,40 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             <div className="space-y-3">
               <p>Projects are listed only after a person checks their registration and plan.</p>
               <VerificationGrid rows={data.queue} />
+              {docs.length > 0 && (
+                <section className="space-y-4 bg-white p-6">
+                  <h2 className="text-xl">Documents sent with each application</h2>
+                  {docs.map(({ project, documents }) => (
+                    <div key={project.id} className="space-y-2 border-t border-line pt-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="font-medium text-ink">
+                          {project.title} <span className="text-sm text-text">#{project.id}</span>
+                        </p>
+                        <OwnerTokenButton projectId={project.id} />
+                      </div>
+                      {documents.length === 0 ? (
+                        <p className="text-sm">No documents yet.</p>
+                      ) : (
+                        <ul className="flex flex-wrap gap-2 text-sm">
+                          {documents.map((d) => (
+                            <li key={d.id}>
+                              <a href={d.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center gap-2 border border-line px-3 text-primary hover:border-primary">
+                                <span className="font-bold uppercase tracking-wider text-ink">{d.kind}</span> open link ↗
+                                {d.flags.length > 0 && <span className="bg-accent px-1.5 text-[10px] font-bold uppercase text-ink">{d.flags.join(", ")}</span>}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </section>
+              )}
+              <section className="space-y-2 bg-white p-6">
+                <h2 className="text-xl">Owner token for any project</h2>
+                <p className="text-sm">For seeded projects or a lost token. The project then uploads evidence at /projects/&lt;id&gt;/evidence.</p>
+                <OwnerTokenButton withInput />
+              </section>
             </div>
           )}
           {tab === "milestones" && (
