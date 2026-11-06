@@ -62,9 +62,57 @@ services:
       # Password for /admin in the browser (any user name). Choose one; share it privately.
       - key: ADMIN_UI_PASSWORD
         sync: false
-      # Person 3's agent service for the giving assistant; leave empty until it exists.
+      # Giving assistant service (agents/). Fill in with https://<giving-agents>.onrender.com
+      # after that service's first deploy, then REDEPLOY the website: this value is read at
+      # build time, so an empty value here means the assistant is not wired up yet.
       - key: NEXT_PUBLIC_AGENTS_URL
         sync: false
+
+  # Giving assistant (Person 3): FastAPI + the MCP server as a stdio child process.
+  # Built from the repo ROOT because mcp-server/ lives outside agents/; see agents/Dockerfile.
+  - type: web
+    name: giving-agents
+    runtime: docker
+    plan: free
+    dockerContext: .
+    dockerfilePath: ./agents/Dockerfile
+    healthCheckPath: /health
+    # Deploy only after the CI checks pass, not on every commit to main.
+    autoDeployTrigger: checksPass
+    # Only rebuild when the agents or the MCP server change, not on every web/api commit.
+    buildFilter:
+      paths:
+        - agents/**
+        - mcp-server/**
+    envVars:
+      # Full URL of giving-api, e.g. https://giving-api.onrender.com (no trailing slash).
+      # Set once in the dashboard, same pattern as giving-web's NEXT_PUBLIC_API_URL.
+      - key: CORE_API_URL
+        sync: false
+      # The agents talk to giving-api's /internal/* routes with INTERNAL_TOKEN.
+      - key: INTERNAL_TOKEN
+        fromService:
+          type: web
+          name: giving-api
+          envVarKey: INTERNAL_TOKEN
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_BASE_URL
+        value: https://api.deepseek.com
+      - key: DEEPSEEK_MODEL
+        value: deepseek-v4-flash
+      # Must include the website's origin or the browser blocks the assistant's calls.
+      # Update to https://<giving-web>.onrender.com,http://localhost:3000 after the first deploy.
+      - key: WEB_ORIGIN
+        value: http://localhost:3000
+      # FIRST DEPLOY: leave true. Every mutating MCP tool becomes a no-op that returns a
+      # canned result, so the service runs end to end without writing. Set to "false" only
+      # once the Watchdog and Milestone agents are real and writes are intended.
+      - key: DRY_RUN
+        value: "true"
+      # Scheduler stays off until the agents are armed; the API is only polled on demand.
+      - key: SCHEDULER_ENABLED
+        value: "false"
 
 databases:
   - name: giving-db

@@ -1,0 +1,47 @@
+# Offline test gate for the agents service, plus a docker build check.
+# Required check: a red suite blocks the merge, before Render ever sees the commit.
+name: agents
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: agents-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: agents/requirements.txt
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      # FAKE_CORE: canned MCP results, no network. DRY_RUN is deliberately NOT set:
+      # test_dry_run.py asserts the shipped default (true) with a clean environment.
+      - name: Test
+        env:
+          FAKE_CORE: "true"
+        run: pytest -q
+
+  # The Dockerfile builds from the repo root because mcp-server/ lives outside agents/.
+  # This catches a broken COPY path or a wrong context before Render tries the same build.
+  agents-docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f agents/Dockerfile -t giving-agents:ci .
