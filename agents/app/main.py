@@ -6,12 +6,12 @@ The chat path has no write tools: it only reads via search_projects.
 """
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 from collections import defaultdict, deque
-from time import monotonic
-
 from contextlib import asynccontextmanager
+from time import monotonic
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,59 +20,91 @@ from pydantic import BaseModel, Field
 from .agents.discovery import DiscoveryAgent
 from .agents.giving import GivingAgent
 from .config import settings
-from .llm import build_llm
-from .mcp_client import McpClient, build_client
+from .llm import LLM, build_llm
+from .mcp_client import FakeMcpClient, McpClient, build_client
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 MAX_MESSAGE = 1000
-RATE_LIMIT = 30
 RATE_WINDOW = 60.0
+
+cfg = settings()
+
+_shared_mcp: McpClient | FakeMcpClient | None = None
+_shared_llm: LLM | None = None
+
+
+def shared_mcp() -> McpClient | FakeMcpClient:
+    """One long-lived MCP client for the whole app.
+
+    Building it never connects: McpClient connects lazily on the first call and
+    reconnects internally (call() retries once after _reset()), so a sleeping core API
+    cannot stop the app from starting.
+    """
+    global _shared_mcp
+    if _shared_mcp is None:
+        _shared_mcp = build_client(cfg)
+    return _shared_mcp
+
+
+def shared_llm() -> LLM:
+    global _shared_llm
+    if _shared_llm is None:
+        _shared_llm = build_llm(cfg)
+    return _shared_llm
+
+
+def reset_shared() -> None:
+    """Drop the shared singletons. Tests call this; lifespan calls it at shutdown."""
+    global _shared_mcp, _shared_llm
+    _shared_mcp = None
+    _shared_llm = None
+
+
+# Startup warm-up budget. Kept small: a cold Render API can take ~60 s, and the app must
+# not wait for it. A miss just means the first chat pays the connect cost.
+WARMUP_SECONDS = 5.0
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Best-effort warm-up, never fatal.
+
+    A sleeping Render API can take ~60 s to wake, so startup does not wait on it: the
+    client is built (cheap, no I/O) and the first chat request connects. Warm-up only
+    happens for the real client, and any failure is logged and swallowed so /health and
+    the rest of the service stay up.
+    """
+    try:
+        client = shared_mcp()
+        if isinstance(client, McpClient):
+            try:
+                await asyncio.wait_for(client.session(), timeout=WARMUP_SECONDS)
+            except Exception as exc:
+                log.warning("MCP warm-up skipped (%s); will connect on first request", exc)
+    except Exception as exc:  # never let startup kill the app
+        log.warning("MCP client unavailable at startup: %s", exc)
+
+    yield
+
+    client = _shared_mcp
+    if client is not None:
+        try:
+            await client.aclose()
+        except Exception as exc:  # best effort teardown
+            log.warning("MCP shutdown failed: %s", exc)
+    reset_shared()
+
 
 app = FastAPI(title="Community Giving agents", version="0.1.0", lifespan=lifespan)
 
-cfg = settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in cfg.web_origin.split(",") if o.strip()],
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "Authorization"],
 )
-
-_shared_mcp: McpClient | None = None
-
-
-def shared_mcp() -> McpClient:
-    """One long-lived MCP client for the whole app.
-
-    McpClient reconnects internally when a call fails (call() retries once after _reset()),
-    so a dead subprocess heals on the next request without a new client per request.
-    Per-call timeouts live in McpClient.call, unchanged.
-    """
-    global _shared_mcp
-    if _shared_mcp is None:
-        client = build_client(cfg)
-        if not isinstance(client, McpClient):
-            raise HTTPException(status_code=503, detail="chat needs the real MCP client")
-        _shared_mcp = client
-    return _shared_mcp
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    """Warm the MCP subprocess at startup so the first chat does not pay for it."""
-    try:
-        client = shared_mcp()
-        await client.session()
-    except Exception as exc:  # the service still serves /health and retries per request
-        log.warning("MCP warm-up failed: %s", exc)
-    yield
-    global _shared_mcp
-    if _shared_mcp is not None:
-        await _shared_mcp.aclose()
-        _shared_mcp = None
-
 
 _hits: dict[str, deque] = defaultdict(deque)
 
@@ -136,7 +168,7 @@ async def _chat(body: ChatIn, request: Request) -> dict:
     # whitespace-padded input that only exceeds the cap once trimmed.
     if len(message) > MAX_MESSAGE:
         raise HTTPException(status_code=422, detail="message too long")
-    agent = DiscoveryAgent(mcp=shared_mcp(), llm=build_llm(cfg))
+    agent = DiscoveryAgent(mcp=shared_mcp(), llm=shared_llm())
     return await agent.chat(message)
 
 

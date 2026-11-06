@@ -119,12 +119,14 @@ def test_days_since_last_funding_uses_newest_rising_point():
     assert value is not None and value > 30
 
 
-def test_days_since_last_funding_without_rise_is_none():
+def test_days_since_last_funding_without_rise_uses_the_only_raise():
+    # Flat afterwards, but the first point is a raise from 0: funded once, not never.
     history = [
         {"date": "2026-01-01T00:00:00Z", "raised_cents": 300},
         {"date": "2026-01-02T00:00:00Z", "raised_cents": 300},
     ]
-    assert days_since_last_funding(history) is None
+    value = days_since_last_funding(history)
+    assert value is not None and value > 30
 
 
 def test_score_is_weighted_average_times_100():
@@ -349,7 +351,8 @@ async def test_report_prompt_carries_rule_built_why(tmp_path):
     llm = FakeLLM(texts=["Report."])
     a = agent([project(1, backer_count=1)], mandate(), llm=llm, tmp_path=tmp_path)
     await a.run(1)
-    _, _, user = llm.calls[0]
+    kind, _, user = llm.calls[-1]
+    assert kind == "text"
     assert "why" in user
     assert "1 backer" in user
 
@@ -359,6 +362,7 @@ async def test_report_prompt_forbids_changing_amounts(tmp_path):
     llm = FakeLLM(texts=["Report."])
     a = agent([project(1)], mandate(), llm=llm, tmp_path=tmp_path)
     await a.run(1)
-    system, _, _ = llm.calls[0]
+    kind, system, _ = llm.calls[-1]
+    assert kind == "text"
     assert "Never change, round or recompute an amount" in system
 
