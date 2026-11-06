@@ -401,6 +401,23 @@ export function AuditGrid({ rows }: { rows: AuditEntry[] }) {
         cellStyle: { lineHeight: "1.5", paddingTop: 16, paddingBottom: 16 },
       },
       {
+        colId: "trace",
+        headerName: "Trace",
+        width: 110,
+        // Same rule as the public API: a run id in the inputs links to its public trace
+        valueGetter: (p) => {
+          const i = p.data?.inputs as Record<string, unknown> | null | undefined;
+          const id = Number(i?.mandate_run_id ?? i?.run_id);
+          return Number.isInteger(id) && id > 0 ? id : null;
+        },
+        cellRenderer: (p: { value: number | null }) =>
+          p.value ? (
+            <a href={`/agents?run=${p.value}`} className="font-bold text-primary underline">
+              Run #{p.value}
+            </a>
+          ) : null,
+      },
+      {
         field: "inputs",
         headerName: "Inputs",
         flex: 1,

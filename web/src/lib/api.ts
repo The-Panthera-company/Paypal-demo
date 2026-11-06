@@ -520,3 +520,7 @@ export async function getRounds(): Promise<{ id: number; name: string; status: s
     return [];
   }
 }
+
+
+// Agent trace helpers live in a browser-safe module; re-exported here for one import path.
+export { fetchAgentActivity, fetchAgentRun, fetchAgentRuns, type AgentActivity, type AgentRun, type TraceStep } from "./agent-trace";
