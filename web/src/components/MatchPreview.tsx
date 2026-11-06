@@ -68,7 +68,7 @@ export function MatchPreview({ projectId, title, amountCents, valid }: { project
             Your {gift} adds about <strong className="tabular">{fmt(item.match_added_cents)}</strong> of matching to {title}.
           </>
         ) : (
-          <>This gift won&apos;t change the match (you&apos;re past the per-person cap, or the project is at its cap).</>
+          <>This gift won&apos;t change the match right now: you&apos;re past the per-person cap, the project is at its cap, or it needs a few more backers before matching moves.</>
         )}
         <span className="block text-xs text-text">Estimate: the match is recalculated until the round closes.</span>
       </span>

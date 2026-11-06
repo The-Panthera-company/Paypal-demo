@@ -28,7 +28,7 @@ export function ApplyForm({ categories }: { categories: { apiId: number; name: s
 
   const goal = Math.round(Number(f.goal || 0) * 100);
   const total = rows.reduce((s, r) => s + Math.round(Number(r.dollars || 0) * 100), 0);
-  const rowsOk = rows.length > 0 && rows.every((r) => r.title.trim() && Number(r.dollars) > 0);
+  const rowsOk = rows.length > 0 && rows.every((r) => r.title.trim() && Number(r.dollars) > 0 && r.due);
   const addsUp = goal > 0 && total === goal;
   const ready = f.title.trim() && f.summary.trim() && f.category_id && addsUp && rowsOk;
   const money = (c: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(c / 100);
@@ -52,13 +52,21 @@ export function ApplyForm({ categories }: { categories: { apiId: number; name: s
         hide_location: f.hide,
         urgency: Number(f.urgency),
         payout_email: f.email.trim() || undefined,
-        milestones: rows.map((r) => ({ title: r.title.trim(), amount_cents: Math.round(Number(r.dollars) * 100), ...(r.due ? { due_date: r.due } : {}) })),
+        milestones: rows.map((r) => ({ title: r.title.trim(), amount_cents: Math.round(Number(r.dollars) * 100), due_date: r.due })),
       };
       const res = await fetch(`${API_URL}/projects`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
         const code = d?.detail?.error as string | undefined;
-        throw new Error((code && MESSAGES[code]) || d?.detail?.message || (Array.isArray(d?.detail) ? "Some fields aren't valid. Check the form." : `Couldn't send (${res.status}).`));
+        // Field errors (422 from validation): name each field in words
+        const fieldErrors = Array.isArray(d?.detail)
+          ? (d.detail as { loc: (string | number)[]; msg: string }[]).map((x) => {
+              const [, a, i, b] = x.loc;
+              const name = a === "milestones" ? `Milestone ${Number(i) + 1} ${String(b ?? "").replace("_", " ")}` : String(a).replace("_", " ");
+              return `${name}: ${x.msg.toLowerCase()}`;
+            })
+          : [];
+        throw new Error((code && MESSAGES[code]) || d?.detail?.message || (fieldErrors.length ? fieldErrors.join("; ") : `Couldn't send (${res.status}).`));
       }
       const projectId = String(d.project_id);
       saveOwner(projectId, {
@@ -189,8 +197,8 @@ export function ApplyForm({ categories }: { categories: { apiId: number; name: s
                 <input type="number" min="0.01" step="0.01" value={r.dollars} onChange={(e) => setRows(rows.map((x, k) => (k === i ? { ...x, dollars: e.target.value } : x)))} className={field} />
               </label>
               <label className="text-sm text-ink">
-                Due date
-                <input type="date" value={r.due} onChange={(e) => setRows(rows.map((x, k) => (k === i ? { ...x, due: e.target.value } : x)))} className={field} />
+                Due date *
+                <input type="date" required value={r.due} onChange={(e) => setRows(rows.map((x, k) => (k === i ? { ...x, due: e.target.value } : x)))} className={field} />
               </label>
               <button type="button" onClick={() => setRows(rows.filter((_, k) => k !== i))} disabled={rows.length === 1} className="min-h-11 border border-line px-3 text-sm text-ink disabled:opacity-40" aria-label={`Remove milestone ${i + 1}`}>
                 Remove
@@ -221,7 +229,7 @@ export function ApplyForm({ categories }: { categories: { apiId: number; name: s
       <button className="btn disabled:opacity-50" disabled={!ready || busy || !API_URL}>
         {busy ? "Sending…" : "Send application"}
       </button>
-      {!addsUp && goal > 0 && <p className="text-sm">The button turns on when the milestones add up to the goal.</p>}
+      {!ready && <p className="text-sm">The button turns on when the name, description, every milestone (name, amount, due date) and the total match the goal.</p>}
     </form>
   );
 }
