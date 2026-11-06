@@ -3,7 +3,9 @@ import { getGlobePins } from "@/lib/globe";
 
 import { AuditGrid, CasesGrid, MilestonesGrid, VerificationGrid } from "@/components/admin/AdminGrids";
 import { PageTitle } from "@/components/PageTitle";
-import { getAdminData, getDashboard } from "@/lib/admin";
+import { getAdminData, getDashboard, listRounds } from "@/lib/admin";
+import { RoundsPanel } from "@/components/admin/RoundsPanel";
+import { RefundPanel } from "@/components/admin/RefundPanel";
 import { getCategories, getLeaderboard, getProjects } from "@/lib/api";
 import { Overview } from "@/components/admin/Overview";
 
@@ -14,6 +16,8 @@ const tabs = [
   { id: "cases", label: "Watchdog cases" },
   { id: "verify", label: "Verification queue" },
   { id: "milestones", label: "Held tranches" },
+  { id: "rounds", label: "Rounds" },
+  { id: "refunds", label: "Refunds" },
   { id: "log", label: "Agent log" },
 ] as const;
 type Tab = (typeof tabs)[number]["id"];
@@ -21,9 +25,11 @@ type Tab = (typeof tabs)[number]["id"];
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab: raw } = await searchParams;
   const tab: Tab = tabs.some((t) => t.id === raw) ? (raw as Tab) : "overview";
-  const [data, globe, dash, projects, lb, categories] = await Promise.all([getAdminData(), getGlobePins(), getDashboard(), getProjects(), getLeaderboard(), getCategories()]);
+  const [data, globe, dash, projects, lb, categories, rounds] = await Promise.all([getAdminData(), getGlobePins(), getDashboard(), getProjects(), getLeaderboard(), getCategories(), listRounds()]);
   const counts: Record<Tab, number> = {
     overview: 0,
+    rounds: 0,
+    refunds: 0,
     cases: data.cases.filter((c) => c.status === "open").length,
     verify: data.queue.length,
     milestones: data.milestones.length,
@@ -67,6 +73,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           {tab === "overview" && (
             <Overview data={data} dash={dash} projects={projects} lb={lb} categories={categories} globe={globe} />
           )}
+          {tab === "rounds" && <RoundsPanel rounds={rounds} />}
+          {tab === "refunds" && <RefundPanel />}
           {tab === "cases" && (
             <div className="space-y-3">
               <p>The Watchdog freezes a project&apos;s <strong>matching</strong> (never its donations) and opens a case. Clear a false alarm, or confirm it.</p>

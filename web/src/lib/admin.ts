@@ -234,3 +234,69 @@ export async function getDashboard(): Promise<Dashboard> {
     })),
   };
 }
+
+// ---- Rounds (#2) ----
+export type RoundInfo = {
+  id: number;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  pool: number;
+  currency: string;
+  projectCapPct: number;
+  floorPct: number;
+  perPersonCap: number;
+  status: "scheduled" | "open" | "closing" | "closed";
+};
+type ApiRoundFull = { id: number; name: string; starts_at: string; ends_at: string; matching_pool_cents: number; currency: string; project_cap_pct: number; floor_pct: number; per_person_cap_cents: number; status: RoundInfo["status"] };
+const toRound = (r: ApiRoundFull): RoundInfo => ({
+  id: r.id,
+  name: r.name,
+  startsAt: r.starts_at,
+  endsAt: r.ends_at,
+  pool: r.matching_pool_cents,
+  currency: r.currency,
+  projectCapPct: r.project_cap_pct,
+  floorPct: r.floor_pct,
+  perPersonCap: r.per_person_cap_cents,
+  status: r.status,
+});
+
+export async function listRounds(): Promise<RoundInfo[]> {
+  if (!API_URL) return [];
+  const res = await fetch(`${API_URL}/rounds`, { cache: "no-store" });
+  return res.ok ? ((await res.json()) as ApiRoundFull[]).map(toRound) : [];
+}
+
+export type RoundFields = { name?: string; starts_at?: string; ends_at?: string; matching_pool_cents?: number; project_cap_pct?: number; floor_pct?: number; per_person_cap_cents?: number };
+export async function createRound(body: RoundFields) {
+  return toRound(await adminFetch<ApiRoundFull>("/admin/rounds", { method: "POST", body: JSON.stringify(body) }));
+}
+export async function updateRound(id: number, body: RoundFields) {
+  return toRound(await adminFetch<ApiRoundFull>(`/admin/rounds/${id}`, { method: "PATCH", body: JSON.stringify(body) }));
+}
+export async function closeRound(id: number) {
+  await adminFetch(`/admin/rounds/${id}/close?early=true`, { method: "POST" });
+}
+
+// ---- Applications and evidence (#3) ----
+export type ProjectDocument = { id: number; kind: string; fileUrl: string; milestoneId: number | null; flags: string[] };
+export async function getProjectDocuments(projectId: string): Promise<ProjectDocument[]> {
+  if (!API_URL || !ADMIN_TOKEN) return [];
+  const docs = await adminFetch<{ id: number; kind: string; file_url: string; milestone_id: number | null; flags: string[] | null }[]>(`/admin/projects/${projectId}/documents`).catch(() => []);
+  return docs.map((d) => ({ id: d.id, kind: d.kind, fileUrl: d.file_url, milestoneId: d.milestone_id, flags: d.flags ?? [] }));
+}
+export async function newOwnerToken(projectId: string) {
+  return (await adminFetch<{ owner_token: string }>(`/admin/projects/${projectId}/owner-token`, { method: "POST" })).owner_token;
+}
+
+// ---- Refunds (#5) ----
+export type DonationInfo = { id: number; amount: number; currency: string; status: string; targetType: string; projectId: number | null; captureId: string | null; capturedAt: string | null };
+export async function getDonation(id: number): Promise<DonationInfo> {
+  const d = await adminFetch<{ id: number; amount_cents: number; currency: string; status: string; target_type: string; project_id: number | null; paypal_capture_id: string | null; captured_at: string | null }>(`/donations/${id}`);
+  return { id: d.id, amount: d.amount_cents, currency: d.currency, status: d.status, targetType: d.target_type, projectId: d.project_id, captureId: d.paypal_capture_id, capturedAt: d.captured_at };
+}
+export type RefundResult = { donation_id: number; refund_id: string; paypal_status: string; amount_cents: number; refunded_total_cents: number; donation_status: string };
+export async function refundDonation(id: number, reason: string, amountCents?: number) {
+  return adminFetch<RefundResult>(`/admin/donations/${id}/refund`, { method: "POST", body: JSON.stringify({ reason, ...(amountCents ? { amount_cents: amountCents } : {}) }) });
+}

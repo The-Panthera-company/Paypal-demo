@@ -450,3 +450,47 @@ export async function getDonorBoard(roundId: string, me = process.env.NEXT_PUBLI
     return { currency: "USD", rows: [] };
   }
 }
+
+export type RoundResults = {
+  roundId: number;
+  name: string;
+  status: "scheduled" | "open" | "closing" | "closed";
+  isFinal: boolean;
+  currency: string;
+  pool: number;
+  sponsored: number;
+  matched: number;
+  unspent: number;
+  raised: number;
+  backers: number;
+  rows: { projectId: string; title: string; category: string; raised: number; backers: number; projected: number; final: number | null; capped: boolean }[];
+};
+
+/** GET /rounds/{id}/results: totals and projected vs final match per project. null if unknown. */
+export async function getRoundResults(roundId: string | number): Promise<RoundResults | null> {
+  if (!API_URL || !roundId) return null;
+  try {
+    const d = await get<{
+      round_id: number; name: string; status: RoundResults["status"]; is_final: boolean; currency: string;
+      matching_pool_cents: number; sponsored_cents: number; matched_cents: number; unspent_cents: number; raised_cents: number; backers: number;
+      rows: { project_id: number; title: string; category: string; raised_cents: number; backer_count: number; projected_match_cents: number; final_match_cents: number | null; capped: boolean }[];
+    }>(`/rounds/${roundId}/results`, 60);
+    return {
+      roundId: d.round_id, name: d.name, status: d.status, isFinal: d.is_final, currency: d.currency,
+      pool: d.matching_pool_cents, sponsored: d.sponsored_cents, matched: d.matched_cents, unspent: d.unspent_cents, raised: d.raised_cents, backers: d.backers,
+      rows: d.rows.map((r) => ({ projectId: String(r.project_id), title: r.title, category: r.category, raised: r.raised_cents, backers: r.backer_count, projected: r.projected_match_cents, final: r.final_match_cents, capped: r.capped })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** All rounds, newest first (GET /rounds) */
+export async function getRounds(): Promise<{ id: number; name: string; status: string; endsAt: string }[]> {
+  if (!API_URL) return [];
+  try {
+    return (await get<{ id: number; name: string; status: string; ends_at: string }[]>("/rounds", 60)).map((r) => ({ id: r.id, name: r.name, status: r.status, endsAt: r.ends_at }));
+  } catch {
+    return [];
+  }
+}

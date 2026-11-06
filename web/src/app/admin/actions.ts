@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { resolveCase, reviewMilestone, verifyProject } from "@/lib/admin";
+import { closeRound, createRound, getDonation, newOwnerToken, refundDonation, resolveCase, reviewMilestone, updateRound, verifyProject, type DonationInfo, type RefundResult, type RoundFields } from "@/lib/admin";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
 
@@ -28,4 +28,76 @@ export async function resolveCaseAction(id: string, action: "clear" | "confirm",
 
 export async function reviewMilestoneAction(id: string, approve: boolean, note?: string) {
   return run(() => reviewMilestone(id, approve, note), approve ? "Tranche released for payout." : "Sent back: the project can upload new evidence.");
+}
+
+// ---- Rounds ----
+export type RoundFormState = { ok: boolean; message: string } | null;
+
+function roundFields(f: FormData, includeStart: boolean): RoundFields {
+  const num = (k: string) => (f.get(k) ? Number(f.get(k)) : undefined);
+  const iso = (k: string) => (f.get(k) ? new Date(String(f.get(k))).toISOString() : undefined);
+  const dollars = num("pool");
+  const cap = num("per_person_cap");
+  return {
+    name: String(f.get("name") ?? "").trim() || undefined,
+    ...(includeStart ? { starts_at: iso("starts_at") } : {}),
+    ends_at: iso("ends_at"),
+    matching_pool_cents: dollars !== undefined ? Math.round(dollars * 100) : undefined,
+    project_cap_pct: num("project_cap_pct"),
+    floor_pct: num("floor_pct"),
+    per_person_cap_cents: cap !== undefined ? Math.round(cap * 100) : undefined,
+  };
+}
+
+export async function createRoundAction(_: RoundFormState, f: FormData): Promise<RoundFormState> {
+  const r = await run(async () => {
+    const round = await createRound(roundFields(f, true));
+    if (!round) throw new Error("Not created");
+  }, "Round scheduled. It opens by itself at its start time.");
+  revalidatePath("/leaderboard");
+  return r;
+}
+
+export async function updateRoundAction(_: RoundFormState, f: FormData): Promise<RoundFormState> {
+  const id = Number(f.get("id"));
+  const open = f.get("status") === "open";
+  const body = roundFields(f, !open); // an open round can't change its start
+  const r = await run(() => updateRound(id, body).then(() => undefined), "Round updated.");
+  revalidatePath("/leaderboard");
+  return r;
+}
+
+export async function closeRoundAction(id: number) {
+  const r = await run(() => closeRound(id), "Round closed: final results are written and matching is added to each project's next milestone.");
+  revalidatePath("/leaderboard");
+  revalidatePath(`/rounds/${id}`);
+  return r;
+}
+
+// ---- Applications ----
+export async function newOwnerTokenAction(projectId: string): Promise<{ ok: true; token: string } | { ok: false; message: string }> {
+  try {
+    return { ok: true, token: await newOwnerToken(projectId) };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Couldn't make a new token." };
+  }
+}
+
+// ---- Refunds ----
+export async function lookupDonationAction(id: number): Promise<{ ok: true; donation: DonationInfo } | { ok: false; message: string }> {
+  try {
+    return { ok: true, donation: await getDonation(id) };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "No such donation." };
+  }
+}
+
+export async function refundAction(id: number, reason: string, amountCents?: number): Promise<{ ok: true; result: RefundResult } | { ok: false; message: string }> {
+  try {
+    const result = await refundDonation(id, reason, amountCents);
+    revalidatePath("/admin");
+    return { ok: true, result };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Refund failed." };
+  }
 }
