@@ -7,6 +7,7 @@ const columns = [
       ["/projects", "Explore projects"],
       ["/gallery", "Impact gallery"],
       ["/apply", "Apply for funding"],
+      ["/agents", "Agent trace"],
       ["/leaderboard", "Leaderboard"],
       ["/mandate", "Giving Agent"],
       ["/report", "My impact"],

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { Category } from "@/lib/types";
 import { DonatePanel } from "./DonatePanel";
 import { MonthlyGiving } from "./MonthlyGiving";
+import { AgentRunViewer } from "./AgentRunViewer";
 import { categoryIcon, Icon } from "./Icon";
 
 // Giving Agent setup (#23). The donor's rules (mandate) are enforced by the core API, never by the
@@ -411,6 +412,12 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
                     </div>
                   ))
                 )}
+              </section>
+
+              <section className="space-y-3 border border-line bg-white p-6">
+                <h2 className="text-xl">Latest run, step by step</h2>
+                <p className="text-sm">What the agent did, and what the rules allowed. Run it now to watch the steps fill in.</p>
+                <AgentRunViewer compact />
               </section>
 
               <section className="space-y-3 border border-line bg-white p-6">
