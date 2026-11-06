@@ -166,6 +166,7 @@ export async function getProjects(filters: ProjectFilters = {}): Promise<Project
     if (filters.group) params.set("beneficiary_group", filters.group.toLowerCase());
     if (filters.region) params.set("region", filters.region);
     if (filters.q) params.set("q", filters.q);
+    params.set("limit", "200"); // the API's default is 50; 200 is its maximum
     const [rows, endsAt] = await Promise.all([apiProjects(params.toString()), currentRoundEnd()]);
     return rows.map((p) => toProject(p, endsAt));
   }

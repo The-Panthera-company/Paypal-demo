@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { FurthestFive } from "@/components/FurthestFive";
 import { CategoryCheckout } from "@/components/CategoryCheckout";
 import { PageTitle } from "@/components/PageTitle";
 import { getCategories, getProjects } from "@/lib/api";
@@ -18,7 +19,10 @@ export default async function GiveToCategory({ params }: { params: Promise<{ cat
       <PageTitle title={`Give to ${category.name}`} crumb={category.name} />
       <section className="section bg-surface-alt">
         <div className="container-k">
-          <CategoryCheckout category={category} projects={projects} />
+          <div className="space-y-8">
+            <FurthestFive projectIds={projects.map((p) => p.id)} />
+            <CategoryCheckout category={category} projects={projects} />
+          </div>
         </div>
       </section>
     </>
