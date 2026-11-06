@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     mcp_server_path: str = "../mcp-server/server.py"
 
     # Any mutating MCP call returns a canned result instead of hitting the API.
-    dry_run: bool = False
+    # Defaults to True: shipping money-moving code must require an explicit opt-in.
+    dry_run: bool = True
 
     web_origin: str = "http://localhost:3000"
 

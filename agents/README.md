@@ -62,7 +62,8 @@ are accepted in the request and ignored.
 
 ## Scripts
 
-Both are read-only and print no secrets. Run them from `agents/`.
+Both are read-only dev probes: they only call `search_projects` / `get_project` and print no
+secrets. Run them from `agents/`. Neither is part of the service.
 
 **Smoke test** — real MCP server, three projects, plus 1-result and 0-result shape checks
 (type and length only):
@@ -91,7 +92,7 @@ All from env (see `.env.example`):
 | `CORE_API_URL` | `https://giving-api.onrender.com` | core API base |
 | `INTERNAL_TOKEN` | — | required for `/agents/giving/run` and the MCP subprocess |
 | `FAKE_CORE` | `false` | `true` serves canned MCP results (use when the API token is unavailable) |
-| `DRY_RUN` | `false` | `true` blocks every mutating MCP tool |
+| `DRY_RUN` | `true` | blocks every mutating MCP tool; set `false` to arm the agents |
 | `DEEPSEEK_API_KEY` | — | LLM; every caller has a fallback when it fails |
 | `DEEPSEEK_MODEL` | `deepseek-v4-flash` | |
 | `MCP_SERVER_PATH` | `../mcp-server/server.py` | |
@@ -126,7 +127,6 @@ agents/
 │   ├── mcp_client.py    stdio MCP client (restart, DRY_RUN, FakeMcpClient)
 │   ├── core.py          read-only public GETs
 │   ├── llm.py           the only DeepSeek caller
-│   ├── cache.py         small JSON cache
 │   ├── scheduler.py     APScheduler wiring (off by default)
 │   └── agents/          giving, discovery, watchdog, milestone
 ├── tests/               pytest, offline
