@@ -147,6 +147,15 @@ def open_watchdog_case(
     return _call("POST", "/internal/watchdog/cases", json={"project_id": project_id, "rule": rule, "evidence": evidence})
 
 
+@server.tool(annotations=READ)
+def list_evidence_queue() -> list[dict[str, Any]]:
+    """Milestone Agent's inbox: tranches whose project owners submitted evidence, oldest first.
+    Each has the milestone (id, title, amount, match added, due date), the project, and every
+    document uploaded for it (kind receipt or photo, file_url, extracted_fields, flags). Check the
+    evidence, then call request_milestone_payout for each one."""
+    return _call("GET", "/internal/milestones/evidence")
+
+
 @server.tool(annotations=ACT)
 def request_milestone_payout(
     milestone_id: int,

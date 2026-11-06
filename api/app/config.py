@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     internal_token: str = ""
     admin_token: str = ""
 
+    # Key for the donor leaderboard's anonymous aliases. Unset: the admin token is used, so set
+    # this if you ever rotate ADMIN_TOKEN and want aliases to stay the same.
+    alias_secret: str = ""
+
     # Routes not built yet return their spec example (header X-Stub) instead of 501.
     stub_examples: bool = True
 

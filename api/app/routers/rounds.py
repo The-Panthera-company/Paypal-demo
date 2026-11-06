@@ -127,13 +127,14 @@ def leaderboard(round_id: int, db: Session = Depends(get_db), settings: Settings
 
 
 @router.get("/{round_id}/donors", response_model=DonorBoardOut, responses={404: {"model": ErrorOut}})
-def donor_leaderboard(round_id: int, me: int | None = None, db: Session = Depends(get_db)):
+def donor_leaderboard(round_id: int, me: int | None = None, db: Session = Depends(get_db),
+                      settings: Settings = Depends(get_settings)):
     """Donor ladders for the round: given, matching unlocked, multiplier, reach, agent-given, impact points.
     Names only for donors who opted in; `me` marks the caller's own row (demo: no login yet)."""
     round_ = db.get(Round, round_id)
     if round_ is None:
         raise HTTPException(404, detail={"error": "ROUND_NOT_FOUND", "message": "No such round"})
-    return donor_board(db, round_, me)
+    return donor_board(db, round_, me, settings.alias_secret or settings.admin_token or None)
 
 
 @router.get(
