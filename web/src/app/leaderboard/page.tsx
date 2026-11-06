@@ -8,6 +8,7 @@ import { LeaderboardGrid } from "@/components/LeaderboardGrid";
 import { PageTitle } from "@/components/PageTitle";
 import { EmptyState, Eyebrow, StatBox } from "@/components/ui";
 import { formatMoney, getDonorBoard, getLeaderboard, getRoundResults, getRounds } from "@/lib/api";
+import { SponsorPool } from "@/components/SponsorPool";
 import { DonorBoard } from "@/components/DonorBoard";
 
 // Rebuilt in the background at most every 30 s, so tab switches serve a ready page.
@@ -107,6 +108,8 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
           )}
             </>
           )}
+
+          {!lb.isFinal && lb.roundId && <SponsorPool poolCents={lb.pool.amount} currency={lb.pool.currency} />}
 
           <p className="text-sm">
             Want your name on the public leaderboard? It&apos;s off by default.{" "}

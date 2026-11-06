@@ -232,8 +232,16 @@ export async function getBackerStories(): Promise<BackerStory[]> {
   return API_URL ? [] : backerStories;
 }
 
+/** Sponsors who added to the open round's pool (GET /rounds/{id}/sponsors), largest first */
 export async function getSponsors(): Promise<Sponsor[]> {
-  return API_URL ? [] : sponsors;
+  if (!API_URL) return sponsors;
+  try {
+    const round = await get<ApiRound>("/rounds/current");
+    const d = await get<{ currency: string; sponsors: { name: string | null; amount_cents: number; given_at: string }[] }>(`/rounds/${round.id}/sponsors`, 60);
+    return d.sponsors.map((x, i) => ({ id: `${i}-${x.given_at}`, name: x.name || "Anonymous sponsor", pool: money(x.amount_cents, d.currency) }));
+  } catch {
+    return [];
+  }
 }
 
 export async function getSimilarProjects(p: Project, limit = 3): Promise<Project[]> {
@@ -335,12 +343,12 @@ function sampleLeaderboard(): Leaderboard {
 }
 
 /** The current matching round (name and end date) for countdowns */
-export async function getRound(): Promise<{ name: string; endsAt: string; pool?: Money }> {
+export async function getRound(): Promise<{ id?: number; name: string; endsAt: string; pool?: Money }> {
   if (!API_URL) return { name: "Sample round", endsAt: projects[0]?.endsAt ?? new Date(Date.now() + 7 * 86_400_000).toISOString() };
   // No round open (or API unreachable): keep the page up with a placeholder countdown
   try {
     const r = await get<ApiRound>("/rounds/current");
-    return { name: r.name, endsAt: r.ends_at, pool: money(r.matching_pool_cents, r.currency) };
+    return { id: r.id, name: r.name, endsAt: r.ends_at, pool: money(r.matching_pool_cents, r.currency) };
   } catch {
     return { name: "Next round", endsAt: new Date(Date.now() + 30 * 86_400_000).toISOString() };
   }

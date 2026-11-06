@@ -91,7 +91,8 @@ export function DonatePanel({
     onAmountChange?.(amountCents);
   }, [amountCents, onAmountChange]);
   const min = config?.min_donation_cents ?? 100;
-  const max = config?.max_donation_cents ?? 100_000;
+  // Sponsor gifts to the matching pool may go up to 10,000 USD (the API's POOL limit)
+  const max = what.kind === "POOL" ? 1_000_000 : (config?.max_donation_cents ?? 100_000);
   const amountOk = Number.isFinite(amountCents) && amountCents >= min && amountCents <= max;
   const currency = config?.currency ?? "USD";
   const fmt = (cents: number) =>
