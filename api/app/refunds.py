@@ -9,7 +9,8 @@ fully refunded before the round closes.
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import AuditLog, Donation, DonationStatus, LedgerEntry, LedgerType, PoolContribution, Round, RoundStatus
+from app import audit
+from app.models import Donation, DonationStatus, LedgerEntry, LedgerType, PoolContribution, Round, RoundStatus
 
 
 def refunded_total(db: Session, donation_id: int) -> int:
@@ -32,9 +33,9 @@ def book_refund(db: Session, donation: Donation, amount: int, refund_id: str | N
         donation.status = DonationStatus.refunded
         remove_from_pool(db, donation)
     if reversed_:
-        db.add(AuditLog(actor="paypal", action="capture_reversed",
-                        inputs={"donation_id": donation.id, "refund_id": refund_id, "amount_cents": amount},
-                        rule_result="reversal", reason="Donor's bank or PayPal reversed the payment (chargeback or dispute)"))
+        audit.write(db, actor="paypal", action="capture_reversed",
+                    inputs={"donation_id": donation.id, "refund_id": refund_id, "amount_cents": amount},
+                    rule_result="reversal", reason="Donor's bank or PayPal reversed the payment (chargeback or dispute)")
     return True
 
 
@@ -45,13 +46,13 @@ def add_to_pool(db: Session, donation: Donation) -> None:
         return
     round_ = db.get(Round, contribution.round_id)
     if round_ is None or round_.status == RoundStatus.closed:
-        db.add(AuditLog(actor="system", action="pool_contribution_late", inputs={"donation_id": donation.id},
-                        rule_result="not_added", reason="The round closed before the payment completed; refund or reassign it"))
+        audit.write(db, actor="system", action="pool_contribution_late", inputs={"donation_id": donation.id},
+                    rule_result="not_added", reason="The round closed before the payment completed; refund or reassign it")
         return
     round_.matching_pool += donation.amount
     contribution.added_to_pool = True
-    db.add(AuditLog(actor="system", action="pool_contribution", inputs={"donation_id": donation.id, "round_id": round_.id},
-                    rule_result="added", reason=f"{donation.amount} cents added to {round_.name}'s matching pool"))
+    audit.write(db, actor="system", action="pool_contribution", inputs={"donation_id": donation.id, "round_id": round_.id},
+                rule_result="added", reason=f"{donation.amount} cents added to {round_.name}'s matching pool")
 
 
 def remove_from_pool(db: Session, donation: Donation) -> None:

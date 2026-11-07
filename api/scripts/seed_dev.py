@@ -32,9 +32,9 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import audit
 from app.db import SessionLocal, create_schema, engine
 from app.models import (
-    AuditLog,
     Category,
     Donation,
     DonationStatus,
@@ -416,12 +416,14 @@ def seed_milestones(db: Session, project: Project, today: date) -> None:
             db.add(ProjectDocument(project_id=project.id, milestone_id=milestone.id, kind=kind,
                                    file_url=EVIDENCE_URL.format(id=milestone.id, kind=kind.value)))
         if status == HELD:
-            db.add(AuditLog(
-                actor="milestone-agent", action="payout_request",
+            audit.write(
+                db,
+                actor="milestone-agent",
+                action="payout_request",
                 inputs={"milestone_id": milestone.id, "amount_cents": cents},
                 rule_result="held_for_admin",
                 reason=f"Held: above_threshold ({cents} > 50000). Summary: delivery note for 15 desks matches the receipt.",
-            ))
+            )
         if status == RELEASED:
             released_at = datetime.combine(due, datetime.min.time(), timezone.utc)
             db.add(LedgerEntry(type=LedgerType.tranche, amount=cents, currency="USD", project_id=project.id,

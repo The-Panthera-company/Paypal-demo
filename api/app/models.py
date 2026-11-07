@@ -1,5 +1,6 @@
 """The fourteen tables from the System Design data model, plus webhook_events, payout_accounts,
-category_gifts, category_allocations, paypal_plans and agent_subscriptions.
+category_gifts, category_allocations, paypal_plans, agent_subscriptions, the audit hash-chain
+state and system flags.
 
 Amounts are integers in minor units. List fields (tags, categories) are JSON so the
 same models run on Postgres and on SQLite in tests.
@@ -301,6 +302,31 @@ class AuditLog(Base):
     rule_result: Mapped[str | None] = mapped_column(String(60))
     reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # Hash-chain columns are nullable so create_schema can add them to an existing database.
+    # app.audit.backfill fills them at startup; app.audit.write advances the chain.
+    seq: Mapped[int | None] = mapped_column(BigInteger)
+    prev_hash: Mapped[str | None] = mapped_column(String(64))
+    hash: Mapped[str | None] = mapped_column(String(64))
+
+
+class AuditChain(Base):
+    """One row that serialises writers and remembers the head of the audit hash chain."""
+
+    __tablename__ = "audit_chain"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    seq: Mapped[int] = mapped_column(BigInteger, default=0)
+    hash: Mapped[str] = mapped_column(String(64), default="")
+
+
+class SystemFlag(Base):
+    """Small key/value store for operational switches such as the global agent pause."""
+
+    __tablename__ = "system_flags"
+
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class WebhookEvent(Base):

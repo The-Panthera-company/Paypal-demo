@@ -36,7 +36,7 @@ services:
       # The website's URL must be listed here, or the browser blocks the PayPal button's calls.
       # After the first deploy, set it in the dashboard to: https://<giving-web>.onrender.com,http://localhost:3000
       - key: CORS_ORIGINS
-        value: http://localhost:3000
+        value:  "https://giving-web.onrender.com,http://localhost:3000"
 
   # Website (Person 2): donor pages, leaderboard, admin console.
   - type: web

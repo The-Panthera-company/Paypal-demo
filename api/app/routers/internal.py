@@ -10,14 +10,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import payouts
+from app import audit, kill_switch, payouts
 from app.auth import require_internal
 from app.config import Settings, get_settings
 from app.db import get_db
+from app.kill_switch import ensure_agents_running, require_agents_running
 from app.mandates import check_gift
 from app.models import (
     ProjectDocument,
-    AuditLog,
     CaseStatus,
     Donation,
     DonationStatus,
@@ -40,6 +40,7 @@ from app.routers.donors import mandate_out, run_out
 from app.schemas import (
     EvidenceMilestone,
     ActiveMandate,
+    AgentStatusOut,
     AuditIn,
     AuditOut,
     CaseIn,
@@ -75,6 +76,12 @@ def case_out(c: WatchdogCase) -> CaseOut:
     )
 
 
+@router.get("/status", response_model=AgentStatusOut)
+def internal_status(db: Session = Depends(get_db)):
+    """The agent service checks this before starting a run. Available while paused."""
+    return kill_switch.status(db)
+
+
 @router.get("/mandates/active", response_model=list[ActiveMandate])
 def active_mandates(db: Session = Depends(get_db)):
     """Mandates for the Giving Agent's run, with each donor's remaining funded balance."""
@@ -82,7 +89,13 @@ def active_mandates(db: Session = Depends(get_db)):
     return [ActiveMandate(**mandate_out(db, m).model_dump()) for m in mandates]
 
 
-@router.post("/mandate-runs", response_model=MandateRunOut, status_code=201, responses=NOT_FOUND)
+@router.post(
+    "/mandate-runs",
+    response_model=MandateRunOut,
+    status_code=201,
+    responses={**NOT_FOUND, 409: {"model": ErrorOut}},
+    dependencies=[Depends(require_agents_running)],
+)
 def record_mandate_run(body: MandateRunIn, db: Session = Depends(get_db)):
     """The Giving Agent records its candidates, scores and choices before requesting donations."""
     if db.get(Mandate, body.mandate_id) is None:
@@ -90,14 +103,13 @@ def record_mandate_run(body: MandateRunIn, db: Session = Depends(get_db)):
     run = MandateRun(mandate_id=body.mandate_id, decisions=body.decisions, report_text=body.report_text)
     db.add(run)
     db.flush()
-    db.add(
-        AuditLog(
-            actor="giving-agent",
-            action="mandate_run",
-            inputs={"mandate_id": body.mandate_id, "mandate_run_id": run.id},
-            rule_result="recorded",
-            reason=body.report_text,
-        )
+    audit.write(
+        db,
+        actor="giving-agent",
+        action="mandate_run",
+        inputs={"mandate_id": body.mandate_id, "mandate_run_id": run.id},
+        rule_result="recorded",
+        reason=body.report_text,
     )
     db.commit()
     return run_out(run)
@@ -110,7 +122,12 @@ _STATUS = {
 }
 
 
-@router.post("/checked-donations", response_model=CheckedDonationOut, responses=NOT_FOUND)
+@router.post(
+    "/checked-donations",
+    response_model=CheckedDonationOut,
+    responses={**NOT_FOUND, 409: {"model": ErrorOut}},
+    dependencies=[Depends(require_agents_running)],
+)
 def checked_donation(body: CheckedDonationIn, db: Session = Depends(get_db)):
     """Re-checks budget, per-project max, exclusions and project status, then records the gift
     (target_type AGENT) or parks it for the donor's approval. Never calls PayPal.
@@ -136,8 +153,8 @@ def checked_donation(body: CheckedDonationIn, db: Session = Depends(get_db)):
     rule, why = check_gift(db, mandate, project, body.amount_cents)
     inputs = {"mandate_run_id": run.id, "project_id": body.project_id, "amount_cents": body.amount_cents}
     if rule != "ok":
-        db.add(AuditLog(actor="giving-agent", action="checked_donation", inputs=inputs, rule_result=rule,
-                        reason=f"{why}. Agent's reason: {body.reason}"))
+        audit.write(db, actor="giving-agent", action="checked_donation", inputs=inputs, rule_result=rule,
+                    reason=f"{why}. Agent's reason: {body.reason}")
         db.commit()
         return CheckedDonationOut(status="rejected", donation_id=None, rule_result=rule, reason=why)
 
@@ -155,15 +172,22 @@ def checked_donation(body: CheckedDonationIn, db: Session = Depends(get_db)):
         status = "awaiting_donor_approval"
         why = f"Above the donor's {mandate.currency} {to_paypal(mandate.approval_threshold, mandate.currency)} approval threshold"
     else:
+        ensure_agents_running(db)  # defense in depth: the switch may have flipped mid-request
         mark_captured(db, donation, {})  # an internal move from the funded balance: no PayPal call
         status = "recorded"
-    db.add(AuditLog(actor="giving-agent", action="checked_donation", inputs={**inputs, "donation_id": donation.id},
-                    rule_result=status, reason=body.reason))
+    audit.write(db, actor="giving-agent", action="checked_donation", inputs={**inputs, "donation_id": donation.id},
+                rule_result=status, reason=body.reason)
     db.commit()
     return CheckedDonationOut(status=status, donation_id=donation.id, rule_result="ok", reason=why)
 
 
-@router.post("/watchdog/cases", response_model=CaseOut, status_code=201, responses=NOT_FOUND)
+@router.post(
+    "/watchdog/cases",
+    response_model=CaseOut,
+    status_code=201,
+    responses={**NOT_FOUND, 409: {"model": ErrorOut}},
+    dependencies=[Depends(require_agents_running)],
+)
 def open_case(body: CaseIn, db: Session = Depends(get_db)):
     """Watchdog rule hit: opens a case and freezes the project's matching (not its donations).
 
@@ -187,8 +211,8 @@ def open_case(body: CaseIn, db: Session = Depends(get_db)):
     project.matching_frozen = True
     db.add(case)
     db.flush()
-    db.add(AuditLog(actor="watchdog-agent", action="case_opened", inputs={"case_id": case.id, **body.model_dump()},
-                    rule_result=body.rule, reason="Matching frozen until an admin resolves the case"))
+    audit.write(db, actor="watchdog-agent", action="case_opened", inputs={"case_id": case.id, **body.model_dump()},
+                rule_result=body.rule, reason="Matching frozen until an admin resolves the case")
     db.commit()
     return case_out(case)
 
@@ -214,7 +238,12 @@ def release_milestone(db: Session, paypal: PayPalClient, milestone: Milestone) -
     return payout
 
 
-@router.post("/payout-requests", response_model=PayoutRequestOut, responses={**NOT_FOUND, 409: {"model": ErrorOut}})
+@router.post(
+    "/payout-requests",
+    response_model=PayoutRequestOut,
+    responses={**NOT_FOUND, 409: {"model": ErrorOut}},
+    dependencies=[Depends(require_agents_running)],
+)
 def payout_request(
     body: PayoutRequestIn,
     db: Session = Depends(get_db),
@@ -247,28 +276,27 @@ def payout_request(
         milestone.status = MilestoneStatus.held
         status, reason = "held_for_admin", "Held: " + ", ".join(problems)
     else:
+        ensure_agents_running(db)  # defense in depth: check again before PayPal
         payout = release_milestone(db, paypal, milestone)
         status, reason = "released", "All checks passed, below threshold"
         if errors := {i.get("error") for i in payout.items if i.get("error")}:
             reason += f"; payout not sent yet: {', '.join(sorted(errors))}"
-    db.add(
-        AuditLog(
-            actor="milestone-agent",
-            action="payout_request",
-            inputs={"milestone_id": milestone.id, "checks": body.checks.model_dump(), "amount_cents": total},
-            rule_result=status,
-            reason=f"{reason}. Summary: {body.summary}",
-        )
+    audit.write(
+        db,
+        actor="milestone-agent",
+        action="payout_request",
+        inputs={"milestone_id": milestone.id, "checks": body.checks.model_dump(), "amount_cents": total},
+        rule_result=status,
+        reason=f"{reason}. Summary: {body.summary}",
     )
     db.commit()
     return PayoutRequestOut(status=status, payout_id=payout.id if payout else None, reason=reason)
 
 
-@router.post("/audit", response_model=AuditOut, status_code=201)
+@router.post("/audit", response_model=AuditOut, status_code=201, response_model_exclude_unset=True)
 def write_audit(body: AuditIn, db: Session = Depends(get_db)):
     """Agents log decisions that don't go through another endpoint (e.g. a skipped project)."""
-    entry = AuditLog(**body.model_dump())
-    db.add(entry)
+    entry = audit.write(db, **body.model_dump())
     db.commit()
     return AuditOut(**body.model_dump(), id=entry.id, created_at=entry.created_at)
 

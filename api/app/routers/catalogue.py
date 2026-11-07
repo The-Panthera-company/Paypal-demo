@@ -7,11 +7,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import audit
 from app.auth import check_owner_token, new_owner_token
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.models import (
-    AuditLog,
     CategoryAllocation,
     Category,
     DocumentKind,
@@ -201,8 +201,8 @@ def apply_project(body: ProjectApplicationIn, db: Session = Depends(get_db), set
     db.add_all(milestones)
     if body.payout_email:
         db.add(PayoutAccount(project_id=project.id, paypal_email=body.payout_email))
-    db.add(AuditLog(actor="project-owner", action="project_applied", inputs={"project_id": project.id},
-                    rule_result="pending_review", reason=f"{body.title}: {len(milestones)} milestones"))
+    audit.write(db, actor="project-owner", action="project_applied", inputs={"project_id": project.id},
+                rule_result="pending_review", reason=f"{body.title}: {len(milestones)} milestones")
     db.commit()
     return ProjectApplicationOut(project_id=project.id, status=project.status, owner_token=token,
                                  milestone_ids=[m.id for m in milestones])
@@ -241,10 +241,10 @@ def add_document(
                           flags=[])
     db.add(doc)
     db.flush()
-    db.add(AuditLog(actor="project-owner", action="document_added",
-                    inputs={"project_id": project.id, "document_id": doc.id, "milestone_id": body.milestone_id},
-                    rule_result=body.kind.value,
-                    reason="Evidence submitted" if milestone is not None and body.kind in EVIDENCE else None))
+    audit.write(db, actor="project-owner", action="document_added",
+                inputs={"project_id": project.id, "document_id": doc.id, "milestone_id": body.milestone_id},
+                rule_result=body.kind.value,
+                reason="Evidence submitted" if milestone is not None and body.kind in EVIDENCE else None)
     db.commit()
     return document_out(doc)
 
