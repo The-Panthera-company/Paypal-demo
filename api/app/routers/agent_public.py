@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.demo import DEMO_MANDATE_ID
 from app.models import AuditLog, Donation, MandateRun, Milestone, Project, WatchdogCase
 from app.schemas import (
     AgentActivityOut,
@@ -62,6 +63,7 @@ def _private_key(key: Any) -> bool:
         or "donor" in name
         or "payer" in name
         or "email" in name
+        or "balance" in name
     )
 
 
@@ -231,6 +233,8 @@ def _title(row: AuditLog, project_title: str | None) -> str:
 
     if action == "mandate_run":
         title = "Giving Agent recorded a run"
+    elif action == "mandate_run_summary":
+        title = "Giving Agent finished a run"
     elif action == "checked_donation":
         if status == "blocked":
             title = f"Agent gift to {project} blocked"
@@ -324,10 +328,13 @@ def list_agent_runs(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Newest Giving Agent runs across all mandates, with the same safe projection."""
+    """Newest Giving Agent runs for the demo mandate, with the same safe projection."""
     runs = list(
         db.scalars(
-            select(MandateRun).order_by(MandateRun.run_at.desc(), MandateRun.id.desc()).limit(limit)
+            select(MandateRun)
+            .where(MandateRun.mandate_id == DEMO_MANDATE_ID)
+            .order_by(MandateRun.run_at.desc(), MandateRun.id.desc())
+            .limit(limit)
         )
     )
     _cache(response)
@@ -340,9 +347,9 @@ def list_agent_runs(
     responses={404: {"model": ErrorOut, "description": "No run with that id"}},
 )
 def get_agent_run(run_id: int, response: Response, db: Session = Depends(get_db)):
-    """One Giving Agent run with its ordered trace, chosen projects and skipped projects."""
+    """One demo Giving Agent run with its ordered trace, chosen projects and skipped projects."""
     run = db.get(MandateRun, run_id)
-    if run is None:
+    if run is None or run.mandate_id != DEMO_MANDATE_ID:
         raise _error("RUN_NOT_FOUND", "No such agent run")
     _cache(response)
     return _run_out(db, run)

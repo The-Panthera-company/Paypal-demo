@@ -5,9 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.routing import APIRoute
 
-from app import projections
+from app import audit, projections
 from app.config import get_settings
-from app.db import create_schema, engine
+from app.db import SessionLocal, create_schema, engine
 from app.openapi_docs import document
 from app.routers import admin, agent_public, catalogue, donations, donors, internal, paypal_config, rounds, webhooks
 from app.stubs import Planned, planned_handler
@@ -26,6 +26,9 @@ Core API for the Community Giving Platform. Owns all money logic; the only servi
 async def lifespan(app: FastAPI):
     # Creates missing tables and new nullable columns (see create_schema).
     create_schema(engine)
+    # Existing audit rows predate the hash chain; fill them once. Later startups are no-ops.
+    with SessionLocal() as db:
+        audit.backfill(db)
     settings = app.dependency_overrides.get(get_settings, get_settings)()
     stop = projections.start(settings.projection_interval_seconds) if settings.projection_interval_seconds else None
     yield

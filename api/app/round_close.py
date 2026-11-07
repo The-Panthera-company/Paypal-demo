@@ -13,9 +13,9 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app import audit
 from app.engine import run_round
 from app.models import (
-    AuditLog,
     CaseStatus,
     LedgerEntry,
     LedgerType,
@@ -72,8 +72,8 @@ def close(db: Session, round_: Round, *, now: datetime | None = None, early: boo
     if cases := open_cases(db):
         if round_.status != RoundStatus.closing:
             round_.status = RoundStatus.closing
-            db.add(AuditLog(actor="system", action="round_closing", inputs={"round_id": round_.id, "open_cases": cases},
-                            rule_result="waiting", reason="Final results wait until no Watchdog case is open"))
+            audit.write(db, actor="system", action="round_closing", inputs={"round_id": round_.id, "open_cases": cases},
+                        rule_result="waiting", reason="Final results wait until no Watchdog case is open")
         return False
 
     results = run_round(db, round_, is_final=True)
@@ -85,9 +85,9 @@ def close(db: Session, round_: Round, *, now: datetime | None = None, early: boo
         db.add(LedgerEntry(type=LedgerType.match, amount=r.final_amount, currency=round_.currency, project_id=r.project_id))
     round_.status = RoundStatus.closed
     total = sum(r.final_amount for r in results)
-    db.add(AuditLog(actor="system", action="round_closed",
-                    inputs={"round_id": round_.id, "projects": len(results), "matched_cents": total},
-                    rule_result="closed", reason=f"{total} of {round_.matching_pool} matched; the rest stays unspent"))
+    audit.write(db, actor="system", action="round_closed",
+                inputs={"round_id": round_.id, "projects": len(results), "matched_cents": total},
+                rule_result="closed", reason=f"{total} of {round_.matching_pool} matched; the rest stays unspent")
     return True
 
 
@@ -111,7 +111,7 @@ def open_due(db: Session, now: datetime | None = None) -> Round | None:
     for round_ in db.scalars(select(Round).where(Round.status == RoundStatus.scheduled).order_by(Round.starts_at)):
         if _aware(round_.starts_at) <= now < _aware(round_.ends_at):
             round_.status = RoundStatus.open
-            db.add(AuditLog(actor="system", action="round_opened", inputs={"round_id": round_.id},
-                            rule_result="open", reason=f"{round_.name} started"))
+            audit.write(db, actor="system", action="round_opened", inputs={"round_id": round_.id},
+                        rule_result="open", reason=f"{round_.name} started")
             return round_
     return None

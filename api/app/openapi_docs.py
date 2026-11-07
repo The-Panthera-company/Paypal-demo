@@ -39,10 +39,13 @@ SCHEMAS = {
     "DonorBoardRow": "One donor's numbers for the round, for each ladder (given, matching unlocked, multiplier, reach, agent-given, impact points).",
     "DonorBoardOut": "A round's donor ladders. Names appear only for donors who opted in.",
     "ActiveMandate": "A mandate the Giving Agent should run now, with the donor's remaining funded balance.",
+    "AgentStatusOut": "The global agent kill switch: whether agents are paused, why, since when, and who last changed it.",
+    "AgentToggleIn": "An admin's reason for pausing or resuming every money-moving agent route.",
     "Allocation": "One project's share of a category gift.",
     "ApprovalIn": "The donor's answer to an agent gift above their approval threshold.",
     "AuditIn": "A decision an agent or person took, for the admin's agent log.",
     "AuditOut": "An entry in the agent log.",
+    "AuditVerifyOut": "The result of recomputing the audit hash chain: whether it is intact, how many rows were checked, the first bad row and the current head hash.",
     "CaseIn": "A Watchdog rule hit: freezes the project's matching and opens a case for an admin.",
     "CaseOut": "A Watchdog case and its current state.",
     "CaseResolveIn": "An admin's resolution of a Watchdog case.",
@@ -120,7 +123,7 @@ SCHEMAS = {
     "AgentRunChoice": "A project the agent chose and the amount it asked the rules engine for.",
     "AgentRunSkip": "A project the agent left out, with the reason.",
     "AgentRunOut": "A public Giving Agent run: ordered trace, chosen projects, skipped projects and the report. No donor identifiers.",
-    "AgentActivityOut": "One recent agent or admin action for the public activity feed.",
+    "AgentActivityOut": "One recent agent or admin action for the public activity feed; summary rows include the run id.",
 }
 
 # --- fields: by name, with per-schema wording where a name means different things ------------
@@ -134,7 +137,7 @@ FIELDS = {
     "given_cents": "Everything the donor gave in the round, in cents (agent budget top-ups excluded).",
     "is_me": "True on the row of the donor passed as `me`.",
     "alias": "Stable anonymous name that does not reveal the donor id, e.g. Donor 3FA2C1.",
-    "action": "What was done, e.g. checked_donation, case_opened, payout_request.",
+    "action": "What was done, e.g. checked_donation, mandate_run_summary, case_opened, payout_request.",
     "active": "Whether the Giving Agent runs for this mandate; false pauses it.",
     "actor": "Who acted: giving-agent, milestone-agent, watchdog-agent, admin, donor, system or paypal.",
     "agent_report": "The Giving Agent's latest run report for this donor, if any.",
@@ -254,6 +257,15 @@ FIELDS = {
     "urgency": "1 (low) to 5 (urgent), set at verification.",
     "verified_at": "When an admin verified the project.",
     "via": "How it was given: PROJECT, CATEGORY or AGENT.",
+    "first_bad_id": "Id of the first row that failed verification; null when the chain is intact.",
+    "first_bad_reason": "Why that row failed: missing hash, sequence mismatch, previous-hash mismatch or content hash mismatch.",
+    "hash": "SHA-256 of this row's canonical payload; the next row stores it as prev_hash.",
+    "head_hash": "Hash of the last row checked, or an empty string when the log is empty.",
+    "paused": "True while the global agent kill switch is on.",
+    "prev_hash": "The previous row's hash, or an empty string for the first row.",
+    "since": "When the switch was last changed (UTC).",
+    "updated_by": "Who last moved the switch, e.g. admin.",
+    "valid": "True only when every row matches its sequence, previous hash and content hash.",
 }
 
 SCHEMA_FIELDS = {
@@ -280,6 +292,10 @@ SCHEMA_FIELDS = {
     ("PayoutRequestOut", "reason"): "Why it was held, or that every check passed.",
     ("AuditIn", "reason"): "Why, in plain words.",
     ("AuditOut", "reason"): "Why, in plain words.",
+    ("AuditOut", "seq"): "Position in the audit hash chain (1 = first).",
+    ("AuditVerifyOut", "checked"): "How many audit rows were recomputed before the check finished.",
+    ("AgentStatusOut", "reason"): "Why agents are paused, or why they were last resumed.",
+    ("AgentToggleIn", "reason"): "Why the admin paused or resumed agents; kept in the audit log.",
     ("DonationOut", "status"): "created, pending, captured, failed or refunded.",
     ("ReportGift", "status"): "pending, captured or refunded.",
     ("MilestoneOut", "status"): "open, evidence_submitted, held or released.",
@@ -354,6 +370,7 @@ PARAMS = {
     "early": "Close before the round's end time.",
     "run_id": "Giving Agent run id.",
     "before_id": "Return entries older than this audit-log id (cursor paging).",
+    "include_hash": "Include each audit row's seq, prev_hash and hash for independent checks.",
 }
 
 # --- examples for schemas that have none ------------------------------------------------------
@@ -445,14 +462,19 @@ OPERATIONS = {
     "get_mandate": "The donor's Giving Agent mandate and funded balance. 404 NO_MANDATE until the donor sets one.",
     "get_subscription": "The donor's monthly Giving Agent subscription, if one is pending, active or suspended.",
     "current_round": "The round taking donations now (open, or closing while it waits for Watchdog cases). 404 when none is.",
+    "verify_audit_log": "Recompute the audit SHA-256 chain in id order. Reports the first edited, missing or reordered row and stops there.",
+    "agent_status": "Whether the global agent kill switch is on, with the reason, time and actor.",
+    "pause_agents": "Stop every money-moving agent route with one request. Audit remains writable so agents can record the pause.",
+    "resume_agents": "Turn the global agent kill switch back off.",
+    "internal_status": "The agent service's read-only view of the kill switch; reachable while paused.",
     "review_queue": "Projects in a status for the admin, by default those waiting for verification.",
     "list_cases": "Watchdog cases, by default the open ones, newest first.",
     "list_payouts": "PayPal Payouts batches, newest first, with each item's status.",
     "get_payout_account": "The PayPal email a project's tranches are paid to.",
     "paypal_config": "Public PayPal settings for the website: client id, currency, environment and donation limits.",
     "health": "Returns ok when the API is up. Use it to wake the free Render instance before a demo.",
-    "list_agent_runs": "Newest Giving Agent runs across all mandates, with the same safe projection. Public: no auth and no donor identifiers.",
-    "get_agent_run": "One Giving Agent run with its ordered trace, chosen projects and skipped projects. 404 when the run is unknown. Public: no auth and no donor identifiers.",
+    "list_agent_runs": "Newest Giving Agent runs for the demo mandate, with the same safe projection. Public: no auth and no donor identifiers.",
+    "get_agent_run": "One demo Giving Agent run with its ordered trace, chosen projects and skipped projects. 404 when the run is unknown or belongs to another mandate. Public: no auth and no donor identifiers.",
     "agent_activity": "Recent agent and admin actions for the public activity feed, newest first. Pass before_id to page. No raw inputs and no donor identifiers.",
 }
 
@@ -462,6 +484,7 @@ PARAM_EXAMPLES = {
     "project_id": 1, "donation_id": 4, "donor_id": 1, "order_id": "8E825560D88497210", "payout_id": 1,
     "round_id": 1, "milestone_id": 7, "case_id": 2, "actor": "giving-agent", "early": True,
     "run_id": 7, "before_id": 100,
+    "include_hash": True,
 }
 
 # Literal fields become named enums (APIMatic flags inline enums); same values share one name.
