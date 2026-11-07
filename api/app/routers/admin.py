@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import payouts, reconciliation, round_close
+from app import audit, kill_switch, payouts, reconciliation, round_close
 from app.money import to_paypal
 from app.refunds import book_refund, refunded_total
 from app.auth import require_admin
@@ -35,7 +35,10 @@ from app.routers.catalogue import _summaries, document_out, milestone_out, proje
 from app.routers.internal import case_out, release_milestone
 from app.routers.rounds import _out as round_out, leaderboard, _sponsored
 from app.schemas import (
+    AgentStatusOut,
+    AgentToggleIn,
     AuditOut,
+    AuditVerifyOut,
     CaseOut,
     CaseResolveIn,
     DocumentOut,
@@ -90,8 +93,8 @@ def verify_project(project_id: int, body: VerifyIn, db: Session = Depends(get_db
         project.verified_at = datetime.now(timezone.utc)
     else:
         project.status = ProjectStatus.draft
-    db.add(AuditLog(actor="admin", action="project_verification", inputs={"project_id": project.id},
-                    rule_result="approved" if body.approve else "rejected", reason=body.note))
+    audit.write(db, actor="admin", action="project_verification", inputs={"project_id": project.id},
+                rule_result="approved" if body.approve else "rejected", reason=body.note)
     db.commit()
     return project_detail(db, project)
 
@@ -129,8 +132,8 @@ def resolve_case(case_id: int, body: CaseResolveIn, db: Session = Depends(get_db
         )
         project.matching_frozen = still_open is not None
     result = "removed" if body.remove_project else case.status.value
-    db.add(AuditLog(actor="admin", action="case_resolved", inputs={"case_id": case.id, "project_id": project.id},
-                    rule_result=result, reason=body.note))
+    audit.write(db, actor="admin", action="case_resolved", inputs={"case_id": case.id, "project_id": project.id},
+                rule_result=result, reason=body.note)
     db.commit()
     # A round waiting in `closing` for this case can finish now.
     if round_close.close_due(db):
@@ -159,8 +162,8 @@ def review_milestone(
         raise _error(404, "MILESTONE_NOT_FOUND", "No such milestone")
     if milestone.status != MilestoneStatus.held:
         raise _error(409, "MILESTONE_NOT_HELD", f"Milestone is {milestone.status.value}")
-    db.add(AuditLog(actor="admin", action="milestone_review", inputs={"milestone_id": milestone.id},
-                    rule_result="released" if body.approve else "sent_back", reason=body.note))
+    audit.write(db, actor="admin", action="milestone_review", inputs={"milestone_id": milestone.id},
+                rule_result="released" if body.approve else "sent_back", reason=body.note)
     if body.approve:
         release_milestone(db, paypal, milestone)
     else:
@@ -247,8 +250,8 @@ def set_payout_account(project_id: int, body: PayoutAccountIn, db: Session = Dep
     account = db.get(PayoutAccount, project_id) or PayoutAccount(project_id=project_id, paypal_email="")
     account.paypal_email = body.paypal_email
     db.add(account)
-    db.add(AuditLog(actor="admin", action="payout_account_set", inputs={"project_id": project_id},
-                    rule_result="set", reason=None))
+    audit.write(db, actor="admin", action="payout_account_set", inputs={"project_id": project_id},
+                rule_result="set", reason=None)
     db.commit()
     return PayoutAccountOut(project_id=project_id, paypal_email=account.paypal_email)
 
@@ -266,28 +269,85 @@ def sweep_orders(db: Session = Depends(get_db), paypal: PayPalClient = Depends(g
     return reconciliation.sweep(db, paypal)
 
 
-@router.get("/audit-log", response_model=list[AuditOut])
+@router.get("/audit-log", response_model=list[AuditOut], response_model_exclude_unset=True)
 def audit_log(
     actor: str | None = Query(None, description="e.g. giving-agent, milestone-agent, watchdog-agent"),
+    include_hash: bool = Query(
+        False,
+        description="Include each row's seq, prev_hash and hash for independent chain checks.",
+    ),
     limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
-    """The agent log view: every action with its inputs, rule result and reason."""
+    """The agent log view: every action with its inputs, rule result and reason.
+
+    Pass include_hash=true to also see the audit hash chain columns.
+    """
     stmt = select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)
     if actor:
         stmt = stmt.where(AuditLog.actor == actor)
-    return [
-        AuditOut(
-            id=a.id,
-            actor=a.actor,
-            action=a.action,
-            inputs=a.inputs,
-            rule_result=a.rule_result,
-            reason=a.reason,
-            created_at=a.created_at,
-        )
-        for a in db.scalars(stmt)
-    ]
+    rows = []
+    for a in db.scalars(stmt):
+        data = {
+            "id": a.id,
+            "actor": a.actor,
+            "action": a.action,
+            "inputs": a.inputs,
+            "rule_result": a.rule_result,
+            "reason": a.reason,
+            "created_at": a.created_at,
+        }
+        if include_hash:
+            data.update(seq=a.seq, prev_hash=a.prev_hash, hash=a.hash)
+        rows.append(AuditOut(**data))
+    return rows
+
+
+@router.get("/audit-log/verify", response_model=AuditVerifyOut)
+def verify_audit_log(db: Session = Depends(get_db)):
+    """Recompute the audit hash chain and report the first row that no longer matches.
+
+    An edited, deleted or reordered row is reported by id and the check stops there.
+    """
+    return audit.verify(db)
+
+
+@router.get("/agents/status", response_model=AgentStatusOut)
+def agent_status(db: Session = Depends(get_db)):
+    """Whether the global agent kill switch is on, and who last moved it."""
+    return kill_switch.status(db)
+
+
+@router.post("/agents/pause", response_model=AgentStatusOut)
+def pause_agents(body: AgentToggleIn, db: Session = Depends(get_db)):
+    """Stop every money-moving agent route. Audit stays writable so agents can log the pause."""
+    kill_switch.pause(db, body.reason)
+    audit.write(
+        db,
+        actor="admin",
+        action="agents_paused",
+        inputs={"reason": body.reason},
+        rule_result="paused",
+        reason=body.reason,
+    )
+    db.commit()
+    return kill_switch.status(db)
+
+
+@router.post("/agents/resume", response_model=AgentStatusOut)
+def resume_agents(body: AgentToggleIn, db: Session = Depends(get_db)):
+    """Turn the global agent kill switch back off."""
+    kill_switch.resume(db, body.reason)
+    audit.write(
+        db,
+        actor="admin",
+        action="agents_resumed",
+        inputs={"reason": body.reason},
+        rule_result="resumed",
+        reason=body.reason,
+    )
+    db.commit()
+    return kill_switch.status(db)
 
 
 @router.get("/webhook-events", response_model=list[WebhookEventOut])
@@ -357,8 +417,8 @@ def create_round(body: RoundIn, db: Session = Depends(get_db), settings: Setting
     _check_round(db, round_)
     db.add(round_)
     db.flush()
-    db.add(AuditLog(actor="admin", action="round_created", inputs={"round_id": round_.id, **body.model_dump(mode="json")},
-                    rule_result="scheduled", reason=None))
+    audit.write(db, actor="admin", action="round_created", inputs={"round_id": round_.id, **body.model_dump(mode="json")},
+                rule_result="scheduled", reason=None)
     round_close.open_due(db, now)
     db.commit()
     return round_out(round_)
@@ -386,8 +446,8 @@ def update_round(round_id: int, body: RoundUpdateIn, db: Session = Depends(get_d
     _check_round(db, round_)
     if round_.status == RoundStatus.open and _aware(round_.ends_at) <= datetime.now(timezone.utc):
         raise _error(422, "BAD_DATES", "ends_at is in the past (close the round instead)")
-    db.add(AuditLog(actor="admin", action="round_updated", inputs={"round_id": round_.id, **body.model_dump(mode="json", exclude_unset=True)},
-                    rule_result=round_.status.value, reason=None))
+    audit.write(db, actor="admin", action="round_updated", inputs={"round_id": round_.id, **body.model_dump(mode="json", exclude_unset=True)},
+                rule_result=round_.status.value, reason=None)
     round_close.open_due(db)
     db.commit()
     return round_out(round_)
@@ -409,8 +469,8 @@ def reset_owner_token(project_id: int, db: Session = Depends(get_db)):
     if project is None:
         raise _error(404, "PROJECT_NOT_FOUND", "No such project")
     token, project.owner_token_hash = new_owner_token()
-    db.add(AuditLog(actor="admin", action="owner_token_reset", inputs={"project_id": project_id}, rule_result="reset",
-                    reason=None))
+    audit.write(db, actor="admin", action="owner_token_reset", inputs={"project_id": project_id}, rule_result="reset",
+                reason=None)
     db.commit()
     return OwnerTokenOut(project_id=project_id, owner_token=token)
 
@@ -445,9 +505,9 @@ def refund_donation(donation_id: int, body: RefundIn, db: Session = Depends(get_
     status = refund.get("status", "PENDING")
     if status == "COMPLETED":
         book_refund(db, donation, amount, refund.get("id"))
-    db.add(AuditLog(actor="admin", action="refund", inputs={"donation_id": donation.id, "amount_cents": amount,
-                                                            "refund_id": refund.get("id")},
-                    rule_result=status.lower(), reason=body.reason))
+    audit.write(db, actor="admin", action="refund", inputs={"donation_id": donation.id, "amount_cents": amount,
+                                                           "refund_id": refund.get("id")},
+                rule_result=status.lower(), reason=body.reason)
     db.commit()
     return RefundOut(donation_id=donation.id, refund_id=refund.get("id", ""), paypal_status=status, amount_cents=amount,
                      refunded_total_cents=refunded_total(db, donation.id), donation_status=donation.status)

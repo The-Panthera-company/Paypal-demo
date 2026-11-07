@@ -39,10 +39,13 @@ SCHEMAS = {
     "DonorBoardRow": "One donor's numbers for the round, for each ladder (given, matching unlocked, multiplier, reach, agent-given, impact points).",
     "DonorBoardOut": "A round's donor ladders. Names appear only for donors who opted in.",
     "ActiveMandate": "A mandate the Giving Agent should run now, with the donor's remaining funded balance.",
+    "AgentStatusOut": "The global agent kill switch: whether agents are paused, why, since when, and who last changed it.",
+    "AgentToggleIn": "An admin's reason for pausing or resuming every money-moving agent route.",
     "Allocation": "One project's share of a category gift.",
     "ApprovalIn": "The donor's answer to an agent gift above their approval threshold.",
     "AuditIn": "A decision an agent or person took, for the admin's agent log.",
     "AuditOut": "An entry in the agent log.",
+    "AuditVerifyOut": "The result of recomputing the audit hash chain: whether it is intact, how many rows were checked, the first bad row and the current head hash.",
     "CaseIn": "A Watchdog rule hit: freezes the project's matching and opens a case for an admin.",
     "CaseOut": "A Watchdog case and its current state.",
     "CaseResolveIn": "An admin's resolution of a Watchdog case.",
@@ -254,6 +257,15 @@ FIELDS = {
     "urgency": "1 (low) to 5 (urgent), set at verification.",
     "verified_at": "When an admin verified the project.",
     "via": "How it was given: PROJECT, CATEGORY or AGENT.",
+    "first_bad_id": "Id of the first row that failed verification; null when the chain is intact.",
+    "first_bad_reason": "Why that row failed: missing hash, sequence mismatch, previous-hash mismatch or content hash mismatch.",
+    "hash": "SHA-256 of this row's canonical payload; the next row stores it as prev_hash.",
+    "head_hash": "Hash of the last row checked, or an empty string when the log is empty.",
+    "paused": "True while the global agent kill switch is on.",
+    "prev_hash": "The previous row's hash, or an empty string for the first row.",
+    "since": "When the switch was last changed (UTC).",
+    "updated_by": "Who last moved the switch, e.g. admin.",
+    "valid": "True only when every row matches its sequence, previous hash and content hash.",
 }
 
 SCHEMA_FIELDS = {
@@ -280,6 +292,10 @@ SCHEMA_FIELDS = {
     ("PayoutRequestOut", "reason"): "Why it was held, or that every check passed.",
     ("AuditIn", "reason"): "Why, in plain words.",
     ("AuditOut", "reason"): "Why, in plain words.",
+    ("AuditOut", "seq"): "Position in the audit hash chain (1 = first).",
+    ("AuditVerifyOut", "checked"): "How many audit rows were recomputed before the check finished.",
+    ("AgentStatusOut", "reason"): "Why agents are paused, or why they were last resumed.",
+    ("AgentToggleIn", "reason"): "Why the admin paused or resumed agents; kept in the audit log.",
     ("DonationOut", "status"): "created, pending, captured, failed or refunded.",
     ("ReportGift", "status"): "pending, captured or refunded.",
     ("MilestoneOut", "status"): "open, evidence_submitted, held or released.",
@@ -354,6 +370,7 @@ PARAMS = {
     "early": "Close before the round's end time.",
     "run_id": "Giving Agent run id.",
     "before_id": "Return entries older than this audit-log id (cursor paging).",
+    "include_hash": "Include each audit row's seq, prev_hash and hash for independent checks.",
 }
 
 # --- examples for schemas that have none ------------------------------------------------------
@@ -445,6 +462,11 @@ OPERATIONS = {
     "get_mandate": "The donor's Giving Agent mandate and funded balance. 404 NO_MANDATE until the donor sets one.",
     "get_subscription": "The donor's monthly Giving Agent subscription, if one is pending, active or suspended.",
     "current_round": "The round taking donations now (open, or closing while it waits for Watchdog cases). 404 when none is.",
+    "verify_audit_log": "Recompute the audit SHA-256 chain in id order. Reports the first edited, missing or reordered row and stops there.",
+    "agent_status": "Whether the global agent kill switch is on, with the reason, time and actor.",
+    "pause_agents": "Stop every money-moving agent route with one request. Audit remains writable so agents can record the pause.",
+    "resume_agents": "Turn the global agent kill switch back off.",
+    "internal_status": "The agent service's read-only view of the kill switch; reachable while paused.",
     "review_queue": "Projects in a status for the admin, by default those waiting for verification.",
     "list_cases": "Watchdog cases, by default the open ones, newest first.",
     "list_payouts": "PayPal Payouts batches, newest first, with each item's status.",
@@ -462,6 +484,7 @@ PARAM_EXAMPLES = {
     "project_id": 1, "donation_id": 4, "donor_id": 1, "order_id": "8E825560D88497210", "payout_id": 1,
     "round_id": 1, "milestone_id": 7, "case_id": 2, "actor": "giving-agent", "early": True,
     "run_id": 7, "before_id": 100,
+    "include_hash": True,
 }
 
 # Literal fields become named enums (APIMatic flags inline enums); same values share one name.

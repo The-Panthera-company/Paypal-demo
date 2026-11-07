@@ -4246,7 +4246,7 @@
           "admin"
         ],
         "summary": "Audit Log",
-        "description": "The agent log view: every action with its inputs, rule result and reason.",
+        "description": "The agent log view: every action with its inputs, rule result and reason.\n\nPass include_hash=true to also see the audit hash chain columns.",
         "operationId": "audit_log",
         "security": [
           {
@@ -4266,6 +4266,19 @@
             },
             "description": "e.g. giving-agent, milestone-agent, watchdog-agent",
             "example": "giving-agent"
+          },
+          {
+            "name": "include_hash",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include each row's seq, prev_hash and hash for independent chain checks.",
+              "default": false,
+              "example": true
+            },
+            "description": "Include each row's seq, prev_hash and hash for independent chain checks.",
+            "example": true
           },
           {
             "name": "limit",
@@ -4351,6 +4364,209 @@
             }
           }
         }
+      }
+    },
+    "/admin/audit-log/verify": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Verify Audit Log",
+        "description": "Recompute the audit hash chain and report the first row that no longer matches.\n\nAn edited, deleted or reordered row is reported by id and the check stops there.",
+        "operationId": "verify_audit_log",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditVerifyOut"
+                },
+                "example": {
+                  "checked": 40,
+                  "head_hash": "9f2c...",
+                  "valid": true
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/agents/status": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Agent Status",
+        "description": "Whether the global agent kill switch is on, and who last moved it.",
+        "operationId": "agent_status",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStatusOut"
+                },
+                "example": {
+                  "paused": true,
+                  "reason": "Investigating a Watchdog alert",
+                  "since": "2026-11-07T09:30:00Z",
+                  "updated_by": "admin"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/agents/pause": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Pause Agents",
+        "description": "Stop every money-moving agent route. Audit stays writable so agents can log the pause.",
+        "operationId": "pause_agents",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentToggleIn"
+              },
+              "example": {
+                "reason": "Investigating a Watchdog alert"
+              }
+            }
+          },
+          "required": true,
+          "description": "An admin's reason for pausing or resuming every money-moving agent route."
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStatusOut"
+                },
+                "example": {
+                  "paused": true,
+                  "reason": "Investigating a Watchdog alert",
+                  "since": "2026-11-07T09:30:00Z",
+                  "updated_by": "admin"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/agents/resume": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Resume Agents",
+        "description": "Turn the global agent kill switch back off.",
+        "operationId": "resume_agents",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentToggleIn"
+              },
+              "example": {
+                "reason": "Investigating a Watchdog alert"
+              }
+            }
+          },
+          "required": true,
+          "description": "An admin's reason for pausing or resuming every money-moving agent route."
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStatusOut"
+                },
+                "example": {
+                  "paused": true,
+                  "reason": "Investigating a Watchdog alert",
+                  "since": "2026-11-07T09:30:00Z",
+                  "updated_by": "admin"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/admin/webhook-events": {
@@ -5102,6 +5318,39 @@
         }
       }
     },
+    "/internal/status": {
+      "get": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Internal Status",
+        "description": "The agent service checks this before starting a run. Available while paused.",
+        "operationId": "internal_status",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStatusOut"
+                },
+                "example": {
+                  "paused": true,
+                  "reason": "Investigating a Watchdog alert",
+                  "since": "2026-11-07T09:30:00Z",
+                  "updated_by": "admin"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/internal/mandates/active": {
       "get": {
         "tags": [
@@ -5259,6 +5508,22 @@
               }
             }
           },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -5333,6 +5598,22 @@
           },
           "404": {
             "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -5436,6 +5717,22 @@
           },
           "404": {
             "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -6674,6 +6971,66 @@
         "title": "AgentRunSkip",
         "description": "A project the agent left out, with the reason."
       },
+      "AgentStatusOut": {
+        "properties": {
+          "paused": {
+            "type": "boolean",
+            "description": "True while the global agent kill switch is on.",
+            "example": true
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why agents are paused, or why they were last resumed.",
+            "nullable": true,
+            "example": "Investigating a Watchdog alert"
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the switch was last changed (UTC).",
+            "nullable": true,
+            "example": "2026-11-07T09:30:00Z"
+          },
+          "updated_by": {
+            "type": "string",
+            "description": "Who last moved the switch, e.g. admin.",
+            "nullable": true,
+            "example": "admin"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paused"
+        ],
+        "example": {
+          "paused": true,
+          "reason": "Investigating a Watchdog alert",
+          "since": "2026-11-07T09:30:00Z",
+          "updated_by": "admin"
+        },
+        "title": "AgentStatusOut",
+        "description": "The global agent kill switch: whether agents are paused, why, since when, and who last changed it."
+      },
+      "AgentToggleIn": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "Why the admin paused or resumed agents; kept in the audit log.",
+            "example": "Investigating a Watchdog alert"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "example": {
+          "reason": "Investigating a Watchdog alert"
+        },
+        "title": "AgentToggleIn",
+        "description": "An admin's reason for pausing or resuming every money-moving agent route."
+      },
       "Allocation": {
         "properties": {
           "project_id": {
@@ -6820,6 +7177,24 @@
             "format": "date-time",
             "description": "When it was created (UTC).",
             "example": "2026-11-06T09:00:02Z"
+          },
+          "seq": {
+            "type": "integer",
+            "description": "Position in the audit hash chain (1 = first).",
+            "nullable": true,
+            "example": 1
+          },
+          "prev_hash": {
+            "type": "string",
+            "description": "The previous row's hash, or an empty string for the first row.",
+            "nullable": true,
+            "example": "prev hash"
+          },
+          "hash": {
+            "type": "string",
+            "description": "SHA-256 of this row's canonical payload; the next row stores it as prev_hash.",
+            "nullable": true,
+            "example": "hash"
           }
         },
         "type": "object",
@@ -6844,6 +7219,50 @@
         },
         "title": "AuditOut",
         "description": "An entry in the agent log."
+      },
+      "AuditVerifyOut": {
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "description": "True only when every row matches its sequence, previous hash and content hash.",
+            "example": true
+          },
+          "checked": {
+            "type": "integer",
+            "description": "How many audit rows were recomputed before the check finished.",
+            "example": 40
+          },
+          "first_bad_id": {
+            "type": "integer",
+            "description": "Id of the first row that failed verification; null when the chain is intact.",
+            "nullable": true,
+            "example": 1
+          },
+          "first_bad_reason": {
+            "type": "string",
+            "description": "Why that row failed: missing hash, sequence mismatch, previous-hash mismatch or content hash mismatch.",
+            "nullable": true,
+            "example": "first bad reason"
+          },
+          "head_hash": {
+            "type": "string",
+            "description": "Hash of the last row checked, or an empty string when the log is empty.",
+            "example": "9f2c..."
+          }
+        },
+        "type": "object",
+        "required": [
+          "valid",
+          "checked",
+          "head_hash"
+        ],
+        "example": {
+          "checked": 40,
+          "head_hash": "9f2c...",
+          "valid": true
+        },
+        "title": "AuditVerifyOut",
+        "description": "The result of recomputing the audit hash chain: whether it is intact, how many rows were checked, the first bad row and the current head hash."
       },
       "CaseIn": {
         "properties": {

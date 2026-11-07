@@ -10,7 +10,8 @@ were RETURNED or BLOCKED can be retried in a new batch with a new id (…-retry1
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import AuditLog, LedgerEntry, LedgerType, Milestone, Payout, PayoutAccount, PayoutStatus, Project
+from app import audit
+from app.models import LedgerEntry, LedgerType, Milestone, Payout, PayoutAccount, PayoutStatus, Project
 from app.money import to_paypal
 from app.paypal import PayPalClient, PayPalError
 
@@ -81,8 +82,8 @@ def send(db: Session, paypal: PayPalClient, payout: Payout) -> None:
         for item in items:
             item["error"] = e.issue
         payout.items = items
-        db.add(AuditLog(actor="system", action="payout_failed", inputs={"payout_id": payout.id},
-                        rule_result=e.issue, reason=f"PayPal refused batch {payout.sender_batch_id}"))
+        audit.write(db, actor="system", action="payout_failed", inputs={"payout_id": payout.id},
+                    rule_result=e.issue, reason=f"PayPal refused batch {payout.sender_batch_id}")
         return
 
     header = batch.get("batch_header", {})
@@ -91,8 +92,8 @@ def send(db: Session, paypal: PayPalClient, payout: Payout) -> None:
     for item in items:
         item.update(status="PENDING", error=None)
     payout.items = items
-    db.add(AuditLog(actor="system", action="payout_sent", inputs={"payout_id": payout.id},
-                    rule_result=header.get("batch_status"), reason=f"Batch {payout.sender_batch_id}"))
+    audit.write(db, actor="system", action="payout_sent", inputs={"payout_id": payout.id},
+                rule_result=header.get("batch_status"), reason=f"Batch {payout.sender_batch_id}")
 
 
 def _update_item(db: Session, payout: Payout, sender_item_id: str, status: str, payout_item_id: str | None) -> bool:

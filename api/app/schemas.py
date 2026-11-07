@@ -656,6 +656,50 @@ class AuditOut(AuditIn):
     )
     id: int
     created_at: datetime
+    # Only present when GET /admin/audit-log is called with include_hash=true.
+    seq: int | None = None
+    prev_hash: str | None = None
+    hash: str | None = None
+
+
+class AuditVerifyOut(BaseModel):
+    model_config = _example(
+        {
+            "valid": True,
+            "checked": 40,
+            "first_bad_id": None,
+            "first_bad_reason": None,
+            "head_hash": "9f2c...",
+        }
+    )
+
+    valid: bool
+    checked: int
+    first_bad_id: int | None = None
+    first_bad_reason: str | None = None
+    head_hash: str
+
+
+class AgentStatusOut(BaseModel):
+    model_config = _example(
+        {
+            "paused": True,
+            "reason": "Investigating a Watchdog alert",
+            "since": "2026-11-07T09:30:00Z",
+            "updated_by": "admin",
+        }
+    )
+
+    paused: bool
+    reason: str | None = None
+    since: datetime | None = None
+    updated_by: str | None = None
+
+
+class AgentToggleIn(BaseModel):
+    model_config = _example({"reason": "Investigating a Watchdog alert"})
+
+    reason: str = Field(min_length=1, max_length=500)
 
 
 class ActiveMandate(MandateOut):
