@@ -33,10 +33,9 @@ services:
         value: USD
       - key: STUB_EXAMPLES
         value: "true"
-      # The website's URL must be listed here, or the browser blocks the PayPal button's calls.
-      # After the first deploy, set it in the dashboard to: https://<giving-web>.onrender.com,http://localhost:3000
+      # The website's origin must be listed here, or the browser blocks its API calls.
       - key: CORS_ORIGINS
-        value: http://localhost:3000
+        value: "https://giving-web.onrender.com,http://localhost:3000"
 
   # Website (Person 2): donor pages, leaderboard, admin console.
   - type: web
@@ -67,6 +66,12 @@ services:
       # build time, so an empty value here means the assistant is not wired up yet.
       - key: NEXT_PUBLIC_AGENTS_URL
         sync: false
+      # Server-only token for the "Run now" action. Never exposed to the browser.
+      - key: INTERNAL_TOKEN
+        fromService:
+          type: web
+          name: giving-api
+          envVarKey: INTERNAL_TOKEN
 
   # Giving assistant (Person 3): FastAPI + the MCP server as a stdio child process.
   # Built from the repo ROOT because mcp-server/ lives outside agents/; see agents/Dockerfile.
@@ -102,9 +107,8 @@ services:
       - key: DEEPSEEK_MODEL
         value: deepseek-v4-flash
       # Must include the website's origin or the browser blocks the assistant's calls.
-      # Update to https://<giving-web>.onrender.com,http://localhost:3000 after the first deploy.
       - key: WEB_ORIGIN
-        value: http://localhost:3000
+        value: "https://giving-web.onrender.com,http://localhost:3000"
       # FIRST DEPLOY: leave true. Every mutating MCP tool becomes a no-op that returns a
       # canned result, so the service runs end to end without writing. Set to "false" only
       # once the Watchdog and Milestone agents are real and writes are intended.
