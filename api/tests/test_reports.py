@@ -166,6 +166,9 @@ def test_seed_reproduces_the_worked_example_and_is_rerunnable(monkeypatch):
         assert len(projects) == len(seed_dev.PROJECTS)
         assert len({p.category_id for p in projects}) == 4 and all(p.tags and p.facilitator for p in projects)
         assert db.scalar(select(Donor).order_by(Donor.id)).id == 1  # the demo donor
+        mandate = db.get(Mandate, seed_dev.DEMO_MANDATE_ID)
+        assert mandate is not None and mandate.active and mandate.donor_id == 1
+        assert len(db.scalars(select(Mandate).where(Mandate.active.is_(True))).all()) == 1
         assert len(db.scalars(select(Donation)).all()) == 29
         round_ = db.scalar(select(Round))
         assert round_.project_cap_pct == 40
