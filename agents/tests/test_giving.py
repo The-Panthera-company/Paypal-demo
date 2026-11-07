@@ -1,5 +1,6 @@
 """Giving Agent tests. Offline: FakeMcpClient + FakeCore + FakeLLM, no network."""
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -267,11 +268,14 @@ def test_days_ignores_non_dict_points():
     assert days_since_last_funding(["junk", 42]) is None
 
 
+FIXED_NOW = datetime(2026, 11, 7, 12, 0, tzinfo=timezone.utc)
+
+
 def test_days_single_point_above_zero_counts_as_a_raise():
     # The API only writes a point once money arrives, so one point means funded once.
-    days = days_since_last_funding([_point("2026-10-17T00:00:00Z", 5000)])
-    assert days is not None
-    assert 19.0 <= days <= 21.0
+    days = days_since_last_funding([_point("2026-10-17T00:00:00Z", 5000)], now=FIXED_NOW)
+    # 2026-10-17T00:00Z -> 2026-11-07T12:00Z is 21 days and 12 hours.
+    assert days == 21.5
 
 
 def test_days_single_point_at_zero_is_never_funded():
@@ -284,9 +288,9 @@ def test_days_multi_point_uses_latest_increase():
         _point("2026-10-17T00:00:00Z", 5000),
         _point("2026-10-20T00:00:00Z", 5000),  # flat, not a raise
     ]
-    days = days_since_last_funding(history)
-    assert days is not None
-    assert 19.0 <= days <= 21.0
+    days = days_since_last_funding(history, now=FIXED_NOW)
+    # The 2026-10-20 point is flat, so the raise is still 2026-10-17T00:00Z: 21.5 days.
+    assert days == 21.5
 
 
 def test_days_multi_point_flat_history_is_never_funded():

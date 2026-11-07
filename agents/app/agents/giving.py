@@ -63,12 +63,14 @@ def passes_hard_filters(project: dict) -> bool:
     )
 
 
-def days_since_last_funding(history: list) -> float | None:
+def days_since_last_funding(history: list, now: datetime | None = None) -> float | None:
     """Days since the most recent point where raised_cents went up.
 
     A single point above zero counts as a raise from 0: the API only writes a point after
     money arrives, so one point means the project has been funded once. Returns None only
     when the project has never raised anything.
+
+    `now` defaults to the current UTC time; tests pass a fixed value so they do not drift.
     """
     points = [p for p in history if isinstance(p, dict)]
     if not points:
@@ -92,7 +94,10 @@ def days_since_last_funding(history: list) -> float | None:
         return None
     if when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
-    return max(0.0, (datetime.now(timezone.utc) - when).total_seconds() / 86400)
+    reference = now or datetime.now(timezone.utc)
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=timezone.utc)
+    return max(0.0, (reference - when).total_seconds() / 86400)
 
 
 def merge_weights(overrides: dict | None) -> dict:
@@ -159,12 +164,12 @@ class GivingAgent:
         except OSError as exc:
             log.warning("could not persist giving state: %s", exc)
 
-    def already_ran(self, mandate_id):
-        return self._read_state().get(str(mandate_id)) == date.today().strftime("%Y-%m")
+    def already_ran(self, mandate_id, today: date | None = None):
+        return self._read_state().get(str(mandate_id)) == (today or date.today()).strftime("%Y-%m")
 
-    def _mark_ran(self, mandate_id):
+    def _mark_ran(self, mandate_id, today: date | None = None):
         state = self._read_state()
-        state[str(mandate_id)] = date.today().strftime("%Y-%m")
+        state[str(mandate_id)] = (today or date.today()).strftime("%Y-%m")
         self._write_state(state)
 
     async def run(self, mandate_id, force=False):
