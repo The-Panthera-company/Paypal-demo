@@ -30,10 +30,10 @@ def _mandate(db_session_factory):
         db.commit()
 
 
-def _run(factory, *, minutes_ago=0, decisions=None, report_text="Your agent gave $5 to Lanet Library."):
+def _run(factory, *, mandate_id=1, minutes_ago=0, decisions=None, report_text="Your agent gave $5 to Lanet Library."):
     with factory() as db:
         run = MandateRun(
-            mandate_id=1,
+            mandate_id=mandate_id,
             run_at=datetime.now(timezone.utc) - timedelta(minutes=minutes_ago),
             decisions=decisions,
             report_text=report_text,
@@ -64,13 +64,15 @@ def test_run_has_trace_choices_and_no_donor_identifiers(client, db_session_facto
                 "input": {
                     "project_id": 1,
                     "amount_cents": 500,
+                    "funded_balance_cents": 5000,
+                    "balance": 5000,
                     "donor_id": 7,
                     "donor_ids": [7],
                     "donor_name": "Wanjiru",
                     "payer_id": "PAYER-SECRET-1",
                     "email": "donor@example.com",
                 },
-                "result": {"status": "recorded", "payer_id": "PAYER-SECRET-1"},
+                "result": {"status": "recorded", "funded_balance_cents": 5000, "payer_id": "PAYER-SECRET-1"},
                 "rule": "ok",
                 "reason": "Three backers, donor@example.com confirmed",
             },
@@ -79,7 +81,7 @@ def test_run_has_trace_choices_and_no_donor_identifiers(client, db_session_facto
                 "actor": "giving-agent",
                 "step": "search",
                 "title": "Kept two projects",
-                "input": {"project_ids": [1, 2], "donor_ids": [7], "payer": "PAYER-SECRET-1"},
+                "input": {"project_ids": [1, 2], "donor_ids": [7], "payer": "PAYER-SECRET-1", "balance": 5000},
                 "result": {"count": 2},
             },
         ],
@@ -107,6 +109,7 @@ def test_run_has_trace_choices_and_no_donor_identifiers(client, db_session_facto
     assert "payer_id" not in response.text
     assert "PAYER-SECRET-1" not in response.text
     assert "donor@example.com" not in response.text
+    assert "balance" not in response.text
     assert response.headers["cache-control"] == "public, max-age=5"
 
 
@@ -130,6 +133,56 @@ def test_runs_are_newest_first_and_limited(client, db_session_factory):
     assert [run["report_text"] for run in body] == ["newest", "middle"]
     assert all("mandate_id" not in run for run in body)
     assert response.headers["cache-control"] == "public, max-age=5"
+
+
+def test_runs_are_limited_to_the_demo_mandate(client, db_session_factory):
+    with db_session_factory() as db:
+        db.add(Donor(id=2, display_name="Other donor"))
+        db.flush()
+        db.add(
+            Mandate(
+                id=2,
+                donor_id=2,
+                monthly_budget=1000,
+                currency="USD",
+                categories=[1],
+                excluded_tags=[],
+                per_project_max=500,
+                approval_threshold=500,
+            )
+        )
+        db.commit()
+
+    demo_run = _run(db_session_factory)
+    other_run = _run(db_session_factory, mandate_id=2)
+
+    body = client.get("/agents/runs").json()
+    assert [run["id"] for run in body] == [demo_run]
+
+    other = client.get(f"/agents/runs/{other_run}")
+    assert other.status_code == 404
+    assert other.json()["detail"]["error"] == "RUN_NOT_FOUND"
+    assert client.get(f"/agents/runs/{demo_run}").status_code == 200
+
+
+def test_activity_has_a_title_for_a_run_summary(client, db_session_factory):
+    run_id = _run(db_session_factory)
+    with db_session_factory() as db:
+        db.add(
+            AuditLog(
+                actor="giving-agent",
+                action="mandate_run_summary",
+                inputs={"mandate_run_id": run_id},
+                rule_result="ok",
+                reason="2 recorded, 1 awaiting approval",
+            )
+        )
+        db.commit()
+
+    body = client.get("/agents/activity").json()
+    summary = next(item for item in body if item["action"] == "mandate_run_summary")
+    assert summary["run_id"] == run_id
+    assert summary["title"] == "Giving Agent finished a run - 2 recorded, 1 awaiting approval"
 
 
 def test_activity_is_newest_first_with_cursor_and_project_titles(client, db_session_factory):

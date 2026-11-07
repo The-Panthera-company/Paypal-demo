@@ -6202,7 +6202,7 @@
           "agents (public)"
         ],
         "summary": "List Agent Runs",
-        "description": "Newest Giving Agent runs across all mandates, with the same safe projection.",
+        "description": "Newest Giving Agent runs for the demo mandate, with the same safe projection.",
         "operationId": "list_agent_runs",
         "parameters": [
           {
@@ -6349,7 +6349,7 @@
           "agents (public)"
         ],
         "summary": "Get Agent Run",
-        "description": "One Giving Agent run with its ordered trace, chosen projects and skipped projects.",
+        "description": "One demo Giving Agent run with its ordered trace, chosen projects and skipped projects.",
         "operationId": "get_agent_run",
         "parameters": [
           {
@@ -6505,7 +6505,7 @@
                   "items": {
                     "$ref": "#/components/schemas/AgentActivityOut"
                   },
-                  "description": "List of: One recent agent or admin action for the public activity feed.",
+                  "description": "List of: One recent agent or admin action for the public activity feed; summary rows include the run id.",
                   "example": [
                     {
                       "action": "checked_donation",
@@ -6785,7 +6785,7 @@
           "title": "Agent gift recorded for Lanet Library - Three backers, 2% funded"
         },
         "title": "AgentActivityOut",
-        "description": "One recent agent or admin action for the public activity feed."
+        "description": "One recent agent or admin action for the public activity feed; summary rows include the run id."
       },
       "AgentRunChoice": {
         "properties": {
@@ -7090,7 +7090,7 @@
           },
           "action": {
             "type": "string",
-            "description": "What was done, e.g. checked_donation, case_opened, payout_request.",
+            "description": "What was done, e.g. checked_donation, mandate_run_summary, case_opened, payout_request.",
             "example": "skip"
           },
           "inputs": {
@@ -7141,7 +7141,7 @@
           },
           "action": {
             "type": "string",
-            "description": "What was done, e.g. checked_donation, case_opened, payout_request.",
+            "description": "What was done, e.g. checked_donation, mandate_run_summary, case_opened, payout_request.",
             "example": "checked_donation"
           },
           "inputs": {

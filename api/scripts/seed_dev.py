@@ -17,6 +17,7 @@ re-applied. Adds:
   but paid in the database only: their payout batch stays PENDING under a SEED- batch id, so nothing
   goes to PayPal and reconciliation stays clean (there is no PayPal money behind seeded backers).
 - a demo donor for the Giving Agent page (there is no route that creates donors), id 1 on a fresh database
+- the demo Giving Agent mandate, id 1 on a fresh database, so the public trace has a stable run owner
 - an open round: 10,000 USD pool, 40% cap
 
 Seeded backers are database rows, not PayPal payments; reconciliation only counts PayPal money.
@@ -34,6 +35,7 @@ from sqlalchemy.orm import Session
 
 from app import audit
 from app.db import SessionLocal, create_schema, engine
+from app.demo import DEMO_MANDATE_ID
 from app.models import (
     Category,
     Donation,
@@ -42,6 +44,7 @@ from app.models import (
     DocumentKind,
     LedgerEntry,
     LedgerType,
+    Mandate,
     Milestone,
     MilestoneStatus,
     Payout,
@@ -477,6 +480,34 @@ def main() -> None:
         if demo is None:
             demo = Donor(display_name="Demo donor", show_on_leaderboard=True)
             db.add(demo)
+        db.flush()  # demo.id is needed for the demo mandate
+
+        mandate = db.get(Mandate, DEMO_MANDATE_ID)
+        if mandate is None:
+            mandate = Mandate(
+                donor_id=demo.id,
+                monthly_budget=5000,
+                currency="USD",
+                categories=sorted(c.id for c in categories.values()),
+                excluded_tags=[],
+                per_project_max=1000,
+                approval_threshold=500,
+                active=True,
+            )
+            db.add(mandate)
+            db.flush()
+            if mandate.id != DEMO_MANDATE_ID:
+                print(
+                    f"warning: demo mandate got id {mandate.id}; "
+                    f"the public trace expects {DEMO_MANDATE_ID}"
+                )
+        elif mandate.donor_id == demo.id:
+            mandate.active = True
+        else:
+            print(
+                f"warning: mandate {DEMO_MANDATE_ID} belongs to donor {mandate.donor_id}, "
+                f"not demo donor {demo.id}"
+            )
 
         if not db.scalar(select(Donor).where(Donor.display_name.like(f"{SEED_BACKER} %"))):
             n = 0
@@ -497,6 +528,7 @@ def main() -> None:
             print(f"project {p.id}: {p.title} [{next(c for c, v in categories.items() if v.id == p.category_id)}]")
         print(f"round {round_.id}: {round_.name}, cap {round_.project_cap_pct}%, pool {round_.matching_pool} cents")
         print(f"demo donor: id {demo.id}")
+        print(f"demo mandate: id {mandate.id}, active {mandate.active}")
 
 
 if __name__ == "__main__":

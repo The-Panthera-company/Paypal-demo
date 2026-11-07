@@ -123,7 +123,7 @@ SCHEMAS = {
     "AgentRunChoice": "A project the agent chose and the amount it asked the rules engine for.",
     "AgentRunSkip": "A project the agent left out, with the reason.",
     "AgentRunOut": "A public Giving Agent run: ordered trace, chosen projects, skipped projects and the report. No donor identifiers.",
-    "AgentActivityOut": "One recent agent or admin action for the public activity feed.",
+    "AgentActivityOut": "One recent agent or admin action for the public activity feed; summary rows include the run id.",
 }
 
 # --- fields: by name, with per-schema wording where a name means different things ------------
@@ -137,7 +137,7 @@ FIELDS = {
     "given_cents": "Everything the donor gave in the round, in cents (agent budget top-ups excluded).",
     "is_me": "True on the row of the donor passed as `me`.",
     "alias": "Stable anonymous name that does not reveal the donor id, e.g. Donor 3FA2C1.",
-    "action": "What was done, e.g. checked_donation, case_opened, payout_request.",
+    "action": "What was done, e.g. checked_donation, mandate_run_summary, case_opened, payout_request.",
     "active": "Whether the Giving Agent runs for this mandate; false pauses it.",
     "actor": "Who acted: giving-agent, milestone-agent, watchdog-agent, admin, donor, system or paypal.",
     "agent_report": "The Giving Agent's latest run report for this donor, if any.",
@@ -473,8 +473,8 @@ OPERATIONS = {
     "get_payout_account": "The PayPal email a project's tranches are paid to.",
     "paypal_config": "Public PayPal settings for the website: client id, currency, environment and donation limits.",
     "health": "Returns ok when the API is up. Use it to wake the free Render instance before a demo.",
-    "list_agent_runs": "Newest Giving Agent runs across all mandates, with the same safe projection. Public: no auth and no donor identifiers.",
-    "get_agent_run": "One Giving Agent run with its ordered trace, chosen projects and skipped projects. 404 when the run is unknown. Public: no auth and no donor identifiers.",
+    "list_agent_runs": "Newest Giving Agent runs for the demo mandate, with the same safe projection. Public: no auth and no donor identifiers.",
+    "get_agent_run": "One demo Giving Agent run with its ordered trace, chosen projects and skipped projects. 404 when the run is unknown or belongs to another mandate. Public: no auth and no donor identifiers.",
     "agent_activity": "Recent agent and admin actions for the public activity feed, newest first. Pass before_id to page. No raw inputs and no donor identifiers.",
 }
 
