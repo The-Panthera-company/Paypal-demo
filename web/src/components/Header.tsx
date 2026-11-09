@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FavoritesLink } from "./FavoriteButton";
+import { AgentStatusDot } from "./AgentStatusDot";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -71,13 +72,15 @@ export function Header() {
           </nav>
 
           <div className="ml-auto hidden h-full shrink-0 items-center gap-4 border-l border-white/15 pl-6 lg:flex">
+            <AgentStatusDot />
             <FavoritesLink />
             <Link href="/projects" className="btn hidden 2xl:inline-flex">
               Back a project
             </Link>
           </div>
 
-          <div className="ml-auto lg:hidden">
+          <div className="ml-auto flex items-center gap-4 lg:hidden">
+            <AgentStatusDot />
             <FavoritesLink />
           </div>
           <button

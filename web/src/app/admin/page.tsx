@@ -3,12 +3,16 @@ import { getGlobePins } from "@/lib/globe";
 
 import { AuditGrid, CasesGrid, MilestonesGrid, VerificationGrid } from "@/components/admin/AdminGrids";
 import { PageTitle } from "@/components/PageTitle";
-import { getAdminData, getDashboard, getProjectDocuments, listRounds } from "@/lib/admin";
+import { getAgentStatus, getAuditChain, verifyAuditChain, getAdminData, getDashboard, getProjectDocuments, listRounds } from "@/lib/admin";
 import { OwnerTokenButton } from "@/components/admin/OwnerTokenButton";
 import { RoundsPanel } from "@/components/admin/RoundsPanel";
 import { RefundPanel } from "@/components/admin/RefundPanel";
 import { getCategories, getLeaderboard, getProjects } from "@/lib/api";
 import { Overview } from "@/components/admin/Overview";
+import { AgentSwitch } from "@/components/admin/AgentSwitch";
+import { TrustPanel } from "@/components/admin/TrustPanel";
+import { CollusionCases } from "@/components/admin/CollusionCases";
+import { hasRingGraph } from "@/components/CollusionGraph";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +24,7 @@ const tabs = [
   { id: "rounds", label: "Rounds" },
   { id: "refunds", label: "Refunds" },
   { id: "log", label: "Agent log" },
+  { id: "trust", label: "Trust" },
 ] as const;
 type Tab = (typeof tabs)[number]["id"];
 
@@ -27,11 +32,16 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const { tab: raw } = await searchParams;
   const tab: Tab = tabs.some((t) => t.id === raw) ? (raw as Tab) : "overview";
   const [data, globe, dash, projects, lb, categories, rounds] = await Promise.all([getAdminData(), getGlobePins(), getDashboard(), getProjects(), getLeaderboard(), getCategories(), listRounds()]);
+  const status = await getAgentStatus().catch(() => null);
+  const [chain, chainRows] = tab === "trust" ? await Promise.all([verifyAuditChain().catch(() => null), getAuditChain(100).catch(() => [])]) : [null, []];
+  const open = data.cases.filter((c) => c.status === "open");
+  const rings = open.filter(hasRingGraph);
   const docs = tab === "verify" ? await Promise.all(data.queue.map(async (project) => ({ project, documents: await getProjectDocuments(project.id) }))) : [];
   const counts: Record<Tab, number> = {
     overview: 0,
     rounds: 0,
     refunds: 0,
+    trust: 0,
     cases: data.cases.filter((c) => c.status === "open").length,
     verify: data.queue.length,
     milestones: data.milestones.length,
@@ -47,6 +57,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             Agents read, check and explain; anything big or unclear waits here for a person. Every decision is logged
             with a reason.
           </p>
+
+          {status ? <AgentSwitch status={status} /> : <p role="status" className="border border-line bg-white p-4 text-sm">Couldn&apos;t read the agent switch. The API may be waking up.</p>}
 
           {data.sampleReason && (
             <p className="border-l-4 border-accent bg-white p-3 text-sm text-ink">
@@ -80,7 +92,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           {tab === "cases" && (
             <div className="space-y-3">
               <p>The Watchdog freezes a project&apos;s <strong>matching</strong> (never its donations) and opens a case. Clear a false alarm, or confirm it.</p>
-              <CasesGrid rows={data.cases.filter((c) => c.status === "open")} />
+              {rings.length > 0 && <CollusionCases cases={rings} />}
+              <CasesGrid rows={open.filter((c) => !hasRingGraph(c))} />
             </div>
           )}
           {tab === "verify" && (
@@ -129,6 +142,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               <MilestonesGrid rows={data.milestones} />
             </div>
           )}
+          {tab === "trust" && <TrustPanel initial={chain} rows={chainRows} />}
           {tab === "log" && (
             <div className="space-y-3">
               <p>Every agent and admin action, with the inputs it saw, the rule result and the reason.</p>
