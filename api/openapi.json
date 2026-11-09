@@ -964,7 +964,7 @@
           "catalogue"
         ],
         "summary": "List Project Procurements",
-        "description": "A project's managed purchases, newest first: status, supplier, amount, line items and the\nPayPal receipt once paid. Public; never includes a supplier's PayPal email.",
+        "description": "A project's managed purchases, newest first: status, supplier, amount, line items and the\nPayPal receipt once paid. Public; never includes a supplier's PayPal email. Like the project\npage, only for listed or completed projects: one under review or delisted answers 404.",
         "operationId": "list_project_procurements",
         "parameters": [
           {
@@ -7077,13 +7077,117 @@
         }
       }
     },
+    "/internal/procurement/runs": {
+      "post": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Record Procurement Run",
+        "description": "The Procurement Agent records its run (the trace of what it looked at and why it chose a\nsupplier) before proposing. The run belongs to no donor's mandate; its trace is public at\nGET /agents/runs/{id}, so keep supplier emails and personal details out of it.",
+        "operationId": "record_procurement_run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcurementRunIn"
+              },
+              "example": {
+                "decisions": {
+                  "trace": [
+                    {
+                      "seq": 1,
+                      "status": "ok",
+                      "step": "list_suppliers",
+                      "title": "Found 2 eligible suppliers in Nakuru",
+                      "tool": "list_procurement_suppliers"
+                    }
+                  ]
+                },
+                "report_text": "Chose Nakuru Books & Stationery: the only eligible bookseller, 30 USD with delivery."
+              }
+            }
+          },
+          "required": true,
+          "description": "A Procurement Agent run: what it looked at and why it chose a supplier (its public trace)."
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateRunOut"
+                },
+                "example": {
+                  "decisions": {
+                    "candidates": [
+                      {
+                        "project_id": 2,
+                        "score": 81.5
+                      },
+                      {
+                        "project_id": 3,
+                        "score": 64.0
+                      }
+                    ],
+                    "chosen": [
+                      {
+                        "amount_cents": 300,
+                        "project_id": 2
+                      }
+                    ],
+                    "skipped": [
+                      {
+                        "project_id": 5,
+                        "reason": "excluded tag: gambling-recovery"
+                      }
+                    ]
+                  },
+                  "id": 5,
+                  "mandate_id": 1,
+                  "report_text": "USD 3.00 to Kaptembwo Desks: 4 backers, 60% funded, receipts uploaded.",
+                  "run_at": "2026-11-06T09:00:00Z"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/internal/procurement/{procurement_id}/propose": {
       "post": {
         "tags": [
           "internal (agents)"
         ],
         "summary": "Propose Procurement",
-        "description": "Choose an active, eligible supplier and a price within the request and the milestone.\nA procurement gets one proposal; asking twice is a conflict.",
+        "description": "Choose an active, eligible supplier and a price within the request and the milestone.\nA procurement gets one proposal; asking twice is a conflict. Pass the run_id from\nPOST /internal/procurement/runs so the purchase links to its trace.",
         "operationId": "propose_procurement",
         "security": [
           {
@@ -7648,7 +7752,7 @@
           "agents (public)"
         ],
         "summary": "List Agent Runs",
-        "description": "Newest Giving Agent runs for the demo mandate, with the same safe projection.",
+        "description": "Newest agent runs, with the same safe projection: the demo mandate's Giving Agent runs and\nthe Procurement Agent's runs.",
         "operationId": "list_agent_runs",
         "parameters": [
           {
@@ -7795,7 +7899,7 @@
           "agents (public)"
         ],
         "summary": "Get Agent Run",
-        "description": "One demo Giving Agent run with its ordered trace, chosen projects and skipped projects.",
+        "description": "One agent run (a demo Giving Agent run or a Procurement Agent run) with its ordered trace,\nchosen projects and skipped projects.",
         "operationId": "get_agent_run",
         "parameters": [
           {
@@ -8310,6 +8414,12 @@
             "type": "integer",
             "description": "Agent run id",
             "example": 7
+          },
+          "agent": {
+            "type": "string",
+            "description": "giving-agent or procurement-agent",
+            "default": "giving-agent",
+            "example": "giving-agent"
           },
           "run_at": {
             "type": "string",
@@ -10799,7 +10909,8 @@
           },
           "mandate_id": {
             "type": "integer",
-            "description": "Mandate id.",
+            "description": "The mandate the run was for; null for a Procurement Agent run",
+            "nullable": true,
             "example": 1
           },
           "run_at": {
@@ -11725,9 +11836,15 @@
           },
           "receipt_url": {
             "type": "string",
-            "description": "Link of the receipt document created from the PayPal batch",
+            "description": "A public receipt page anyone can open, once paid",
             "nullable": true,
             "example": "receipt url"
+          },
+          "run_id": {
+            "type": "integer",
+            "description": "The Procurement Agent run behind the proposal: GET /agents/runs/{run_id}",
+            "nullable": true,
+            "example": 1
           },
           "needs_approval": {
             "type": "boolean",
@@ -11877,6 +11994,12 @@
             "minLength": 1,
             "description": "Why this supplier and price were chosen",
             "example": "Lowest eligible quote, delivery included"
+          },
+          "run_id": {
+            "type": "integer",
+            "description": "The agent run that chose it (POST /internal/procurement/runs), so the purchase links to its public trace",
+            "nullable": true,
+            "example": 1
           }
         },
         "type": "object",
@@ -12084,9 +12207,15 @@
           },
           "receipt_url": {
             "type": "string",
-            "description": "Link of the receipt document created from the PayPal batch",
+            "description": "A public receipt page anyone can open, once paid",
             "nullable": true,
             "example": "receipt url"
+          },
+          "run_id": {
+            "type": "integer",
+            "description": "The Procurement Agent run behind the proposal: GET /agents/runs/{run_id}",
+            "nullable": true,
+            "example": 1
           },
           "needs_approval": {
             "type": "boolean",
@@ -12210,6 +12339,53 @@
         },
         "title": "ProcurementRequestOut",
         "description": "A purchase request waiting for a proposal, with the project and milestone details the agent needs."
+      },
+      "ProcurementRunIn": {
+        "properties": {
+          "decisions": {
+            "additionalProperties": true,
+            "type": "object",
+            "description": "What the agent considered and chose; \"trace\" is the ordered list of steps",
+            "example": {
+              "trace": [
+                {
+                  "seq": 1,
+                  "status": "ok",
+                  "step": "list_suppliers",
+                  "title": "Found 2 eligible suppliers in Nakuru",
+                  "tool": "list_procurement_suppliers"
+                }
+              ]
+            }
+          },
+          "report_text": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "A short account of the run, for people",
+            "nullable": true,
+            "example": "Chose Nakuru Books & Stationery: the only eligible bookseller, 30 USD with delivery."
+          }
+        },
+        "type": "object",
+        "required": [
+          "decisions"
+        ],
+        "example": {
+          "decisions": {
+            "trace": [
+              {
+                "seq": 1,
+                "status": "ok",
+                "step": "list_suppliers",
+                "title": "Found 2 eligible suppliers in Nakuru",
+                "tool": "list_procurement_suppliers"
+              }
+            ]
+          },
+          "report_text": "Chose Nakuru Books & Stationery: the only eligible bookseller, 30 USD with delivery."
+        },
+        "title": "ProcurementRunIn",
+        "description": "A Procurement Agent run: what it looked at and why it chose a supplier (its public trace)."
       },
       "ProcurementStatus": {
         "type": "string",

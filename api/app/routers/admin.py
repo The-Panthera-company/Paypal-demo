@@ -210,6 +210,9 @@ def retry_procurement(
         raise _error(404, "PROCUREMENT_NOT_FOUND", "No such procurement")
     if procurement.status != ProcurementStatus.failed:
         raise _error(409, "PROCUREMENT_NOT_FAILED", f"Only a failed payment can be retried; this one is {procurement.status.value}")
+    # Logged as the admin's decision; the payment itself is logged by the pay route below.
+    audit.write(db, actor="admin", action="procurement_retry", inputs={"procurement_id": procurement.id},
+                rule_result="retry", reason=f"Retrying after {procurement.error or 'a failed payment'}")
     from app.routers.internal import pay_procurement
     return pay_procurement(procurement_id, db, settings, paypal)
 

@@ -95,6 +95,7 @@ SCHEMAS = {
     "ProcurementOut": "A managed purchase request, its supplier proposal, PayPal batch and receipt. Supplier PayPal emails are never returned.",
     "ProcurementProjectOut": "The project requesting a purchase, with the goal, tags and region used to match suppliers.",
     "ProcurementProposeIn": "The Procurement Agent's chosen supplier, price, quoted lines and reason.",
+    "ProcurementRunIn": "A Procurement Agent run: what it looked at and why it chose a supplier (its public trace).",
     "ProcurementRequestIn": "A project owner's request for something to be bought from one milestone.",
     "ProcurementRequestOut": "A purchase request waiting for a proposal, with the project and milestone details the agent needs.",
     "ProcurementStatus": "requested: waiting for a supplier proposal; proposed: waiting to pay or for admin approval; approved: over the automatic limit and approved; paid: PayPal accepted the supplier batch; failed: PayPal refused it and it can be retried; cancelled: withdrawn.",

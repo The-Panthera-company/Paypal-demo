@@ -1,9 +1,11 @@
 """Public catalogue: categories, projects, their stories and funding history."""
 
+import html
 from collections import defaultdict
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -20,6 +22,7 @@ from app.models import (
     MatchResult,
     Milestone,
     MilestoneStatus,
+    Payout,
     PayoutAccount,
     Procurement,
     ProcurementStatus,
@@ -311,11 +314,68 @@ def request_procurement(
             responses={404: {"model": ErrorOut}})
 def list_project_procurements(project_id: int, db: Session = Depends(get_db)):
     """A project's managed purchases, newest first: status, supplier, amount, line items and the
-    PayPal receipt once paid. Public; never includes a supplier's PayPal email."""
-    if db.get(Project, project_id) is None:
+    PayPal receipt once paid. Public; never includes a supplier's PayPal email. Like the project
+    page, only for listed or completed projects: one under review or delisted answers 404."""
+    project = db.get(Project, project_id)
+    if project is None or project.status not in LISTED + (ProjectStatus.completed,):
         raise HTTPException(404, detail={"error": "PROJECT_NOT_FOUND", "message": "No such project"})
     rows = db.scalars(select(Procurement).where(Procurement.project_id == project_id).order_by(Procurement.id.desc()))
     return [procurement_service.procurement_out(db, p) for p in rows]
+
+
+def _money(cents: int | None, currency: str) -> str:
+    return f"{currency} {(cents or 0) / 100:,.2f}"
+
+
+@router.get("/procurements/{procurement_id}/receipt", response_class=HTMLResponse, include_in_schema=False)
+def procurement_receipt(procurement_id: int, db: Session = Depends(get_db)):
+    """A purchase's receipt as a page anyone can open (the receipt_url on a paid purchase): who was
+    paid, for what, how much, when, and PayPal's batch id. Never the supplier's PayPal email."""
+    procurement = db.get(Procurement, procurement_id)
+    project = db.get(Project, procurement.project_id) if procurement else None
+    receipt = db.get(ProjectDocument, procurement.receipt_document_id) if procurement and procurement.receipt_document_id else None
+    if (procurement is None or receipt is None or procurement.status != ProcurementStatus.paid
+            or project is None or project.status not in LISTED + (ProjectStatus.completed,)):
+        return HTMLResponse("<!doctype html><title>Receipt not found</title><p>No paid purchase with that number.</p>",
+                            status_code=404)
+    fields = receipt.extracted_fields or {}
+    milestone = db.get(Milestone, procurement.milestone_id)
+    payout = db.get(Payout, procurement.payout_id) if procurement.payout_id else None
+    item_status = next((i.get("status") for i in (payout.items or []) if i.get("procurement_id") == procurement.id), None) \
+        if payout else None
+    esc = html.escape
+    currency = procurement.currency
+    rows = "".join(
+        f"<tr><td>{esc(str(line.get('description', '')))}</td><td class=n>{esc(str(line.get('quantity', '')))}</td>"
+        f"<td class=n>{_money(line.get('unit_amount_cents'), currency) if line.get('unit_amount_cents') is not None else ''}</td></tr>"
+        for line in (procurement.line_items or []) if isinstance(line, dict)
+    ) or f"<tr><td>{esc(procurement.description)}</td><td class=n>{procurement.quantity}</td><td class=n></td></tr>"
+    paid_on = esc(str(fields.get("date") or receipt.created_at)[:10])
+    page = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receipt PR-{procurement.id}</title>
+<style>
+body{{font:16px/1.5 system-ui,sans-serif;color:#1b2620;background:#f6f7f4;margin:0;padding:24px 16px}}
+main{{max-width:640px;margin:0 auto;background:#fff;border:1px solid #d5ddd6;padding:28px}}
+h1{{font-size:1.4rem;margin:0 0 4px}} .muted{{color:#5b6a61}} table{{width:100%;border-collapse:collapse;margin:16px 0}}
+th,td{{text-align:left;padding:6px 8px 6px 0;border-bottom:1px solid #e3e8e4}} .n{{text-align:right}}
+dl{{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:16px 0}} dt{{color:#5b6a61}}
+.total{{font-weight:700;font-size:1.1rem}} code{{font-size:.9em}}
+</style></head><body><main>
+<h1>Payment receipt PR-{procurement.id}</h1>
+<p class=muted>Community Giving paid this supplier directly through PayPal Payouts, from a project's milestone funds.</p>
+<dl>
+<dt>Project</dt><dd>{esc(project.title)}</dd>
+<dt>Milestone</dt><dd>{esc(milestone.title) if milestone else ''}</dd>
+<dt>Paid to</dt><dd>{esc(str(fields.get('supplier') or ''))}</dd>
+<dt>Paid on</dt><dd>{paid_on}</dd>
+<dt>PayPal batch</dt><dd><code>{esc(str(fields.get('batch_id') or (payout.paypal_batch_id if payout else '') or ''))}</code></dd>
+<dt>PayPal status</dt><dd>{esc(str(item_status or (payout.status.value if payout else '')))}</dd>
+</dl>
+<table><thead><tr><th>Item</th><th class=n>Qty</th><th class=n>Unit price</th></tr></thead><tbody>{rows}</tbody></table>
+<p class=total>Total paid: {_money(procurement.amount_cents, currency)}</p>
+</main></body></html>"""
+    return HTMLResponse(page)
 
 
 def project_gifts(db: Session, project_ids: list[int]) -> list[tuple[int, int | None, int, datetime]]:

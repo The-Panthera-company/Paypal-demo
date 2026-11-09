@@ -365,3 +365,91 @@ def test_public_list_admin_retry_and_display_fields(client, db_session_factory, 
     assert body["status"] == "paid"
     assert body["paypal_batch_id"].startswith("BATCH")
     assert body["receipt_url"]
+
+
+def _paid(client, db_session_factory, *, run_id=None):
+    """A $30 purchase, proposed (optionally from a recorded run) and paid."""
+    request = _request(client, _owner(client), _milestone(db_session_factory))
+    body = {"supplier_id": _supplier(db_session_factory), "amount_cents": 3000, "rationale": "Local bookseller",
+            "line_items": [{"description": "Grade 3 reading set <b>", "quantity": 40, "unit_amount_cents": 75}]}
+    if run_id is not None:
+        body["run_id"] = run_id
+    assert client.post(f"/internal/procurement/{request['id']}/propose", headers=INTERNAL, json=body).status_code == 200
+    paid = client.post(f"/internal/procurement/{request['id']}/pay", headers=INTERNAL).json()
+    assert paid["status"] == "paid"
+    return paid
+
+
+def test_purchase_links_to_its_agent_run_and_trace(client, db_session_factory, fake_paypal):
+    trace = [{"seq": 2, "step": "propose", "title": "Proposed 30 USD"},
+             {"seq": 1, "step": "list_suppliers", "title": "Found 1 eligible supplier"}]
+    run = client.post("/internal/procurement/runs", headers=INTERNAL,
+                      json={"decisions": {"trace": trace}, "report_text": "Chose the local bookseller"})
+    assert run.status_code == 201 and run.json()["mandate_id"] is None
+    run_id = run.json()["id"]
+
+    paid = _paid(client, db_session_factory, run_id=run_id)
+    assert paid["run_id"] == run_id
+    assert client.get("/projects/1/procurements").json()[0]["run_id"] == run_id
+
+    public = client.get(f"/agents/runs/{run_id}").json()
+    assert public["agent"] == "procurement-agent" and public["report_text"] == "Chose the local bookseller"
+    assert [s["seq"] for s in public["trace"]] == [1, 2]
+    assert run_id in [r["id"] for r in client.get("/agents/runs").json()]
+    feed = client.get("/agents/activity").json()
+    assert any(a["action"] == "procurement_paid" and a["run_id"] == run_id and a["project_id"] == 1 for a in feed)
+
+
+def test_propose_rejects_an_unknown_or_foreign_run(client, db_session_factory):
+    request = _request(client, _owner(client), _milestone(db_session_factory))
+    supplier_id = _supplier(db_session_factory)
+    r = client.post(f"/internal/procurement/{request['id']}/propose", headers=INTERNAL,
+                    json={"supplier_id": supplier_id, "amount_cents": 3000, "rationale": "x", "run_id": 999})
+    assert r.status_code == 422 and r.json()["detail"]["error"] == "RUN_NOT_FOUND"
+
+
+def test_receipt_is_a_public_page_without_the_supplier_email(client, db_session_factory, fake_paypal):
+    paid = _paid(client, db_session_factory)
+    assert paid["receipt_url"].endswith(f"/procurements/{paid['id']}/receipt")
+    assert paid["receipt_url"].startswith("https://")  # a browser address, not PayPal's API
+
+    page = client.get(f"/procurements/{paid['id']}/receipt")
+    assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
+    text = page.text
+    assert f"PR-{paid['id']}" in text and "Nakuru Books" in text and "USD 30.00" in text
+    assert paid["paypal_batch_id"] in text
+    assert "@supplier.co.ke" not in text and "paypal_email" not in text
+    assert "&lt;b&gt;" in text and "<b>" not in text  # quoted text is escaped
+    with db_session_factory() as db:
+        doc = db.get(ProjectDocument, paid["receipt_document_id"])
+        assert doc.file_url == paid["receipt_url"]
+        assert doc.extracted_fields["paypal_batch_url"].endswith(paid["paypal_batch_id"])
+
+    unpaid = _request(client, _owner(client), _milestone(db_session_factory))
+    assert client.get(f"/procurements/{unpaid['id']}/receipt").status_code == 404
+    assert client.get("/procurements/9999/receipt").status_code == 404
+
+
+def test_hidden_projects_show_no_purchases_or_receipts(client, db_session_factory, fake_paypal):
+    from app.models import Project, ProjectStatus
+
+    paid = _paid(client, db_session_factory)
+    with db_session_factory() as db:
+        db.get(Project, 1).status = ProjectStatus.pending_review
+        db.commit()
+    assert client.get("/projects/1/procurements").status_code == 404
+    assert client.get(f"/procurements/{paid['id']}/receipt").status_code == 404
+
+
+def test_admin_retry_is_logged_as_the_admin(client, db_session_factory, fake_paypal):
+    from app.models import AuditLog
+
+    request = _request(client, _owner(client), _milestone(db_session_factory))
+    assert _propose(client, request["id"], _supplier(db_session_factory)).status_code == 200
+    fake_paypal.payout_error = (422, {"name": "UNPROCESSABLE_ENTITY", "details": [{"issue": "INSUFFICIENT_FUNDS"}]})
+    client.post(f"/internal/procurement/{request['id']}/pay", headers=INTERNAL)
+    fake_paypal.payout_error = None
+    assert client.post(f"/admin/procurement/{request['id']}/retry", headers=ADMIN).json()["status"] == "paid"
+    with db_session_factory() as db:
+        retry = db.scalar(select(AuditLog).where(AuditLog.action == "procurement_retry"))
+    assert retry.actor == "admin" and retry.inputs == {"procurement_id": request["id"]}
