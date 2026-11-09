@@ -201,16 +201,33 @@ def list_procurement_suppliers(project_id: int) -> list[dict[str, Any]]:
 
 
 @server.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False))
+def record_procurement_run(decisions: dict[str, Any], report_text: str | None = None) -> dict[str, Any]:
+    """Record a Procurement Agent run before proposing: decisions["trace"] is the ordered list of
+    steps (seq, step, tool, status, title, reason), report_text a short account. The trace is public
+    on the website, so leave out supplier emails and personal details. Returns the run; pass its id
+    as run_id to propose_procurement so the purchase links to the trace."""
+    return _call("POST", "/internal/procurement/runs", json={"decisions": decisions, "report_text": report_text})
+
+
+@server.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False))
 def propose_procurement(
-    procurement_id: int, supplier_id: int, amount_cents: int, line_items: list[dict[str, Any]], rationale: str
+    procurement_id: int,
+    supplier_id: int,
+    amount_cents: int,
+    line_items: list[dict[str, Any]],
+    rationale: str,
+    run_id: int | None = None,
 ) -> dict[str, Any]:
     """Choose the supplier and price for a requested purchase. line_items are the quoted lines, e.g.
     {"description": "40 reading sets", "quantity": 40, "unit_amount_cents": 75}; rationale says why
-    this supplier. The API refuses an ineligible or inactive supplier (422), an amount over the
-    budget or the tranche, and a second proposal."""
-    return _call("POST", f"/internal/procurement/{procurement_id}/propose", json={
+    this supplier; run_id is the run from record_procurement_run. The API refuses an ineligible or
+    inactive supplier (422), an amount over the budget or the tranche, and a second proposal."""
+    body: dict[str, Any] = {
         "supplier_id": supplier_id, "amount_cents": amount_cents, "line_items": line_items, "rationale": rationale,
-    })
+    }
+    if run_id is not None:
+        body["run_id"] = run_id
+    return _call("POST", f"/internal/procurement/{procurement_id}/propose", json=body)
 
 
 @server.tool(annotations=ACT)

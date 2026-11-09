@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # The website, for PayPal's return and cancel links after a donor approves a subscription.
     web_url: str = "https://giving-web.onrender.com"
 
+    # This API's public address, for links people open in a browser (e.g. purchase receipts).
+    public_api_url: str = "https://giving-api.onrender.com"
+
     @property
     def db_url(self) -> str:
         url = self.database_url or "sqlite:///./giving.db"

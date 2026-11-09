@@ -68,7 +68,8 @@ def procurement_out(db: Session, procurement: Procurement) -> ProcurementOut:
     limit = get_settings().procurement_auto_approve_cents
     return ProcurementOut(
         paypal_batch_id=payout.paypal_batch_id if payout else None,
-        receipt_url=receipt.file_url if receipt else None,
+        receipt_url=receipt_page_url(get_settings(), procurement.id) if receipt else None,
+        run_id=procurement.run_id,
         needs_approval=bool(procurement.amount_cents and procurement.amount_cents > limit and not procurement.admin_approved
                             and procurement.status in (ProcurementStatus.proposed, ProcurementStatus.failed)),
         id=procurement.id,
@@ -143,8 +144,14 @@ def supplier_eligible(db: Session, supplier: Supplier, project: Project) -> bool
 
 
 def batch_url(settings: Settings, batch_id: str | None) -> str:
+    """PayPal's API address for the batch: needs PayPal credentials, so kept for the record only."""
     base = settings.paypal_base_url.rstrip("/")
     return f"{base}/v1/payments/payouts/{batch_id or 'pending'}"
+
+
+def receipt_page_url(settings: Settings, procurement_id: int) -> str:
+    """The public receipt page (GET /procurements/{id}/receipt) anyone can open."""
+    return f"{settings.public_api_url.rstrip('/')}/procurements/{procurement_id}/receipt"
 
 
 def mark_paid(
@@ -183,13 +190,14 @@ def mark_paid(
             project_id=procurement.project_id,
             milestone_id=procurement.milestone_id,
             kind=DocumentKind.receipt,
-            file_url=batch_url(settings, batch_id),
+            file_url=receipt_page_url(settings, procurement.id),
             extracted_fields={
                 "supplier": supplier.name if supplier else None,
                 "supplier_id": supplier.id if supplier else None,
                 "amount_cents": procurement.amount_cents,
                 "date": when.isoformat(),
                 "batch_id": batch_id,
+                "paypal_batch_url": batch_url(settings, batch_id),
                 "line_items": procurement.line_items or [],
             },
             flags=[],

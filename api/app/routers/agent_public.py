@@ -30,7 +30,13 @@ from app.schemas import (
 router = APIRouter(prefix="/agents", tags=["agents (public)"])
 
 # The only audit actors shown in the public feed. Donor and system rows stay private.
-PUBLIC_ACTORS = ("giving-agent", "milestone-agent", "watchdog-agent", "admin")
+PUBLIC_ACTORS = ("giving-agent", "milestone-agent", "watchdog-agent", "procurement-agent", "admin")
+PROCUREMENT_AGENT = "procurement-agent"
+
+
+def _public_run(run: MandateRun | None) -> bool:
+    """The demo mandate's Giving Agent runs, and Procurement Agent runs (they belong to no donor)."""
+    return run is not None and (run.mandate_id == DEMO_MANDATE_ID or run.agent == PROCUREMENT_AGENT)
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
@@ -198,6 +204,7 @@ def _run_out(db: Session, run: MandateRun) -> AgentRunOut:
     decisions = _decisions(run)
     return AgentRunOut(
         id=run.id,
+        agent=run.agent or "giving-agent",
         run_at=run.run_at,
         report_text=_safe_text(run.report_text, 4000),
         trace=_trace(run),
@@ -328,11 +335,12 @@ def list_agent_runs(
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    """Newest Giving Agent runs for the demo mandate, with the same safe projection."""
+    """Newest agent runs, with the same safe projection: the demo mandate's Giving Agent runs and
+    the Procurement Agent's runs."""
     runs = list(
         db.scalars(
             select(MandateRun)
-            .where(MandateRun.mandate_id == DEMO_MANDATE_ID)
+            .where((MandateRun.mandate_id == DEMO_MANDATE_ID) | (MandateRun.agent == PROCUREMENT_AGENT))
             .order_by(MandateRun.run_at.desc(), MandateRun.id.desc())
             .limit(limit)
         )
@@ -347,9 +355,10 @@ def list_agent_runs(
     responses={404: {"model": ErrorOut, "description": "No run with that id"}},
 )
 def get_agent_run(run_id: int, response: Response, db: Session = Depends(get_db)):
-    """One demo Giving Agent run with its ordered trace, chosen projects and skipped projects."""
+    """One agent run (a demo Giving Agent run or a Procurement Agent run) with its ordered trace,
+    chosen projects and skipped projects."""
     run = db.get(MandateRun, run_id)
-    if run is None or run.mandate_id != DEMO_MANDATE_ID:
+    if not _public_run(run):
         raise _error("RUN_NOT_FOUND", "No such agent run")
     _cache(response)
     return _run_out(db, run)

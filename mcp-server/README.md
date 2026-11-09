@@ -18,7 +18,8 @@ no database access, so an agent can't do more through it than the API allows.
 | `request_milestone_payout` | `POST /internal/payout-requests` | releases a tranche, or holds it for an admin |
 | `list_procurement_requests` | `GET /internal/procurement/requests` | no |
 | `list_procurement_suppliers` | `GET /internal/procurement/suppliers?project_id=` (eligible suppliers, no PayPal emails) | no |
-| `propose_procurement` | `POST /internal/procurement/{id}/propose` | records the chosen supplier and price |
+| `record_procurement_run` | `POST /internal/procurement/runs` | records the run and its public trace |
+| `propose_procurement` | `POST /internal/procurement/{id}/propose` (with the run's `run_id`) | records the chosen supplier and price |
 | `pay_procurement` | `POST /internal/procurement/{id}/pay` | pays the supplier through PayPal Payouts, or `APPROVAL_REQUIRED` above the limit |
 | `log_decision` | `POST /internal/audit` | writes to the agent log |
 

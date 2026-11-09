@@ -126,3 +126,15 @@ def test_pay_above_the_limit_tells_the_agent_to_wait(api):
     api.reply = (409, {"detail": {"error": "APPROVAL_REQUIRED", "message": "Above the automatic limit"}})
     with pytest.raises(ToolError, match="APPROVAL_REQUIRED"):
         call("pay_procurement", procurement_id=9)
+
+
+def test_procurement_run_is_recorded_and_passed_to_propose(api):
+    api.reply = (201, {"id": 12, "mandate_id": None})
+    trace = {"trace": [{"seq": 1, "step": "list_suppliers", "title": "Found 2 suppliers"}]}
+    assert payload(call("record_procurement_run", decisions=trace, report_text="Chose the bookseller"))["id"] == 12
+    assert api.requests[-1].url.path == "/internal/procurement/runs"
+    assert json.loads(api.requests[-1].content) == {"decisions": trace, "report_text": "Chose the bookseller"}
+
+    api.reply = (200, {"id": 9, "status": "proposed", "run_id": 12})
+    call("propose_procurement", procurement_id=9, supplier_id=1, amount_cents=3000, line_items=[], rationale="x", run_id=12)
+    assert json.loads(api.requests[-1].content)["run_id"] == 12

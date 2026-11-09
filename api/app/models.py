@@ -238,7 +238,10 @@ class MandateRun(Base):
     __tablename__ = "mandate_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    mandate_id: Mapped[int] = mapped_column(ForeignKey("mandates.id"))
+    # Null for agents that don't work for one donor's mandate, e.g. the Procurement Agent.
+    mandate_id: Mapped[int | None] = mapped_column(ForeignKey("mandates.id"))
+    # Which agent ran: null (older rows) or "giving-agent" for mandate runs, "procurement-agent".
+    agent: Mapped[str | None] = mapped_column(String(40))
     run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     decisions: Mapped[dict | None] = mapped_column(JSON)  # candidates, scores, chosen, reasons
     report_text: Mapped[str | None] = mapped_column(Text)
@@ -336,6 +339,8 @@ class Procurement(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     payout_id: Mapped[int | None] = mapped_column(ForeignKey("payouts.id"))
     receipt_document_id: Mapped[int | None] = mapped_column(ForeignKey("project_documents.id"))
+    # The Procurement Agent run that proposed it (its public trace), when the agent recorded one.
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("mandate_runs.id"))
     error: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)

@@ -438,7 +438,7 @@ class MandateRunOut(BaseModel):
         }
     )
     id: int
-    mandate_id: int
+    mandate_id: int | None = Field(description="The mandate the run was for; null for a Procurement Agent run")
     run_at: datetime
     decisions: dict | None
     report_text: str | None
@@ -692,6 +692,20 @@ class ProcurementProposeIn(BaseModel):
     amount_cents: int = Field(gt=0, description="What the supplier will be paid, in cents")
     line_items: list[dict] = Field(default_factory=list, description="The quoted lines; kept on the receipt")
     rationale: str = Field(min_length=1, max_length=2000, description="Why this supplier and price were chosen")
+    run_id: int | None = Field(None, description="The agent run that chose it (POST /internal/procurement/runs), "
+                                                 "so the purchase links to its public trace")
+
+
+class ProcurementRunIn(BaseModel):
+    model_config = _example(
+        {
+            "decisions": {"trace": [{"seq": 1, "step": "list_suppliers", "tool": "list_procurement_suppliers",
+                                     "status": "ok", "title": "Found 2 eligible suppliers in Nakuru"}]},
+            "report_text": "Chose Nakuru Books & Stationery: the only eligible bookseller, 30 USD with delivery.",
+        }
+    )
+    decisions: dict = Field(description='What the agent considered and chose; "trace" is the ordered list of steps')
+    report_text: str | None = Field(None, max_length=4000, description="A short account of the run, for people")
 
 
 class ProcurementApproveIn(BaseModel):
@@ -748,7 +762,8 @@ class ProcurementOut(BaseModel):
     created_at: datetime = Field(description="When the request was created (UTC)")
     updated_at: datetime = Field(description="When the request last changed (UTC)")
     paypal_batch_id: str | None = Field(None, description="PayPal's payout_batch_id once the batch was accepted")
-    receipt_url: str | None = Field(None, description="Link of the receipt document created from the PayPal batch")
+    receipt_url: str | None = Field(None, description="A public receipt page anyone can open, once paid")
+    run_id: int | None = Field(None, description="The Procurement Agent run behind the proposal: GET /agents/runs/{run_id}")
     needs_approval: bool = Field(False, description="The proposed amount is above the automatic limit and no admin approved it yet")
 
 
@@ -1310,6 +1325,7 @@ class AgentRunOut(BaseModel):
     )
 
     id: int = Field(description="Agent run id")
+    agent: str = Field("giving-agent", description="giving-agent or procurement-agent")
     run_at: datetime = Field(description="When the run happened (UTC)")
     report_text: str | None = Field(None, description="The run's report for the donor")
     trace: list[TraceStep] = Field(default_factory=list, description="Ordered steps the agent took")

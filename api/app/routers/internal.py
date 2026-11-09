@@ -59,6 +59,7 @@ from app.schemas import (
     PayoutRequestOut,
     ProcurementOut,
     ProcurementProposeIn,
+    ProcurementRunIn,
     ProcurementRequestOut,
     SupplierOut,
 )
@@ -448,6 +449,24 @@ def procurement_suppliers(project_id: int, db: Session = Depends(get_db)):
     ]
 
 
+PROCUREMENT_AGENT = "procurement-agent"
+
+
+@router.post("/procurement/runs", response_model=MandateRunOut, status_code=201,
+             dependencies=[Depends(require_agents_running)])
+def record_procurement_run(body: ProcurementRunIn, db: Session = Depends(get_db)):
+    """The Procurement Agent records its run (the trace of what it looked at and why it chose a
+    supplier) before proposing. The run belongs to no donor's mandate; its trace is public at
+    GET /agents/runs/{id}, so keep supplier emails and personal details out of it."""
+    run = MandateRun(mandate_id=None, agent=PROCUREMENT_AGENT, decisions=body.decisions, report_text=body.report_text)
+    db.add(run)
+    db.flush()
+    audit.write(db, actor=PROCUREMENT_AGENT, action="procurement_run", inputs={"run_id": run.id},
+                rule_result="recorded", reason=body.report_text)
+    db.commit()
+    return run_out(run)
+
+
 @router.post(
     "/procurement/{procurement_id}/propose",
     response_model=ProcurementOut,
@@ -457,7 +476,8 @@ def procurement_suppliers(project_id: int, db: Session = Depends(get_db)):
 )
 def propose_procurement(procurement_id: int, body: ProcurementProposeIn, db: Session = Depends(get_db)):
     """Choose an active, eligible supplier and a price within the request and the milestone.
-    A procurement gets one proposal; asking twice is a conflict."""
+    A procurement gets one proposal; asking twice is a conflict. Pass the run_id from
+    POST /internal/procurement/runs so the purchase links to its trace."""
     procurement = db.get(Procurement, procurement_id)
     if procurement is None:
         raise _error(404, "PROCUREMENT_NOT_FOUND", "No such procurement")
@@ -474,7 +494,12 @@ def propose_procurement(procurement_id: int, body: ProcurementProposeIn, db: Ses
     total = milestone.amount + milestone.match_amount
     if body.amount_cents > total:
         raise _error(422, "AMOUNT_ABOVE_MILESTONE", f"{body.amount_cents} is more than the milestone's {total}")
+    if body.run_id is not None:
+        run = db.get(MandateRun, body.run_id)
+        if run is None or run.agent != PROCUREMENT_AGENT:
+            raise _error(422, "RUN_NOT_FOUND", "Record the run with POST /internal/procurement/runs first")
 
+    procurement.run_id = body.run_id
     procurement.supplier_id = supplier.id
     procurement.amount_cents = body.amount_cents
     procurement.line_items = body.line_items
@@ -484,7 +509,8 @@ def propose_procurement(procurement_id: int, body: ProcurementProposeIn, db: Ses
         db,
         actor="procurement-agent",
         action="procurement_proposed",
-        inputs={"procurement_id": procurement.id, "supplier_id": supplier.id, "amount_cents": body.amount_cents},
+        inputs={"procurement_id": procurement.id, "project_id": procurement.project_id, "supplier_id": supplier.id,
+                "amount_cents": body.amount_cents, "run_id": body.run_id},
         rule_result="proposed",
         reason=body.rationale,
     )
@@ -562,8 +588,9 @@ def pay_procurement(
             db,
             actor="procurement-agent",
             action="procurement_paid",
-            inputs={"procurement_id": procurement.id, "payout_id": payout.id,
-                    "amount_cents": procurement.amount_cents, "batch_id": payout.paypal_batch_id},
+            inputs={"procurement_id": procurement.id, "project_id": procurement.project_id, "payout_id": payout.id,
+                    "amount_cents": procurement.amount_cents, "batch_id": payout.paypal_batch_id,
+                    "run_id": procurement.run_id},
             rule_result="paid",
             reason=f"Paid {supplier.name} from the milestone",
         )
@@ -574,7 +601,8 @@ def pay_procurement(
             db,
             actor="procurement-agent",
             action="procurement_failed",
-            inputs={"procurement_id": procurement.id, "payout_id": payout.id},
+            inputs={"procurement_id": procurement.id, "project_id": procurement.project_id, "payout_id": payout.id,
+                    "run_id": procurement.run_id},
             rule_result=procurement.error,
             reason="PayPal did not accept the supplier batch; retry the same procurement",
         )
