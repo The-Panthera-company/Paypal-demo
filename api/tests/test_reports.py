@@ -169,7 +169,7 @@ def test_seed_reproduces_the_worked_example_and_is_rerunnable(monkeypatch):
         mandate = db.get(Mandate, seed_dev.DEMO_MANDATE_ID)
         assert mandate is not None and mandate.active and mandate.donor_id == 1
         assert len(db.scalars(select(Mandate).where(Mandate.active.is_(True))).all()) == 1
-        assert len(db.scalars(select(Donation)).all()) == 29
+        assert len(db.scalars(select(Donation)).all()) == 29 + seed_dev.RING_SIZE
         round_ = db.scalar(select(Round))
         assert round_.project_cap_pct == 40
         titles = {p.id: p.title for p in projects}
@@ -191,3 +191,36 @@ def test_seed_reproduces_the_worked_example_and_is_rerunnable(monkeypatch):
         assert reconciliation.report(db)["issues"] == []
         backed = [p.id for p in projects if p.title in ("Kaptembwo Desks", "Girls' STEM Club")]
         assert [s.title for s in reports.stories(db, backed)] == ["First 10 desks delivered", "Science kits for 30 girls"]
+
+
+def test_seed_opens_a_collusion_ring_case_with_a_valid_graph(monkeypatch):
+    """The admin console only draws a ring for an open collusion_cluster case with a graph."""
+    from app.models import AuditLog, WatchdogCase
+    from app.routers.internal import _validate_collusion_evidence
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr(seed_dev, "engine", engine)
+    monkeypatch.setattr(seed_dev, "SessionLocal", factory)
+    seed_dev.main()
+    seed_dev.main()
+
+    with factory() as db:
+        cases = db.scalars(select(WatchdogCase).where(WatchdogCase.rule == "collusion_cluster")).all()
+        assert len(cases) == 1 and cases[0].status.value == "open"
+        case = cases[0]
+        assert db.get(Project, case.project_id).title == seed_dev.RING_PROJECT
+        assert db.get(Project, case.project_id).matching_frozen
+        _validate_collusion_evidence(db, case.evidence)  # what POST /internal/watchdog/cases accepts
+
+        ring = case.evidence["donor_ids"]
+        graph = case.evidence["graph"]
+        donors = [n for n in graph["nodes"] if n["type"] == "donor"]
+        assert len(ring) == seed_dev.RING_SIZE and {n["id"] for n in donors} >= set(ring)
+        assert all(n["label"].startswith("Donor ") for n in donors)
+        # Every ring donor backs the frozen project; the two ordinary backers back other projects.
+        ring_edges = [e for e in graph["edges"] if e["source"] in ring]
+        assert {e["target"] for e in ring_edges} == {case.project_id} and len(ring_edges) == len(ring)
+        assert {e["target"] for e in graph["edges"] if e["source"] not in ring} - {case.project_id}
+        assert db.scalars(select(AuditLog).where(AuditLog.action == "case_opened")).all()

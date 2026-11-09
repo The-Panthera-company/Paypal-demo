@@ -19,6 +19,9 @@ re-applied. Adds:
 - a demo donor for the Giving Agent page (there is no route that creates donors), id 1 on a fresh database
 - the demo Giving Agent mandate, id 1 on a fresh database, so the public trace has a stable run owner
 - an open round: 10,000 USD pool, 40% cap
+- a Watchdog collusion ring: four new donors give 40 USD each to Village Borehole Repair within
+  minutes, and an open collusion_cluster case with the donor-project graph the admin console draws.
+  The open case freezes that project's matching, so the ring changes no match until an admin resolves it
 
 Seeded backers are database rows, not PayPal payments; reconciliation only counts PayPal money.
 
@@ -59,6 +62,7 @@ from app.models import (
     RoundStatus,
     Supplier,
     TargetType,
+    WatchdogCase,
 )
 
 # (category, title, tags, cause, beneficiary group, region, urgency, goal cents, summary)
@@ -306,6 +310,12 @@ FACILITATORS = {
 BACKERS = [("Lanet Library", 16, 1250), ("Kaptembwo Desks", 9, 1250), ("Girls' STEM Club", 4, 5000)]
 SEED_BACKER = "Seed backer"
 
+# The Watchdog demo ring (seed_ring): outside Education, so the worked example is untouched.
+RING_PROJECT = "Village Borehole Repair"
+RING_DONOR = "Ring donor"
+RING_SIZE = 4
+RING_GIFT_CENTS = 4000
+
 # project: [(title, cents, due in days from today, status)], in order; each project's tranches add up to its goal.
 # Released tranches stay within what the seeded backers gave.
 OPEN, EVIDENCE, HELD, RELEASED = (MilestoneStatus.open, MilestoneStatus.evidence_submitted,
@@ -471,6 +481,51 @@ def seed_milestones(db: Session, project: Project, today: date) -> None:
             ))
 
 
+def seed_ring(db: Session, now: datetime) -> None:
+    """A collusion ring for the Watchdog demo: four new accounts give 40 USD each to one project
+    within minutes and nowhere else, next to two ordinary seeded backers. Opens the open
+    collusion_cluster case with the donor-project graph the admin console draws. The open case
+    freezes that project's matching, so the ring changes no match until an admin resolves it."""
+    project = db.scalar(select(Project).where(Project.title == RING_PROJECT))
+    if project is None or db.scalar(select(WatchdogCase.id).where(
+            WatchdogCase.project_id == project.id, WatchdogCase.rule == "collusion_cluster")):
+        return
+    ring = []
+    for n in range(1, RING_SIZE + 1):
+        donor = Donor(display_name=f"{RING_DONOR} {n}")
+        db.add(donor)
+        db.flush()
+        db.add(Donation(donor_id=donor.id, target_type=TargetType.PROJECT, project_id=project.id,
+                        amount=RING_GIFT_CENTS, currency="USD", status=DonationStatus.captured,
+                        captured_at=now - timedelta(minutes=2 * (RING_SIZE - n))))
+        ring.append(donor.id)
+
+    # Two ordinary backers, for contrast: each backed one project, nothing in common with the ring.
+    context = db.scalars(select(Donor).where(Donor.display_name.in_([f"{SEED_BACKER} 1", f"{SEED_BACKER} 26"]))).all()
+    gifts = db.execute(select(Donation.donor_id, Donation.project_id, Donation.amount).where(
+        Donation.donor_id.in_([d.id for d in context]), Donation.status == DonationStatus.captured)).all()
+    titles = dict(db.execute(select(Project.id, Project.title).where(
+        Project.id.in_({project.id} | {p for _, p, _ in gifts}))).all())
+    graph = {
+        "nodes": [{"id": d, "type": "donor", "label": f"Donor {d}"} for d in ring + [d.id for d in context]]
+        + [{"id": pid, "type": "project", "label": title} for pid, title in titles.items()],
+        "edges": [{"source": d, "target": project.id, "weight": RING_GIFT_CENTS / 100} for d in ring]
+        + [{"source": d, "target": p, "weight": cents / 100} for d, p, cents in gifts],
+    }
+    evidence = {
+        "donor_ids": ring,
+        "summary": f"{RING_SIZE} new accounts each gave {RING_GIFT_CENTS // 100} USD to {project.title} "
+                   f"within {2 * (RING_SIZE - 1)} minutes and have backed nothing else.",
+        "graph": graph,
+    }
+    db.add(WatchdogCase(project_id=project.id, rule="collusion_cluster", evidence=evidence, frozen_at=now))
+    project.matching_frozen = True
+    db.flush()
+    audit.write(db, actor="watchdog-agent", action="case_opened",
+                inputs={"project_id": project.id, "rule": "collusion_cluster", "donor_ids": ring},
+                rule_result="collusion_cluster", reason="Matching frozen until an admin resolves the case")
+
+
 def main() -> None:
     create_schema(engine)  # also adds columns new since Render last deployed
     now = datetime.now(timezone.utc)
@@ -588,6 +643,8 @@ def main() -> None:
                         donor_id=backer.id, target_type=TargetType.PROJECT, project_id=project.id,
                         amount=cents, currency="USD", status=DonationStatus.captured, captured_at=now,
                     ))
+        db.flush()
+        seed_ring(db, now)
         db.commit()
 
         for p in db.scalars(select(Project).order_by(Project.category_id, Project.id)):
