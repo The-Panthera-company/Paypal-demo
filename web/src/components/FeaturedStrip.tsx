@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Project } from "@/lib/types";
 import { CategoryArt } from "./ui";
 
@@ -64,7 +64,9 @@ export function FeaturedStrip({ items }: { items: StripItem[] }) {
   if (n === 0) return null;
 
   return (
-    <div className="space-y-3">
+    <>
+    <PhoneStrip items={items} />
+    <div className="hidden space-y-3 md:block">
       <ul
         className="flex snap-x snap-mandatory gap-1 overflow-x-auto md:h-[480px] md:overflow-hidden"
         aria-label="Featured projects"
@@ -138,6 +140,95 @@ export function FeaturedStrip({ items }: { items: StripItem[] }) {
           </button>
           <span>{hover ? "Paused while you look" : paused ? "Paused" : "Moving through every project"}</span>
         </div>
+      )}
+    </div>
+    </>
+  );
+}
+
+const PHONE_STEP = 6000;
+
+// Phones and small tablets: one project fills the area, a slim bar on the right shows where you are
+// and fills while it waits, then the next one comes in. Tap the left or right edge to go back or on.
+function PhoneStrip({ items }: { items: StripItem[] }) {
+  const n = items.length;
+  const [i, setI] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [reduce, setReduce] = useState(false);
+  const [visible, setVisible] = useState(true);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setReduce(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    const el = box.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setVisible(e.isIntersecting));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const auto = !paused && !reduce && visible && n > 1;
+  useEffect(() => {
+    if (!auto) return;
+    const t = setTimeout(() => setI((x) => (x + 1) % n), PHONE_STEP);
+    return () => clearTimeout(t);
+  }, [auto, i, n]);
+
+  const go = (d: number) => setI((x) => (x + d + n) % n);
+  const { project: p, photo, raised, goal, days } = items[i];
+  const pct = Math.min(100, Math.round((p.raised.amount / p.goal.amount) * 100));
+
+  return (
+    <div className="space-y-3 md:hidden">
+      <div ref={box} className="relative h-[min(560px,72vh)] overflow-hidden bg-ink text-white" role="group" aria-roledescription="carousel" aria-label="Featured projects">
+        <div key={p.id} className="absolute inset-0 motion-safe:animate-[showcase-in_.5s_ease-out]">
+          <CategoryArt id={p.categoryId} seed={p.id} photo={photo} tint={false} label={`Photo for ${p.title}`} />
+        </div>
+        <div className="absolute inset-0 bg-[linear-gradient(0deg,rgba(11,46,51,0.95)_10%,rgba(11,46,51,0.25)_60%,rgba(11,46,51,0.55))]" aria-hidden />
+
+        {/* Tap zones: left edge = previous, right edge = next (buttons, so keyboards and screen readers get them too) */}
+        <button type="button" onClick={() => go(-1)} className="absolute inset-y-0 left-0 z-10 w-[22%]" aria-label="Previous project" />
+        <button type="button" onClick={() => go(1)} className="absolute inset-y-0 right-0 z-10 w-[22%]" aria-label="Next project" />
+
+        {/* Slim bar on the right: the marker shows where you are in the list and fills while it waits */}
+        <div className="pointer-events-none absolute bottom-6 right-2 top-6 z-20 w-1 bg-white/25" aria-hidden>
+          <div className="absolute inset-x-0 min-h-7 overflow-hidden bg-white/40 transition-[top] duration-500" style={{ top: `${(i / n) * 100}%`, height: `${100 / n}%` }}>
+            <span
+              key={`${i}-${auto}`}
+              className={`absolute inset-x-0 top-0 bg-accent ${auto ? "h-0 animate-[strip-fill_linear_forwards]" : "h-full"}`}
+              style={auto ? { animationDuration: `${PHONE_STEP}ms` } : undefined}
+            />
+          </div>
+        </div>
+
+        <div className="absolute inset-x-0 top-0 p-5 pr-8">
+          <span className="text-[11px] font-bold uppercase tracking-[2px] text-accent">
+            {p.categoryId} · {p.facets.region}
+          </span>
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-5 pr-8" aria-live={auto ? "off" : "polite"}>
+          <p className="text-xs text-white/70">
+            {i + 1} of {n}
+          </p>
+          <h3 className="mt-1 text-[28px] leading-tight text-white">{p.title}</h3>
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-white/90">
+            {p.summary || `${p.facets.cause} for ${p.facets.group.toLowerCase()} in ${p.facets.region}.`}
+          </p>
+          <p className="mt-3 text-sm text-white/85">
+            <strong className="tabular text-accent">{raised}</strong> of {goal} · {p.backerCount} backers · {days} days left
+          </p>
+          <div className="mt-3 h-1.5 bg-white/20" aria-hidden>
+            <div className="h-full bg-cobalt-green" style={{ width: `${Math.max(pct, 1)}%` }} />
+          </div>
+          <Link href={`/projects/${p.id}`} className="btn pointer-events-auto mt-4 w-full justify-center" aria-label={`Back ${p.title}`}>
+            Back this project
+          </Link>
+        </div>
+      </div>
+      {n > 1 && !reduce && (
+        <button type="button" onClick={() => setPaused((x) => !x)} aria-pressed={paused} className="flex min-h-11 items-center gap-2 border border-line bg-white px-4 text-sm font-medium text-ink">
+          <span aria-hidden>{paused ? "▶" : "❚❚"}</span> {paused ? "Play" : "Pause"}
+        </button>
       )}
     </div>
   );

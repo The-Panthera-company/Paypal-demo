@@ -128,11 +128,17 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         <div className="container-k relative pt-12 lg:!max-w-[1360px] lg:pt-16">
           <div className="grid gap-8 lg:grid-cols-[230px_1fr]">
             <aside className="lg:sticky lg:top-32 lg:self-start">
-              <details className="bg-white p-4 shadow-[0_0_30px_rgba(0,0,0,0.05)] lg:[&>summary]:hidden" open>
-                <summary className="flex min-h-11 cursor-pointer items-center font-medium text-ink">Filters</summary>
-                <h2 className="mb-3 hidden text-lg lg:block">Filters</h2>
-                {form(true)}
+              {/* Phones and tablets: filters folded away (open when any is set); desktop: always shown */}
+              <details className="bg-white p-4 shadow-[0_0_30px_rgba(0,0,0,0.05)] lg:hidden" open={active.length > 0}>
+                <summary className="flex min-h-11 cursor-pointer items-center justify-between font-medium text-ink">
+                  Filters{active.length > 0 && <span className="tabular bg-ink px-2 text-xs leading-6 text-white">{active.length}</span>}
+                </summary>
+                <div className="mt-3">{form(true)}</div>
               </details>
+              <div className="hidden bg-white p-4 shadow-[0_0_30px_rgba(0,0,0,0.05)] lg:block">
+                <h2 className="mb-3 text-lg">Filters</h2>
+                {form(true)}
+              </div>
             </aside>
             <div className="space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-4">

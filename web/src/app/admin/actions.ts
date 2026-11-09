@@ -1,6 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+
+// Defence in depth: the /admin password is checked by middleware for the page, and again here, so
+// an admin action can't run from a request that didn't come with the admin login.
+async function requireAdmin() {
+  const password = process.env.ADMIN_UI_PASSWORD;
+  if (!password) return;
+  const [scheme, encoded] = ((await headers()).get("authorization") ?? "").split(" ");
+  const given = scheme === "Basic" && encoded ? Buffer.from(encoded, "base64").toString().split(":").slice(1).join(":") : null;
+  if (given !== password) throw new Error("Admin login required");
+}
 import { retryProcurement, reviewProcurement, getAuditChain, pauseAgents, resolveCaseRemoving, resumeAgents, verifyAuditChain, type ChainCheck, type ChainRow, closeRound, createRound, getDonation, newOwnerToken, refundDonation, resolveCase, reviewMilestone, updateRound, verifyProject, type DonationInfo, type RefundResult, type RoundFields } from "@/lib/admin";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
@@ -16,10 +27,12 @@ async function run(fn: () => Promise<void>, done: string): Promise<ActionResult>
 }
 
 export async function verifyAction(id: string, approve: boolean, note?: string) {
+  await requireAdmin();
   return run(() => verifyProject(id, approve, note), approve ? "Project verified and listed." : "Project sent back to the applicant.");
 }
 
 export async function resolveCaseAction(id: string, action: "clear" | "confirm", note?: string) {
+  await requireAdmin();
   return run(
     () => resolveCase(id, action, note),
     action === "clear" ? "Case cleared: matching resumes." : "Case confirmed: flagged donors now count as one person.",
@@ -27,6 +40,7 @@ export async function resolveCaseAction(id: string, action: "clear" | "confirm",
 }
 
 export async function reviewMilestoneAction(id: string, approve: boolean, note?: string) {
+  await requireAdmin();
   return run(() => reviewMilestone(id, approve, note), approve ? "Tranche released for payout." : "Sent back: the project can upload new evidence.");
 }
 
@@ -50,6 +64,7 @@ function roundFields(f: FormData, includeStart: boolean): RoundFields {
 }
 
 export async function createRoundAction(_: RoundFormState, f: FormData): Promise<RoundFormState> {
+  await requireAdmin();
   const r = await run(async () => {
     const round = await createRound(roundFields(f, true));
     if (!round) throw new Error("Not created");
@@ -59,6 +74,7 @@ export async function createRoundAction(_: RoundFormState, f: FormData): Promise
 }
 
 export async function updateRoundAction(_: RoundFormState, f: FormData): Promise<RoundFormState> {
+  await requireAdmin();
   const id = Number(f.get("id"));
   const open = f.get("status") === "open";
   const body = roundFields(f, !open); // an open round can't change its start
@@ -68,6 +84,7 @@ export async function updateRoundAction(_: RoundFormState, f: FormData): Promise
 }
 
 export async function closeRoundAction(id: number) {
+  await requireAdmin();
   const r = await run(() => closeRound(id), "Round closed: final results are written and matching is added to each project's next milestone.");
   revalidatePath("/leaderboard");
   revalidatePath(`/rounds/${id}`);
@@ -76,6 +93,7 @@ export async function closeRoundAction(id: number) {
 
 // ---- Applications ----
 export async function newOwnerTokenAction(projectId: string): Promise<{ ok: true; token: string } | { ok: false; message: string }> {
+  await requireAdmin();
   try {
     return { ok: true, token: await newOwnerToken(projectId) };
   } catch (e) {
@@ -85,6 +103,7 @@ export async function newOwnerTokenAction(projectId: string): Promise<{ ok: true
 
 // ---- Refunds ----
 export async function lookupDonationAction(id: number): Promise<{ ok: true; donation: DonationInfo } | { ok: false; message: string }> {
+  await requireAdmin();
   try {
     return { ok: true, donation: await getDonation(id) };
   } catch (e) {
@@ -93,6 +112,7 @@ export async function lookupDonationAction(id: number): Promise<{ ok: true; dona
 }
 
 export async function refundAction(id: number, reason: string, amountCents?: number): Promise<{ ok: true; result: RefundResult } | { ok: false; message: string }> {
+  await requireAdmin();
   try {
     const result = await refundDonation(id, reason, amountCents);
     revalidatePath("/admin");
@@ -104,16 +124,19 @@ export async function refundAction(id: number, reason: string, amountCents?: num
 
 // ---- Kill switch, hash chain, collusion ----
 export async function pauseAgentsAction(reason?: string) {
+  await requireAdmin();
   const r = await run(() => pauseAgents(reason), "Agents paused: no money can move until you resume.");
   revalidatePath("/", "layout");
   return r;
 }
 export async function resumeAgentsAction() {
+  await requireAdmin();
   const r = await run(() => resumeAgents(), "Agents resumed.");
   revalidatePath("/", "layout");
   return r;
 }
 export async function verifyChainAction(): Promise<{ ok: true; check: ChainCheck; rows: ChainRow[] } | { ok: false; message: string }> {
+  await requireAdmin();
   try {
     const [check, rows] = await Promise.all([verifyAuditChain(), getAuditChain(100)]);
     return { ok: true, check, rows };
@@ -122,13 +145,16 @@ export async function verifyChainAction(): Promise<{ ok: true; check: ChainCheck
   }
 }
 export async function confirmAndRemoveAction(id: string, note?: string) {
+  await requireAdmin();
   return run(() => resolveCaseRemoving(id, note), "Case confirmed and the project removed; its donations are refunded.");
 }
 
 // ---- Procurement ----
 export async function reviewProcurementAction(id: number, approve: boolean) {
+  await requireAdmin();
   return run(() => reviewProcurement(id, approve), approve ? "Purchase approved. The agent pays the supplier on its next step." : "Purchase rejected.");
 }
 export async function retryProcurementAction(id: number) {
+  await requireAdmin();
   return run(() => retryProcurement(id), "Payment sent again with the same PayPal batch.");
 }

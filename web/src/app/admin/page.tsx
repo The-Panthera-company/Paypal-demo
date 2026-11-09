@@ -70,7 +70,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             </p>
           )}
 
-          <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
           <nav aria-label="Admin sections" className="h-fit bg-ink p-2 lg:sticky lg:top-32">
             <ul className="flex gap-1 overflow-x-auto lg:flex-col">
               {tabs.map((t) => (

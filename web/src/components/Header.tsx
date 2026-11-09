@@ -49,7 +49,7 @@ export function Header() {
             <span className="corner grid size-10 place-items-center bg-brand font-display text-xl" style={{ ["--corner-size" as string]: "10px" }} aria-hidden>
               C
             </span>
-            <span className="font-display text-2xl">Community Giving</span>
+            <span className="font-display text-xl sm:text-2xl">Community Giving</span>
           </Link>
 
           <nav aria-label="Main" className="hidden flex-1 lg:block">
@@ -79,7 +79,7 @@ export function Header() {
             </Link>
           </div>
 
-          <div className="ml-auto flex items-center gap-4 lg:hidden">
+          <div className="ml-auto flex items-center gap-1 sm:gap-4 lg:hidden">
             <AgentStatusDot />
             <FavoritesLink />
           </div>
