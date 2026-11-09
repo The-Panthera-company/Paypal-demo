@@ -196,6 +196,24 @@ def approve_procurement(
     return procurement_service.procurement_out(db, procurement)
 
 
+@router.post("/procurement/{procurement_id}/retry", response_model=ProcurementOut, responses=ERRORS)
+def retry_procurement(
+    procurement_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    paypal: PayPalClient = Depends(get_paypal),
+):
+    """Send a failed supplier batch again (same deterministic batch id, so PayPal can't pay twice).
+    Refused while agents are paused."""
+    procurement = db.get(Procurement, procurement_id)
+    if procurement is None:
+        raise _error(404, "PROCUREMENT_NOT_FOUND", "No such procurement")
+    if procurement.status != ProcurementStatus.failed:
+        raise _error(409, "PROCUREMENT_NOT_FAILED", f"Only a failed payment can be retried; this one is {procurement.status.value}")
+    from app.routers.internal import pay_procurement
+    return pay_procurement(procurement_id, db, settings, paypal)
+
+
 @router.post("/milestones/{milestone_id}/review", response_model=MilestoneOut, responses=ERRORS)
 def review_milestone(
     milestone_id: int,

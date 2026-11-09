@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import Settings
+from app.config import Settings, get_settings
 from app.models import (
     Category,
     DocumentKind,
@@ -63,7 +63,14 @@ def active_procurement(db: Session, milestone_id: int) -> Procurement | None:
 
 def procurement_out(db: Session, procurement: Procurement) -> ProcurementOut:
     supplier = db.get(Supplier, procurement.supplier_id) if procurement.supplier_id else None
+    payout = db.get(Payout, procurement.payout_id) if procurement.payout_id else None
+    receipt = db.get(ProjectDocument, procurement.receipt_document_id) if procurement.receipt_document_id else None
+    limit = get_settings().procurement_auto_approve_cents
     return ProcurementOut(
+        paypal_batch_id=payout.paypal_batch_id if payout else None,
+        receipt_url=receipt.file_url if receipt else None,
+        needs_approval=bool(procurement.amount_cents and procurement.amount_cents > limit and not procurement.admin_approved
+                            and procurement.status in (ProcurementStatus.proposed, ProcurementStatus.failed)),
         id=procurement.id,
         project_id=procurement.project_id,
         milestone_id=procurement.milestone_id,

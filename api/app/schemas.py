@@ -747,6 +747,9 @@ class ProcurementOut(BaseModel):
     error: str | None = Field(None, description="Why the last payment attempt failed, when it did")
     created_at: datetime = Field(description="When the request was created (UTC)")
     updated_at: datetime = Field(description="When the request last changed (UTC)")
+    paypal_batch_id: str | None = Field(None, description="PayPal's payout_batch_id once the batch was accepted")
+    receipt_url: str | None = Field(None, description="Link of the receipt document created from the PayPal batch")
+    needs_approval: bool = Field(False, description="The proposed amount is above the automatic limit and no admin approved it yet")
 
 
 class ProcurementProjectOut(BaseModel):

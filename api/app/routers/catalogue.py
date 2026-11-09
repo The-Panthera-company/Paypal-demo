@@ -307,6 +307,17 @@ def request_procurement(
     return procurement_service.procurement_out(db, procurement)
 
 
+@router.get("/projects/{project_id}/procurements", response_model=list[ProcurementOut],
+            responses={404: {"model": ErrorOut}})
+def list_project_procurements(project_id: int, db: Session = Depends(get_db)):
+    """A project's managed purchases, newest first: status, supplier, amount, line items and the
+    PayPal receipt once paid. Public; never includes a supplier's PayPal email."""
+    if db.get(Project, project_id) is None:
+        raise HTTPException(404, detail={"error": "PROJECT_NOT_FOUND", "message": "No such project"})
+    rows = db.scalars(select(Procurement).where(Procurement.project_id == project_id).order_by(Procurement.id.desc()))
+    return [procurement_service.procurement_out(db, p) for p in rows]
+
+
 def project_gifts(db: Session, project_ids: list[int]) -> list[tuple[int, int | None, int, datetime]]:
     """(project_id, donor_id, cents, captured_at) for money that reached these projects: captured
     project and agent gifts, plus each captured category donation's share. Refunds drop out."""
