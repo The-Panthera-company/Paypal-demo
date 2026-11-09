@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AgentActivity } from "@/components/AgentActivity";
 import { AgentRunViewer } from "@/components/AgentRunViewer";
+import { CollusionGraph, type Graph } from "@/components/CollusionGraph";
 import { PageTitle } from "@/components/PageTitle";
 import { Eyebrow } from "@/components/ui";
 import { fetchAgentActivity, fetchAgentRun, fetchAgentRuns, type AgentActivity as Activity, type AgentRun } from "@/lib/agent-trace";
@@ -62,6 +63,42 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
           </div>
         </div>
       </section>
+      <section className="section" aria-labelledby="why-graph">
+        <div className="container-k grid gap-10 lg:grid-cols-[1fr_1.2fr] lg:items-center">
+          <div className="space-y-4">
+            <Eyebrow>Watchdog</Eyebrow>
+            <h2 id="why-graph" className="section-title">Why a graph?</h2>
+            <p className="text-lg leading-8">
+              Matching rewards many different people backing a project, so one person with five accounts could get five votes. A single account looks normal. The pattern shows up only when you draw who gave to what: a tight group of new donors all backing the same few projects, and little else.
+            </p>
+            <p>
+              The Watchdog flags such a cluster and freezes matching for those projects (never the donations). A person looks at the graph and decides. If they confirm it, the group counts as <strong>one person, one voice</strong> in matching. Nobody is refunded or banned by this step.
+            </p>
+          </div>
+          <CollusionGraph graph={SAMPLE_RING} clusterIds={[21, 22, 23, 24]} title="Sample ring" />
+        </div>
+      </section>
     </>
   );
 }
+
+// A made-up example: four new donors (21–24) all back the same two projects; donors 7 and 9 give widely.
+const SAMPLE_RING: Graph = {
+  nodes: [
+    ...[7, 9, 21, 22, 23, 24].map((id) => ({ id, type: "donor", label: `Donor ${id}` })),
+    { id: 101, type: "project", label: "Sample library" },
+    { id: 102, type: "project", label: "Sample water point" },
+    { id: 103, type: "project", label: "Sample clinic" },
+    { id: 104, type: "project", label: "Sample school meals" },
+  ],
+  edges: [
+    ...[21, 22, 23, 24].flatMap((d) => [
+      { source: d, target: 101, weight: 5 },
+      { source: d, target: 102, weight: 5 },
+    ]),
+    { source: 7, target: 103, weight: 20 },
+    { source: 7, target: 101, weight: 10 },
+    { source: 9, target: 104, weight: 15 },
+    { source: 9, target: 103, weight: 5 },
+  ],
+};

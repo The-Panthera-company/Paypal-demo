@@ -300,3 +300,40 @@ export type RefundResult = { donation_id: number; refund_id: string; paypal_stat
 export async function refundDonation(id: number, reason: string, amountCents?: number) {
   return adminFetch<RefundResult>(`/admin/donations/${id}/refund`, { method: "POST", body: JSON.stringify({ reason, ...(amountCents ? { amount_cents: amountCents } : {}) }) });
 }
+
+// ---- Agent kill switch and audit hash chain ----
+export type AgentStatus = { paused: boolean; reason: string | null; since: string | null; updatedBy: string | null; sample?: boolean };
+type ApiStatus = { paused: boolean; reason?: string | null; since?: string | null; updated_by?: string | null };
+const toStatus = (s: ApiStatus): AgentStatus => ({ paused: s.paused, reason: s.reason ?? null, since: s.since ?? null, updatedBy: s.updated_by ?? null });
+
+export async function getAgentStatus(): Promise<AgentStatus> {
+  if (!API_URL || !ADMIN_TOKEN) return { paused: false, reason: null, since: null, updatedBy: null, sample: true };
+  return toStatus(await adminFetch<ApiStatus>("/admin/agents/status"));
+}
+export async function pauseAgents(reason?: string) {
+  if (!API_URL || !ADMIN_TOKEN) return;
+  await adminFetch("/admin/agents/pause", { method: "POST", body: JSON.stringify({ reason: reason?.trim() || "Paused from the admin console" }) });
+}
+export async function resumeAgents(reason?: string) {
+  if (!API_URL || !ADMIN_TOKEN) return;
+  await adminFetch("/admin/agents/resume", { method: "POST", body: JSON.stringify({ reason: reason?.trim() || "Resumed from the admin console" }) });
+}
+
+export type ChainCheck = { valid: boolean; checked: number; firstBadId: number | null; firstBadReason: string | null; headHash: string };
+export async function verifyAuditChain(): Promise<ChainCheck> {
+  if (!API_URL || !ADMIN_TOKEN) return { valid: true, checked: 0, firstBadId: null, firstBadReason: "Sample mode: nothing to check.", headHash: "" };
+  const r = await adminFetch<{ valid: boolean; checked: number; first_bad_id: number | null; first_bad_reason: string | null; head_hash: string }>("/admin/audit-log/verify");
+  return { valid: r.valid, checked: r.checked, firstBadId: r.first_bad_id, firstBadReason: r.first_bad_reason, headHash: r.head_hash };
+}
+
+export type ChainRow = { id: number; seq: number | null; actor: string; action: string; rule: string | null; hash: string | null; prevHash: string | null; createdAt: string };
+export async function getAuditChain(limit = 100): Promise<ChainRow[]> {
+  if (!API_URL || !ADMIN_TOKEN) return [];
+  const rows = await adminFetch<{ id: number; seq?: number; actor: string; action: string; rule_result: string | null; hash?: string; prev_hash?: string; created_at: string }[]>(`/admin/audit-log?include_hash=true&limit=${limit}`);
+  return rows.map((a) => ({ id: a.id, seq: a.seq ?? null, actor: a.actor, action: a.action, rule: a.rule_result, hash: a.hash ?? null, prevHash: a.prev_hash ?? null, createdAt: a.created_at }));
+}
+
+export async function resolveCaseRemoving(id: string, note?: string) {
+  if (!API_URL || !ADMIN_TOKEN) return;
+  await adminFetch(`/admin/cases/${id}/resolve`, { method: "POST", body: JSON.stringify({ action: "confirm", remove_project: true, note }) });
+}

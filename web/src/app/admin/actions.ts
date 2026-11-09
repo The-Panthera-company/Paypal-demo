@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { closeRound, createRound, getDonation, newOwnerToken, refundDonation, resolveCase, reviewMilestone, updateRound, verifyProject, type DonationInfo, type RefundResult, type RoundFields } from "@/lib/admin";
+import { getAuditChain, pauseAgents, resolveCaseRemoving, resumeAgents, verifyAuditChain, type ChainCheck, type ChainRow, closeRound, createRound, getDonation, newOwnerToken, refundDonation, resolveCase, reviewMilestone, updateRound, verifyProject, type DonationInfo, type RefundResult, type RoundFields } from "@/lib/admin";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
 
@@ -100,4 +100,27 @@ export async function refundAction(id: number, reason: string, amountCents?: num
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Refund failed." };
   }
+}
+
+// ---- Kill switch, hash chain, collusion ----
+export async function pauseAgentsAction(reason?: string) {
+  const r = await run(() => pauseAgents(reason), "Agents paused: no money can move until you resume.");
+  revalidatePath("/", "layout");
+  return r;
+}
+export async function resumeAgentsAction() {
+  const r = await run(() => resumeAgents(), "Agents resumed.");
+  revalidatePath("/", "layout");
+  return r;
+}
+export async function verifyChainAction(): Promise<{ ok: true; check: ChainCheck; rows: ChainRow[] } | { ok: false; message: string }> {
+  try {
+    const [check, rows] = await Promise.all([verifyAuditChain(), getAuditChain(100)]);
+    return { ok: true, check, rows };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Couldn't verify the chain." };
+  }
+}
+export async function confirmAndRemoveAction(id: string, note?: string) {
+  return run(() => resolveCaseRemoving(id, note), "Case confirmed and the project removed; its donations are refunded.");
 }

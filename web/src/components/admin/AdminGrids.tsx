@@ -11,7 +11,7 @@ import {
 import { AgGridReact } from "ag-grid-react";
 import { useMemo, useState, useTransition } from "react";
 import {
-  resolveCaseAction,
+  resolveCaseAction, confirmAndRemoveAction,
   reviewMilestoneAction,
   verifyAction,
   type ActionResult,
@@ -277,6 +277,12 @@ export function CasesGrid({ rows }: { rows: AdminCase[] }) {
                   confirm:
                     "Confirm? The flagged donors will count as one person in matching. This can't be undone here.",
                   run: () => resolveCaseAction(data.id, "confirm"),
+                },
+                {
+                  label: "Confirm + remove",
+                  tone: "danger",
+                  confirm: "Confirm and remove the project? It is delisted and its donations are refunded.",
+                  run: () => confirmAndRemoveAction(data.id),
                 },
               ]}
             />
