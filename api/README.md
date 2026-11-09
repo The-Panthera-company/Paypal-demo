@@ -162,6 +162,14 @@ While a round is open its projected match is recomputed every `PROJECTION_INTERV
 The agent never moves money itself: it asks `POST /internal/checked-donations`, and the API re-checks the mandate every time.
 
 - **Mandate:** `PUT /donors/{id}/mandate` sets monthly budget, categories, excluded tags, per-project max, approval threshold and optional `weight_overrides` (keys `few_backers`, `progress`, `urgency`, `evidence`, `days_since_funded`; each within 20 of its default 35/25/20/10/10).
+- **The mandate contract:** `GET /mandates/constraints` (public) gives the limits, so the website and the agents don't hard-code them:
+  - the default weights and how far each may move (20);
+  - a budget cap of 10,000 USD a month;
+  - at most 20 excluded tags of up to 40 characters;
+  - a per-project max and approval threshold of at least 1 USD, and never above the monthly budget.
+
+  Saving also needs at least one existing category. Tags are saved trimmed, lowercased and deduped. A 422 puts the first problem in `error` and `message`, and lists every problem as `errors: [{field, code, message}]` (codes such as `CATEGORIES_REQUIRED`, `THRESHOLD_OVER_BUDGET`, `PER_PROJECT_OVER_BUDGET`, `BUDGET_TOO_HIGH`, `TOO_MANY_TAGS`, `TAG_TOO_LONG`, `INVALID_WEIGHTS`).
+- **Preview before saving:** `POST /donors/{id}/mandate/preview` takes the same body and runs the same rules ([`validate_mandate`](app/mandates.py)) without saving: `{ok, errors, normalized}`. Check an LLM-drafted mandate here, show the donor the result, and call PUT only when they confirm. Every save writes a `mandate_updated` audit row with the mandate before and after.
 - **Funding:** the donor tops up through PayPal with `POST /donations/orders` and `{"target_type": "AGENT", "amount_cents": ...}` (no project), then the normal capture. The top-up is credited to the payer's donor record, so they must pay with the same PayPal account as the mandate's donor. `funded_balance_cents` = top-ups − gifts given − gifts waiting for approval.
 - **A run:** the agent reads `GET /internal/mandates/active`, records its candidates and scores with `POST /internal/mandate-runs`, then asks for each gift with `POST /internal/checked-donations` (`mandate_run_id`, `project_id`, `amount_cents`, `reason`).
 - **The checks, in order** (`rule_result` names the one that blocked): `mandate_inactive`, `project_not_open`, `project_frozen` (Watchdog), `category_not_in_mandate`, `excluded_tag`, `over_per_project_max` (this calendar month), `over_monthly_budget` (this calendar month), `insufficient_balance`.

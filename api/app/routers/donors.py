@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 from app import audit, reports, subscriptions
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.mandates import check_gift, funded_balance, weight_problems
-from app.models import AgentSubscription, Category, Donation, DonationStatus, Donor, Mandate, MandateRun, Project, TargetType
+from app.mandates import check_gift, constraints, funded_balance, validate_mandate
+from app.models import AgentSubscription, Donation, DonationStatus, Donor, Mandate, MandateRun, Project, TargetType
 from app.money import to_paypal
 from app.paypal import PayPalClient, PayPalError, get_paypal
 from app.routers.donations import donation_out, mark_captured
@@ -24,8 +24,10 @@ from app.schemas import (
     DonorReport,
     DonorUpdate,
     ErrorOut,
+    MandateConstraintsOut,
     MandateIn,
     MandateOut,
+    MandatePreviewOut,
     MandateRunOut,
     PendingApproval,
     SubscriptionIn,
@@ -116,18 +118,18 @@ def get_mandate(donor_id: int, db: Session = Depends(get_db)):
 def set_mandate(
     donor_id: int, body: MandateIn, db: Session = Depends(get_db), settings: Settings = Depends(get_settings)
 ):
-    """Create or replace the Giving Agent's rules. The budget is funded separately through PayPal:
-    `POST /donations/orders` with `target_type: AGENT` and no project tops it up."""
+    """Create or replace the Giving Agent's rules (the limits are in GET /mandates/constraints).
+    Excluded tags are saved trimmed, lowercased and deduped. A 422 names the first problem in
+    error and message, and lists them all in errors. The budget is funded separately through
+    PayPal: `POST /donations/orders` with `target_type: AGENT` and no project tops it up."""
     _donor_or_404(db, donor_id)
-    known = set(db.scalars(select(Category.id).where(Category.id.in_(body.categories))))
-    if missing := sorted(set(body.categories) - known):
-        raise _error(422, "CATEGORY_NOT_FOUND", f"No such categories: {missing}")
-    if body.per_project_max_cents > body.monthly_budget_cents:
-        raise _error(422, "INVALID_MANDATE", "Per-project max can't be more than the monthly budget")
-    if problems := weight_problems(body.weight_overrides):
-        raise _error(422, "INVALID_WEIGHTS", "; ".join(problems))
+    body, errors = validate_mandate(db, body)
+    if errors:
+        raise HTTPException(422, detail={"error": errors[0]["code"], "message": errors[0]["message"], "errors": errors})
 
-    m = _mandate(db, donor_id) or Mandate(donor_id=donor_id, currency=settings.currency)
+    existing = _mandate(db, donor_id)
+    before = _mandate_fields(existing) if existing else None
+    m = existing or Mandate(donor_id=donor_id, currency=settings.currency)
     m.monthly_budget = body.monthly_budget_cents
     m.categories = body.categories
     m.excluded_tags = body.excluded_tags
@@ -136,8 +138,39 @@ def set_mandate(
     m.weight_overrides = body.weight_overrides
     m.active = body.active
     db.add(m)
+    db.flush()
+    audit.write(db, actor="donor", action="mandate_updated",
+                inputs={"mandate_id": m.id, "before": before, "after": _mandate_fields(m)}, rule_result="ok")
     db.commit()
     return mandate_out(db, m)
+
+
+def _mandate_fields(m: Mandate) -> dict:
+    return {
+        "monthly_budget_cents": m.monthly_budget, "categories": m.categories or [],
+        "excluded_tags": m.excluded_tags or [], "per_project_max_cents": m.per_project_max,
+        "approval_threshold_cents": m.approval_threshold, "weight_overrides": m.weight_overrides, "active": m.active,
+    }
+
+
+@router.post("/{donor_id}/mandate/preview", response_model=MandatePreviewOut, responses={404: {"model": ErrorOut}})
+def preview_mandate(donor_id: int, body: MandateIn, db: Session = Depends(get_db)):
+    """Check a proposed mandate (e.g. one the LLM drafted from the donor's words) against the same
+    rules as PUT, without saving anything. ok is true when PUT would accept it; normalized is what
+    would be saved."""
+    _donor_or_404(db, donor_id)
+    normalized, errors = validate_mandate(db, body)
+    return MandatePreviewOut(ok=not errors, errors=errors, normalized=normalized)
+
+
+constraints_router = APIRouter(prefix="/mandates", tags=["donors"])
+
+
+@constraints_router.get("/constraints", response_model=MandateConstraintsOut)
+def mandate_constraints():
+    """The limits every mandate must fit, for the website's form and the agents: score weights and
+    how far they may move, budget cap, tag limits, and the per-project max and threshold range."""
+    return constraints()
 
 
 def subscription_out(sub: AgentSubscription, approve: str | None = None) -> SubscriptionOut:

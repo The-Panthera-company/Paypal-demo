@@ -1659,7 +1659,7 @@
           "donors"
         ],
         "summary": "Set Mandate",
-        "description": "Create or replace the Giving Agent's rules. The budget is funded separately through PayPal:\n`POST /donations/orders` with `target_type: AGENT` and no project tops it up.",
+        "description": "Create or replace the Giving Agent's rules (the limits are in GET /mandates/constraints).\nExcluded tags are saved trimmed, lowercased and deduped. A 422 names the first problem in\nerror and message, and lists them all in errors. The budget is funded separately through\nPayPal: `POST /donations/orders` with `target_type: AGENT` and no project tops it up.",
         "operationId": "set_mandate",
         "parameters": [
           {
@@ -1757,6 +1757,128 @@
                     "error": "NOT_IMPLEMENTED",
                     "message": "Planned: matching engine"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/donors/{donor_id}/mandate/preview": {
+      "post": {
+        "tags": [
+          "donors"
+        ],
+        "summary": "Preview Mandate",
+        "description": "Check a proposed mandate (e.g. one the LLM drafted from the donor's words) against the same\nrules as PUT, without saving anything. ok is true when PUT would accept it; normalized is what\nwould be saved.",
+        "operationId": "preview_mandate",
+        "parameters": [
+          {
+            "name": "donor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Donor id (no login yet; demo logins map to donor ids).",
+              "example": 1
+            },
+            "description": "Donor id (no login yet; demo logins map to donor ids).",
+            "example": 1
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MandateIn"
+              },
+              "example": {
+                "monthly_budget_cents": 1000,
+                "categories": [
+                  2
+                ],
+                "excluded_tags": [
+                  "faith-based"
+                ],
+                "per_project_max_cents": 400,
+                "approval_threshold_cents": 500,
+                "weight_overrides": {
+                  "few_backers": 45
+                },
+                "active": true
+              }
+            }
+          },
+          "description": "The rules the Giving Agent must follow for a donor. The core API enforces them on every gift."
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandatePreviewOut"
+                },
+                "example": {
+                  "errors": [
+                    {
+                      "code": "THRESHOLD_OVER_BUDGET",
+                      "field": "approval_threshold_cents",
+                      "message": "Approval threshold can't be more than the monthly budget"
+                    }
+                  ],
+                  "normalized": {
+                    "active": true,
+                    "approval_threshold_cents": 5000,
+                    "categories": [
+                      2
+                    ],
+                    "excluded_tags": [
+                      "faith-based"
+                    ],
+                    "monthly_budget_cents": 1000,
+                    "per_project_max_cents": 400
+                  },
+                  "ok": false
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
                 }
               }
             }
@@ -7630,6 +7752,45 @@
         }
       }
     },
+    "/mandates/constraints": {
+      "get": {
+        "tags": [
+          "donors"
+        ],
+        "summary": "Mandate Constraints",
+        "description": "The limits every mandate must fit, for the website's form and the agents: score weights and\nhow far they may move, budget cap, tag limits, and the per-project max and threshold range.",
+        "operationId": "mandate_constraints",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateConstraintsOut"
+                },
+                "example": {
+                  "default_weights": {
+                    "days_since_funded": 10,
+                    "evidence": 10,
+                    "few_backers": 35,
+                    "progress": 25,
+                    "urgency": 20
+                  },
+                  "max_approval_threshold_cents": 1000000,
+                  "max_budget_cents": 1000000,
+                  "max_per_project_cents": 1000000,
+                  "max_tag_length": 40,
+                  "max_tags": 20,
+                  "max_weight_shift": 20,
+                  "min_approval_threshold_cents": 100,
+                  "min_per_project_cents": 100
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -9942,6 +10103,97 @@
           "matching_frozen": true
         }
       },
+      "MandateConstraintsOut": {
+        "properties": {
+          "default_weights": {
+            "additionalProperties": {
+              "type": "number",
+              "description": "Each value of: The agent's score weights; weight_overrides move them",
+              "example": 1.0
+            },
+            "type": "object",
+            "description": "The agent's score weights; weight_overrides move them",
+            "example": {
+              "days_since_funded": 10,
+              "evidence": 10,
+              "few_backers": 35,
+              "progress": 25,
+              "urgency": 20
+            }
+          },
+          "max_weight_shift": {
+            "type": "number",
+            "description": "How far each weight may move from its default, either way",
+            "example": 20
+          },
+          "max_budget_cents": {
+            "type": "integer",
+            "description": "Highest monthly budget a mandate may set",
+            "example": 1000000
+          },
+          "max_tags": {
+            "type": "integer",
+            "description": "Most excluded tags a mandate may have",
+            "example": 20
+          },
+          "max_tag_length": {
+            "type": "integer",
+            "description": "Longest excluded tag, in characters",
+            "example": 40
+          },
+          "min_per_project_cents": {
+            "type": "integer",
+            "description": "Lowest per-project max",
+            "example": 100
+          },
+          "max_per_project_cents": {
+            "type": "integer",
+            "description": "Also never more than the mandate's monthly budget",
+            "example": 1000000
+          },
+          "min_approval_threshold_cents": {
+            "type": "integer",
+            "description": "Lowest approval threshold",
+            "example": 100
+          },
+          "max_approval_threshold_cents": {
+            "type": "integer",
+            "description": "Also never more than the mandate's monthly budget",
+            "example": 1000000
+          }
+        },
+        "type": "object",
+        "required": [
+          "default_weights",
+          "max_weight_shift",
+          "max_budget_cents",
+          "max_tags",
+          "max_tag_length",
+          "min_per_project_cents",
+          "max_per_project_cents",
+          "min_approval_threshold_cents",
+          "max_approval_threshold_cents"
+        ],
+        "example": {
+          "default_weights": {
+            "days_since_funded": 10,
+            "evidence": 10,
+            "few_backers": 35,
+            "progress": 25,
+            "urgency": 20
+          },
+          "max_approval_threshold_cents": 1000000,
+          "max_budget_cents": 1000000,
+          "max_per_project_cents": 1000000,
+          "max_tag_length": 40,
+          "max_tags": 20,
+          "max_weight_shift": 20,
+          "min_approval_threshold_cents": 100,
+          "min_per_project_cents": 100
+        },
+        "title": "MandateConstraintsOut",
+        "description": "The limits every Giving Agent mandate must fit; read these instead of hard-coding them."
+      },
       "MandateIn": {
         "properties": {
           "monthly_budget_cents": {
@@ -10147,6 +10399,94 @@
         },
         "title": "MandateOut",
         "description": "A donor's Giving Agent mandate and their funded balance."
+      },
+      "MandatePreviewOut": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "True when PUT would save it as it is",
+            "example": false
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/MandateProblem"
+            },
+            "type": "array",
+            "description": "Orders that couldn't be settled, with the reason.",
+            "example": [
+              {
+                "code": "THRESHOLD_OVER_BUDGET",
+                "field": "approval_threshold_cents",
+                "message": "Approval threshold can't be more than the monthly budget"
+              }
+            ]
+          },
+          "normalized": {
+            "$ref": "#/components/schemas/MandateIn"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "errors",
+          "normalized"
+        ],
+        "example": {
+          "errors": [
+            {
+              "code": "THRESHOLD_OVER_BUDGET",
+              "field": "approval_threshold_cents",
+              "message": "Approval threshold can't be more than the monthly budget"
+            }
+          ],
+          "normalized": {
+            "active": true,
+            "approval_threshold_cents": 5000,
+            "categories": [
+              2
+            ],
+            "excluded_tags": [
+              "faith-based"
+            ],
+            "monthly_budget_cents": 1000,
+            "per_project_max_cents": 400
+          },
+          "ok": false
+        },
+        "title": "MandatePreviewOut",
+        "description": "Whether a proposed mandate would be saved, every problem with it, and what would be saved."
+      },
+      "MandateProblem": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "The field at fault, e.g. per_project_max_cents or weight_overrides.urgency",
+            "example": "field"
+          },
+          "code": {
+            "type": "string",
+            "description": "A stable code, e.g. THRESHOLD_OVER_BUDGET",
+            "example": "code"
+          },
+          "message": {
+            "type": "string",
+            "description": "What is wrong, for people",
+            "example": "message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "code",
+          "message"
+        ],
+        "title": "MandateProblem",
+        "description": "One problem with a proposed mandate: the field, a stable code and a message.",
+        "example": {
+          "field": "field",
+          "code": "code",
+          "message": "message"
+        }
       },
       "MandateRunIn": {
         "properties": {
