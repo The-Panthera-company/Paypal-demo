@@ -186,7 +186,8 @@ Instead of one-off top-ups, a donor can fund the agent monthly ([`app/subscripti
 
 ## Watchdog cases
 
-- `POST /internal/watchdog/cases` (`project_id`, `rule`, `evidence`): opens a case and sets the project's `matching_frozen` (donations still work). The same rule on a project with an open case returns that case. Put the suspected donors in `evidence.donor_ids`.
+- `POST /internal/watchdog/cases` (`project_id`, `rule`, `evidence`): opens a case and sets the project's `matching_frozen` (donations still work). The same rule on a project with an open case returns that case. Put the suspected donors in `evidence.donor_ids` as internal `Donor.id` integers, never PayPal payer ids. `rule=collusion_cluster` also accepts an optional `evidence.graph` with nodes (`id`, `type`, `label`) and edges (`source`, `target`, `weight`); unknown or non-integer donor ids answer 422.
+- `GET /internal/donation-events?since=<iso>&limit=500`: the Watchdog's feed of captured and refunded donations, newest first. It returns internal donor ids (`donor_id`, `owner_donor_id`) and the donor's creation time; PayPal payer ids never appear.
 - `POST /admin/cases/{id}/resolve` with `action`:
   - `clear`: false alarm; matching resumes once no other case is open for the project.
   - `confirm`: those `donor_ids` count as one person in matching from now on; matching resumes the same way.

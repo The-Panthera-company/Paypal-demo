@@ -149,10 +149,18 @@ def gather(db: Session, round_: Round) -> tuple[list[Gift], list[ProjectIn]]:
     category_of = {p.id: p.category_id for p in projects}
 
     # Confirmed Watchdog cases merge their donors (evidence["donor_ids"]) into one person.
+    # Only Donor.id integers count. Old cases may still carry a PayPal payer id; skip those
+    # instead of letting one bad row break the whole round.
     cluster: dict[int, str] = {}
     for case in db.scalars(select(WatchdogCase).where(WatchdogCase.status == CaseStatus.confirmed)):
-        for donor_id in (case.evidence or {}).get("donor_ids", []):
-            cluster.setdefault(int(donor_id), f"cluster:{case.id}")
+        for raw in (case.evidence or {}).get("donor_ids", []):
+            if type(raw) is int:
+                donor_id = raw
+            elif isinstance(raw, str) and raw.isdigit():
+                donor_id = int(raw)
+            else:
+                continue
+            cluster.setdefault(donor_id, f"cluster:{case.id}")
 
     rows = db.execute(
         select(Donation, Donor.is_guest)

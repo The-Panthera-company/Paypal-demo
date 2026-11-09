@@ -6,7 +6,7 @@ Every call that changes something writes an audit-log line with its inputs, rule
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,7 @@ from app.models import (
     CaseStatus,
     Donation,
     DonationStatus,
+    Donor,
     LedgerEntry,
     LedgerType,
     Mandate,
@@ -47,6 +48,7 @@ from app.schemas import (
     CaseOut,
     CheckedDonationIn,
     CheckedDonationOut,
+    DonationEventOut,
     ErrorOut,
     MandateRunIn,
     MandateRunOut,
@@ -76,6 +78,64 @@ def case_out(c: WatchdogCase) -> CaseOut:
     )
 
 
+def _invalid_evidence(message: str) -> HTTPException:
+    return _error(422, "INVALID_EVIDENCE", message)
+
+
+def _validate_collusion_evidence(db: Session, evidence: dict) -> None:
+    """Validate a collusion cluster: Donor.id integers only, plus an optional graph.
+
+    PayPal payer ids are strings; they are not donor ids and must never reach the matching
+    engine, which merges confirmed clusters by Donor.id.
+    """
+    donor_ids = evidence.get("donor_ids")
+    if not isinstance(donor_ids, list) or len(donor_ids) < 2:
+        raise _invalid_evidence("collusion_cluster needs donor_ids with at least two Donor.id integers")
+    if any(type(value) is not int for value in donor_ids):
+        raise _invalid_evidence("donor_ids must be Donor.id integers, not PayPal payer ids")
+    unique = set(donor_ids)
+    if len(unique) < 2:
+        raise _invalid_evidence("collusion_cluster needs at least two different donor_ids")
+    found = set(db.scalars(select(Donor.id).where(Donor.id.in_(unique))).all())
+    missing = sorted(unique - found)
+    if missing:
+        raise _invalid_evidence(f"Unknown donor_ids: {missing}")
+
+    graph = evidence.get("graph")
+    if graph is None:
+        return
+    if not isinstance(graph, dict):
+        raise _invalid_evidence("graph must be an object")
+
+    nodes = graph.get("nodes")
+    if nodes is not None:
+        if not isinstance(nodes, list):
+            raise _invalid_evidence("graph.nodes must be a list")
+        for node in nodes:
+            if not isinstance(node, dict) or not {"id", "type", "label"} <= node.keys():
+                raise _invalid_evidence("Each graph node needs id, type and label")
+            if type(node["id"]) not in (int, str) or node["id"] == "":
+                raise _invalid_evidence("A graph node id must be a non-empty integer or string")
+            if not isinstance(node["type"], str) or not node["type"].strip():
+                raise _invalid_evidence("A graph node type must be a non-empty string")
+            if not isinstance(node["label"], str) or not node["label"].strip():
+                raise _invalid_evidence("A graph node label must be a non-empty string")
+
+    edges = graph.get("edges")
+    if edges is not None:
+        if not isinstance(edges, list):
+            raise _invalid_evidence("graph.edges must be a list")
+        for edge in edges:
+            if not isinstance(edge, dict) or not {"source", "target", "weight"} <= edge.keys():
+                raise _invalid_evidence("Each graph edge needs source, target and weight")
+            if type(edge["source"]) not in (int, str) or edge["source"] == "":
+                raise _invalid_evidence("A graph edge source must be a non-empty integer or string")
+            if type(edge["target"]) not in (int, str) or edge["target"] == "":
+                raise _invalid_evidence("A graph edge target must be a non-empty integer or string")
+            if type(edge["weight"]) not in (int, float):
+                raise _invalid_evidence("A graph edge weight must be a number")
+
+
 @router.get("/status", response_model=AgentStatusOut)
 def internal_status(db: Session = Depends(get_db)):
     """The agent service checks this before starting a run. Available while paused."""
@@ -87,6 +147,44 @@ def active_mandates(db: Session = Depends(get_db)):
     """Mandates for the Giving Agent's run, with each donor's remaining funded balance."""
     mandates = db.scalars(select(Mandate).where(Mandate.active.is_(True)).order_by(Mandate.id))
     return [ActiveMandate(**mandate_out(db, m).model_dump()) for m in mandates]
+
+
+@router.get("/donation-events", response_model=list[DonationEventOut])
+def donation_events(
+    since: datetime = Query(..., description="Only donations captured at or after this ISO timestamp (UTC)."),
+    limit: int = Query(500, ge=1, le=1000, description="Most events to return."),
+    db: Session = Depends(get_db),
+):
+    """Watchdog's event feed: captured and refunded donations since a timestamp, newest first.
+
+    donor_id and owner_donor_id are internal Donor.id integers, never PayPal payer ids.
+    """
+    rows = db.execute(
+        select(Donation, Donor, Project.owner_id)
+        .join(Donor, Donor.id == Donation.donor_id, isouter=True)
+        .join(Project, Project.id == Donation.project_id, isouter=True)
+        .where(
+            Donation.status.in_((DonationStatus.captured, DonationStatus.refunded)),
+            Donation.captured_at.is_not(None),
+            Donation.captured_at >= since,
+        )
+        .order_by(Donation.captured_at.desc(), Donation.id.desc())
+        .limit(limit)
+    )
+    return [
+        DonationEventOut(
+            donation_id=donation.id,
+            project_id=donation.project_id,
+            donor_id=donation.donor_id,
+            status=donation.status,
+            amount_cents=donation.amount,
+            captured_at=donation.captured_at,
+            donor_created_at=donor.created_at if donor else None,
+            owner_donor_id=owner_id,
+            is_guest=bool(donor and donor.is_guest),
+        )
+        for donation, donor, owner_id in rows.all()
+    ]
 
 
 @router.post(
@@ -185,17 +283,26 @@ def checked_donation(body: CheckedDonationIn, db: Session = Depends(get_db)):
     "/watchdog/cases",
     response_model=CaseOut,
     status_code=201,
-    responses={**NOT_FOUND, 409: {"model": ErrorOut}},
+    responses={
+        **NOT_FOUND,
+        409: {"model": ErrorOut},
+        422: {"model": ErrorOut, "description": "Invalid collusion_cluster evidence"},
+    },
     dependencies=[Depends(require_agents_running)],
 )
 def open_case(body: CaseIn, db: Session = Depends(get_db)):
     """Watchdog rule hit: opens a case and freezes the project's matching (not its donations).
 
-    The same rule firing again on a project with an open case returns that case instead of a new one.
+    collusion_cluster accepts Donor.id integers in evidence["donor_ids"] and an optional
+    nodes/edges graph. The same rule firing again on a project with an open case returns that
+    case instead of a new one. Opening or clearing a case never merges donors; only an admin's
+    confirm decision does.
     """
     project = db.get(Project, body.project_id)
     if project is None:
         raise _error(404, "PROJECT_NOT_FOUND", "No such project")
+    if body.rule == "collusion_cluster":
+        _validate_collusion_evidence(db, body.evidence)
     existing = db.scalar(
         select(WatchdogCase).where(
             WatchdogCase.project_id == project.id,

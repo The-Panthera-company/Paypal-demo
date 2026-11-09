@@ -3260,7 +3260,7 @@
               "example": {
                 "action": "confirm",
                 "remove_project": false,
-                "note": "Same device for all three payers"
+                "note": "Three accounts shared a device"
               }
             }
           },
@@ -5420,6 +5420,115 @@
         ]
       }
     },
+    "/internal/donation-events": {
+      "get": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Donation Events",
+        "description": "Watchdog's event feed: captured and refunded donations since a timestamp, newest first.\n\ndonor_id and owner_donor_id are internal Donor.id integers, never PayPal payer ids.",
+        "operationId": "donation_events",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Only donations captured at or after this ISO timestamp (UTC).",
+              "example": "2026-11-08T00:00:00Z"
+            },
+            "description": "Only donations captured at or after this ISO timestamp (UTC).",
+            "example": "2026-11-08T00:00:00Z"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "Most events to return.",
+              "default": 500,
+              "example": 50
+            },
+            "description": "Most events to return.",
+            "example": 50
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DonationEventOut"
+                  },
+                  "description": "List of: One donation event for the Watchdog: captured or refunded, with internal Donor ids (never PayPal payer ids).",
+                  "example": [
+                    {
+                      "amount_cents": 2000,
+                      "captured_at": "2026-11-08T14:02:00Z",
+                      "donation_id": 4,
+                      "donor_created_at": "2026-11-01T09:00:00Z",
+                      "donor_id": 12,
+                      "is_guest": false,
+                      "owner_donor_id": 3,
+                      "project_id": 1,
+                      "status": "captured"
+                    }
+                  ]
+                },
+                "example": [
+                  {
+                    "amount_cents": 2000,
+                    "captured_at": "2026-11-08T14:02:00Z",
+                    "donation_id": 4,
+                    "donor_created_at": "2026-11-01T09:00:00Z",
+                    "donor_id": 12,
+                    "is_guest": false,
+                    "owner_donor_id": 3,
+                    "project_id": 1,
+                    "status": "captured"
+                  }
+                ]
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/internal/mandate-runs": {
       "post": {
         "tags": [
@@ -5664,7 +5773,7 @@
           "internal (agents)"
         ],
         "summary": "Open Case",
-        "description": "Watchdog rule hit: opens a case and freezes the project's matching (not its donations).\n\nThe same rule firing again on a project with an open case returns that case instead of a new one.",
+        "description": "Watchdog rule hit: opens a case and freezes the project's matching (not its donations).\n\ncollusion_cluster accepts Donor.id integers in evidence[\"donor_ids\"] and an optional\nnodes/edges graph. The same rule firing again on a project with an open case returns that\ncase instead of a new one. Opening or clearing a case never merges donors; only an admin's\nconfirm decision does.",
         "operationId": "open_case",
         "requestBody": {
           "content": {
@@ -5674,15 +5783,54 @@
               },
               "example": {
                 "project_id": 6,
-                "rule": "new_payer_burst",
+                "rule": "collusion_cluster",
                 "evidence": {
                   "donor_ids": [
                     12,
                     13,
                     14
                   ],
-                  "window_minutes": 15,
-                  "median_amount_cents": 100
+                  "graph": {
+                    "nodes": [
+                      {
+                        "id": 12,
+                        "type": "donor",
+                        "label": "Donor 3FA2C1"
+                      },
+                      {
+                        "id": 13,
+                        "type": "donor",
+                        "label": "Donor 81B4D0"
+                      },
+                      {
+                        "id": 14,
+                        "type": "donor",
+                        "label": "Donor C27A9E"
+                      },
+                      {
+                        "id": 6,
+                        "type": "project",
+                        "label": "Lanet Library"
+                      }
+                    ],
+                    "edges": [
+                      {
+                        "source": 12,
+                        "target": 6,
+                        "weight": 1
+                      },
+                      {
+                        "source": 13,
+                        "target": 6,
+                        "weight": 1
+                      },
+                      {
+                        "source": 14,
+                        "target": 6,
+                        "weight": 1
+                      }
+                    ]
+                  }
                 }
               }
             }
@@ -5748,23 +5896,17 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Invalid collusion_cluster evidence",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorOut"
                 },
                 "example": {
-                  "detail": [
-                    {
-                      "loc": [
-                        "body",
-                        "amount_cents"
-                      ],
-                      "msg": "Field required",
-                      "type": "missing"
-                    }
-                  ]
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
                 }
               }
             }
@@ -7277,15 +7419,54 @@
           "evidence": {
             "additionalProperties": true,
             "type": "object",
-            "description": "Include \"donor_ids\": [..] for the suspected cluster; if an admin confirms the case, the matching engine counts those donors as one person.",
+            "description": "Include \"donor_ids\": [..] for the suspected cluster; if an admin confirms the case, the matching engine counts those donors as one person. collusion_cluster also accepts an optional \"graph\": {\"nodes\": [{\"id\", \"type\", \"label\"}], \"edges\": [{\"source\", \"target\", \"weight\"}]}.",
             "example": {
               "donor_ids": [
                 12,
                 13,
                 14
               ],
-              "window_minutes": 15,
-              "median_amount_cents": 100
+              "graph": {
+                "nodes": [
+                  {
+                    "id": 12,
+                    "type": "donor",
+                    "label": "Donor 3FA2C1"
+                  },
+                  {
+                    "id": 13,
+                    "type": "donor",
+                    "label": "Donor 81B4D0"
+                  },
+                  {
+                    "id": 14,
+                    "type": "donor",
+                    "label": "Donor C27A9E"
+                  },
+                  {
+                    "id": 6,
+                    "type": "project",
+                    "label": "Lanet Library"
+                  }
+                ],
+                "edges": [
+                  {
+                    "source": 12,
+                    "target": 6,
+                    "weight": 1
+                  },
+                  {
+                    "source": 13,
+                    "target": 6,
+                    "weight": 1
+                  },
+                  {
+                    "source": 14,
+                    "target": 6,
+                    "weight": 1
+                  }
+                ]
+              }
             }
           }
         },
@@ -7299,15 +7480,54 @@
         "description": "A Watchdog rule hit: freezes the project's matching and opens a case for an admin.",
         "example": {
           "project_id": 6,
-          "rule": "new_payer_burst",
+          "rule": "collusion_cluster",
           "evidence": {
             "donor_ids": [
               12,
               13,
               14
             ],
-            "window_minutes": 15,
-            "median_amount_cents": 100
+            "graph": {
+              "nodes": [
+                {
+                  "id": 12,
+                  "type": "donor",
+                  "label": "Donor 3FA2C1"
+                },
+                {
+                  "id": 13,
+                  "type": "donor",
+                  "label": "Donor 81B4D0"
+                },
+                {
+                  "id": 14,
+                  "type": "donor",
+                  "label": "Donor C27A9E"
+                },
+                {
+                  "id": 6,
+                  "type": "project",
+                  "label": "Lanet Library"
+                }
+              ],
+              "edges": [
+                {
+                  "source": 12,
+                  "target": 6,
+                  "weight": 1
+                },
+                {
+                  "source": 13,
+                  "target": 6,
+                  "weight": 1
+                },
+                {
+                  "source": 14,
+                  "target": 6,
+                  "weight": 1
+                }
+              ]
+            }
           }
         }
       },
@@ -7405,7 +7625,7 @@
             "type": "string",
             "description": "Optional note, kept in the audit log.",
             "nullable": true,
-            "example": "Same device for all three payers"
+            "example": "Three accounts shared a device"
           }
         },
         "type": "object",
@@ -7417,7 +7637,7 @@
         "example": {
           "action": "confirm",
           "remove_project": false,
-          "note": "Same device for all three payers"
+          "note": "Three accounts shared a device"
         }
       },
       "CaseStatus": {
@@ -7893,6 +8113,84 @@
         },
         "title": "DocumentOut",
         "description": "A stored project document with the fields extracted from it."
+      },
+      "DonationEventOut": {
+        "properties": {
+          "donation_id": {
+            "type": "integer",
+            "description": "Donation id.",
+            "example": 4
+          },
+          "project_id": {
+            "type": "integer",
+            "description": "Project id.",
+            "nullable": true,
+            "example": 1
+          },
+          "donor_id": {
+            "type": "integer",
+            "description": "Internal Donor.id integer, never a PayPal payer id.",
+            "nullable": true,
+            "example": 12
+          },
+          "status": {
+            "$ref": "#/components/schemas/DonationStatus"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "description": "Amount in cents (minor units of currency).",
+            "example": 2000
+          },
+          "captured_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When PayPal captured the donation (UTC).",
+            "example": "2026-11-08T14:02:00Z"
+          },
+          "donor_created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the donor record was created (UTC).",
+            "nullable": true,
+            "example": "2026-11-01T09:00:00Z"
+          },
+          "owner_donor_id": {
+            "type": "integer",
+            "description": "Internal Donor.id of the project owner, never a PayPal payer id.",
+            "nullable": true,
+            "example": 3
+          },
+          "is_guest": {
+            "type": "boolean",
+            "description": "Paid by card without a PayPal account; counts at half weight in matching.",
+            "example": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "donation_id",
+          "project_id",
+          "donor_id",
+          "status",
+          "amount_cents",
+          "captured_at",
+          "donor_created_at",
+          "owner_donor_id",
+          "is_guest"
+        ],
+        "example": {
+          "amount_cents": 2000,
+          "captured_at": "2026-11-08T14:02:00Z",
+          "donation_id": 4,
+          "donor_created_at": "2026-11-01T09:00:00Z",
+          "donor_id": 12,
+          "is_guest": false,
+          "owner_donor_id": 3,
+          "project_id": 1,
+          "status": "captured"
+        },
+        "title": "DonationEventOut",
+        "description": "One donation event for the Watchdog: captured or refunded, with internal Donor ids (never PayPal payer ids)."
       },
       "DonationOut": {
         "properties": {
@@ -11483,10 +11781,11 @@
           "new_payer_burst",
           "reciprocal_backing",
           "owner_donation",
-          "refund_spike"
+          "refund_spike",
+          "collusion_cluster"
         ],
         "title": "WatchdogRule",
-        "description": "new_payer_burst, reciprocal_backing, owner_donation or refund_spike.",
+        "description": "new_payer_burst, reciprocal_backing, owner_donation, refund_spike or collusion_cluster.",
         "example": "new_payer_burst"
       },
       "CaseAction": {
