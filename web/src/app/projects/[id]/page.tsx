@@ -8,6 +8,8 @@ import { ProjectCard } from "@/components/ProjectCard";
 import { Countdown } from "@/components/Countdown";
 import { ProjectTabs } from "@/components/ProjectTabs";
 import { TeamRoster } from "@/components/TeamRoster";
+import { boughtTitle, fetchProjectProcurements, type Procurement } from "@/lib/procurement";
+import { LineItems } from "@/components/PurchaseRequests";
 import { daysLeft, formatDate, formatMoney, getImpactUpdates, getProject, getRound, getSimilarProjects } from "@/lib/api";
 import { getProjectTeam } from "@/lib/project-team";
 
@@ -17,7 +19,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const p = await getProject(id);
   if (!p) notFound();
   const pct = Math.round((p.raised.amount / p.goal.amount) * 100);
-  const [updates, similar, round] = await Promise.all([getImpactUpdates(p.id), getSimilarProjects(p), getRound()]);
+  const [updates, similar, round, procurements] = await Promise.all([getImpactUpdates(p.id), getSimilarProjects(p), getRound(), fetchProjectProcurements(p.id, { next: { revalidate: 60 } } as RequestInit).catch(() => [] as Procurement[])]);
+  const bought = procurements.filter((x) => x.status === "paid");
 
   const team = getProjectTeam(p);
   const milestones = [...(p.milestones ?? [])].sort((a, b) => a.seq - b.seq);
@@ -156,9 +159,37 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
       <section>
         <h2 className="mb-6 text-3xl">Updates with evidence</h2>
-        {updates.length === 0 ? (
+        {bought.length > 0 && (
+          <ol className="mb-6 space-y-4" aria-label="Purchases paid through PayPal">
+            {bought.map((b) => (
+              <li key={b.id} className="border-l-4 border-growth bg-white p-5">
+                <p className="text-sm">
+                  {formatDate(b.updated_at)} · Bought by the platform · paid to the supplier through PayPal
+                </p>
+                <h3 className="text-xl">
+                  {boughtTitle(b)} — PayPal {b.paypal_batch_id ? <>batch <code className="text-base text-primary">{b.paypal_batch_id}</code></> : "payout"}
+                </h3>
+                <p>
+                  {b.supplier_name ?? "Supplier"} · <strong className="tabular text-ink">{formatMoney({ amount: b.amount_cents ?? 0, currency: b.currency })}</strong>
+                </p>
+                {b.line_items.length > 0 && (
+                  <details className="mt-2 text-sm">
+                    <summary className="cursor-pointer text-primary">Line items</summary>
+                    <LineItems p={b} />
+                  </details>
+                )}
+                {b.receipt_url && (
+                  <a href={b.receipt_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm font-bold text-primary underline-offset-4 hover:underline">
+                    PayPal receipt ↗
+                  </a>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+        {updates.length === 0 && bought.length === 0 ? (
           <p className="border border-dashed border-line p-6">No milestone released yet. Updates with receipts and photos appear here.</p>
-        ) : (
+        ) : updates.length === 0 ? null : (
           <ol className="space-y-6">
             {updates.map((u) => (
               <li key={u.id} className="bg-white p-5">

@@ -3,13 +3,14 @@ import { getGlobePins } from "@/lib/globe";
 
 import { AuditGrid, CasesGrid, MilestonesGrid, VerificationGrid } from "@/components/admin/AdminGrids";
 import { PageTitle } from "@/components/PageTitle";
-import { getAgentStatus, getAuditChain, verifyAuditChain, getAdminData, getDashboard, getProjectDocuments, listRounds } from "@/lib/admin";
+import { listProcurement, getAgentStatus, getAuditChain, verifyAuditChain, getAdminData, getDashboard, getProjectDocuments, listRounds } from "@/lib/admin";
 import { OwnerTokenButton } from "@/components/admin/OwnerTokenButton";
 import { RoundsPanel } from "@/components/admin/RoundsPanel";
 import { RefundPanel } from "@/components/admin/RefundPanel";
 import { getCategories, getLeaderboard, getProjects } from "@/lib/api";
 import { Overview } from "@/components/admin/Overview";
 import { AgentSwitch } from "@/components/admin/AgentSwitch";
+import { ProcurementPanel } from "@/components/admin/ProcurementPanel";
 import { TrustPanel } from "@/components/admin/TrustPanel";
 import { CollusionCases } from "@/components/admin/CollusionCases";
 import { hasRingGraph } from "@/components/CollusionGraph";
@@ -21,6 +22,7 @@ const tabs = [
   { id: "cases", label: "Watchdog cases" },
   { id: "verify", label: "Verification queue" },
   { id: "milestones", label: "Held tranches" },
+  { id: "procurement", label: "Procurement" },
   { id: "rounds", label: "Rounds" },
   { id: "refunds", label: "Refunds" },
   { id: "log", label: "Agent log" },
@@ -34,6 +36,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const [data, globe, dash, projects, lb, categories, rounds] = await Promise.all([getAdminData(), getGlobePins(), getDashboard(), getProjects(), getLeaderboard(), getCategories(), listRounds()]);
   const status = await getAgentStatus().catch(() => null);
   const [chain, chainRows] = tab === "trust" ? await Promise.all([verifyAuditChain().catch(() => null), getAuditChain(100).catch(() => [])]) : [null, []];
+  const procurement = await listProcurement().catch(() => []);
   const open = data.cases.filter((c) => c.status === "open");
   const rings = open.filter(hasRingGraph);
   const docs = tab === "verify" ? await Promise.all(data.queue.map(async (project) => ({ project, documents: await getProjectDocuments(project.id) }))) : [];
@@ -42,6 +45,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     rounds: 0,
     refunds: 0,
     trust: 0,
+    procurement: procurement.filter((p) => p.needs_approval || p.status === "failed").length,
     cases: data.cases.filter((c) => c.status === "open").length,
     verify: data.queue.length,
     milestones: data.milestones.length,
@@ -142,6 +146,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               <MilestonesGrid rows={data.milestones} />
             </div>
           )}
+          {tab === "procurement" && <ProcurementPanel rows={procurement} />}
           {tab === "trust" && <TrustPanel initial={chain} rows={chainRows} />}
           {tab === "log" && (
             <div className="space-y-3">

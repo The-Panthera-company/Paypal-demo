@@ -336,3 +336,32 @@ def test_tranche_routes_reject_procurement_managed_milestone(client, db_session_
     assert review.json()["detail"]["error"] == "PROCUREMENT_MANAGED"
     with db_session_factory() as db:
         assert db.get(Procurement, procurement["id"]).status == ProcurementStatus.requested
+
+
+def test_public_list_admin_retry_and_display_fields(client, db_session_factory, fake_paypal):
+    headers = _owner(client)
+    big = _request(client, headers, _milestone(db_session_factory, amount=30_000), amount=30_000)
+    supplier_id = _supplier(db_session_factory)
+    assert _propose(client, big["id"], supplier_id, amount=30_000).status_code == 200
+
+    listed = client.get("/projects/1/procurements")
+    assert listed.status_code == 200
+    row = listed.json()[0]
+    assert row["needs_approval"] is True
+    assert row["paypal_batch_id"] is None
+    assert "paypal_email" not in listed.text and "@supplier.co.ke" not in listed.text
+    assert client.get("/projects/9999/procurements").status_code == 404
+
+    assert client.post(f"/admin/procurement/{big['id']}/retry", headers=ADMIN).json()["detail"]["error"] == "PROCUREMENT_NOT_FAILED"
+    client.post(f"/admin/procurement/{big['id']}/approve", headers=ADMIN, json={"approve": True})
+    fake_paypal.payout_error = (422, {"name": "UNPROCESSABLE_ENTITY", "details": [{"issue": "INSUFFICIENT_FUNDS"}]})
+    failed = client.post(f"/internal/procurement/{big['id']}/pay", headers=INTERNAL).json()
+    assert failed["status"] == "failed" and failed["needs_approval"] is False
+
+    fake_paypal.payout_error = None
+    paid = client.post(f"/admin/procurement/{big['id']}/retry", headers=ADMIN)
+    assert paid.status_code == 200, paid.text
+    body = paid.json()
+    assert body["status"] == "paid"
+    assert body["paypal_batch_id"].startswith("BATCH")
+    assert body["receipt_url"]

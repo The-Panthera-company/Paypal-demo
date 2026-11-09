@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { loadOwner, saveOwner } from "@/lib/owner-tokens";
 import { Banner, notify } from "./Status";
+import { PurchaseRequests } from "./PurchaseRequests";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 const field = "min-h-11 border border-line bg-white px-3 text-sm text-ink";
@@ -143,6 +144,8 @@ export function EvidenceUploads({ projectId, listed }: { projectId: string; list
           </ol>
         )}
       </section>
+
+      {listed && <PurchaseRequests projectId={projectId} milestones={milestones} token={token} />}
 
       <section className="space-y-3 bg-white p-6">
         <h2 className="text-xl">Registration and plan</h2>
