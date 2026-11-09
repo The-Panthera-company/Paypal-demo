@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import audit, kill_switch, payouts, reconciliation, round_close
+from app import audit, kill_switch, payouts, procurement as procurement_service, reconciliation, round_close
 from app.money import to_paypal
 from app.refunds import book_refund, refunded_total
 from app.auth import require_admin
@@ -21,6 +21,8 @@ from app.models import (
     MilestoneStatus,
     Payout,
     PayoutAccount,
+    Procurement,
+    ProcurementStatus,
     Project,
     ProjectDocument,
     ProjectStatus,
@@ -51,6 +53,8 @@ from app.schemas import (
     PayoutAccountOut,
     PayoutItem,
     PayoutOut,
+    ProcurementApproveIn,
+    ProcurementOut,
     ProjectDetail,
     ProjectSummary,
     ReconciliationOut,
@@ -149,6 +153,49 @@ def held_milestones(db: Session = Depends(get_db)):
     return [milestone_out(m) for m in held]
 
 
+@router.get("/procurement", response_model=list[ProcurementOut])
+def list_procurement(
+    status: ProcurementStatus | None = None,
+    db: Session = Depends(get_db),
+):
+    """Managed purchase requests, newest first. Filter by status to see proposals awaiting an
+    admin decision. None of these responses includes a supplier's PayPal email."""
+    stmt = select(Procurement).order_by(Procurement.id.desc())
+    if status is not None:
+        stmt = stmt.where(Procurement.status == status)
+    return [procurement_service.procurement_out(db, p) for p in db.scalars(stmt)]
+
+
+@router.post("/procurement/{procurement_id}/approve", response_model=ProcurementOut, responses=ERRORS)
+def approve_procurement(
+    procurement_id: int, body: ProcurementApproveIn | None = None, db: Session = Depends(get_db)
+):
+    """Approve a purchase above the automatic limit, or decline the proposal. Approval is needed
+    only when the proposed amount is over PROCUREMENT_AUTO_APPROVE_CENTS. A request with no body
+    approves."""
+    procurement = db.get(Procurement, procurement_id)
+    if procurement is None:
+        raise _error(404, "PROCUREMENT_NOT_FOUND", "No such procurement")
+    if procurement.status in (ProcurementStatus.paid, ProcurementStatus.cancelled):
+        raise _error(409, "PROCUREMENT_CLOSED", f"Procurement is {procurement.status.value}")
+    approve = True if body is None else body.approve
+    note = body.note if body else None
+    if approve:
+        procurement.admin_approved = True
+        procurement.approved_by = "admin"
+        procurement.approved_at = datetime.now(timezone.utc)
+        if procurement.status == ProcurementStatus.proposed:
+            procurement.status = ProcurementStatus.approved
+        result = "approved"
+    else:
+        procurement.status = ProcurementStatus.cancelled
+        result = "declined"
+    audit.write(db, actor="admin", action="procurement_review", inputs={"procurement_id": procurement.id},
+                rule_result=result, reason=note)
+    db.commit()
+    return procurement_service.procurement_out(db, procurement)
+
+
 @router.post("/milestones/{milestone_id}/review", response_model=MilestoneOut, responses=ERRORS)
 def review_milestone(
     milestone_id: int,
@@ -162,6 +209,8 @@ def review_milestone(
         raise _error(404, "MILESTONE_NOT_FOUND", "No such milestone")
     if milestone.status != MilestoneStatus.held:
         raise _error(409, "MILESTONE_NOT_HELD", f"Milestone is {milestone.status.value}")
+    if body.approve and procurement_service.managed_procurement(db, milestone.id) is not None:
+        raise _error(409, "PROCUREMENT_MANAGED", "This milestone is paid through a managed procurement")
     audit.write(db, actor="admin", action="milestone_review", inputs={"milestone_id": milestone.id},
                 rule_result="released" if body.approve else "sent_back", reason=body.note)
     if body.approve:
@@ -203,6 +252,7 @@ def send_payout(payout_id: int, db: Session = Depends(get_db), paypal: PayPalCli
     if payout.paypal_batch_id:
         raise _error(409, "ALREADY_SENT", "PayPal already accepted this batch; refresh it or retry failed items")
     payouts.send(db, paypal, payout)
+    procurement_service.sync_from_payout(db, payout, get_settings())
     db.commit()
     return payout_out(payout)
 
@@ -217,6 +267,7 @@ def refresh_payout(payout_id: int, db: Session = Depends(get_db), paypal: PayPal
         payouts.apply_batch(db, payout, paypal.get_payout(payout.paypal_batch_id))
     except PayPalError as e:
         raise _error(502, e.issue, "PayPal could not return the batch")
+    procurement_service.sync_from_payout(db, payout, get_settings())
     db.commit()
     return payout_out(payout)
 
@@ -230,6 +281,7 @@ def retry_payout(payout_id: int, db: Session = Depends(get_db), paypal: PayPalCl
         raise _error(409, "NOTHING_TO_RETRY", "No failed, returned or blocked items in this batch")
     db.commit()
     payouts.send(db, paypal, new)
+    procurement_service.sync_from_payout(db, new, get_settings())
     db.commit()
     return payout_out(new)
 

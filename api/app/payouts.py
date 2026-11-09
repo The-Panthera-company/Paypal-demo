@@ -11,7 +11,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import audit
-from app.models import LedgerEntry, LedgerType, Milestone, Payout, PayoutAccount, PayoutStatus, Project
+from app.config import get_settings
+from app.models import (
+    LedgerEntry,
+    LedgerType,
+    Milestone,
+    Payout,
+    PayoutAccount,
+    PayoutStatus,
+    Procurement,
+    Project,
+    Supplier,
+)
 from app.money import to_paypal
 from app.paypal import PayPalClient, PayPalError
 
@@ -55,8 +66,13 @@ def send(db: Session, paypal: PayPalClient, payout: Payout) -> None:
     items = [dict(i) for i in payout.items]
     for item in items:
         if not item.get("receiver"):
-            account = db.get(PayoutAccount, item["project_id"])
-            item["receiver"] = account.paypal_email if account else None
+            if item.get("procurement_id"):
+                procurement = db.get(Procurement, int(item["procurement_id"]))
+                supplier = db.get(Supplier, procurement.supplier_id) if procurement and procurement.supplier_id else None
+                item["receiver"] = supplier.paypal_email if supplier else None
+            else:
+                account = db.get(PayoutAccount, item["project_id"])
+                item["receiver"] = account.paypal_email if account else None
     if missing := [i for i in items if not i["receiver"]]:
         for item in missing:
             item["error"] = "NO_PAYOUT_ACCOUNT"
@@ -81,6 +97,7 @@ def send(db: Session, paypal: PayPalClient, payout: Payout) -> None:
     except PayPalError as e:
         for item in items:
             item["error"] = e.issue
+            item["status"] = "FAILED"
         payout.items = items
         audit.write(db, actor="system", action="payout_failed", inputs={"payout_id": payout.id},
                     rule_result=e.issue, reason=f"PayPal refused batch {payout.sender_batch_id}")
@@ -105,17 +122,27 @@ def _update_item(db: Session, payout: Payout, sender_item_id: str, status: str, 
     item["payout_item_id"] = payout_item_id or item.get("payout_item_id")
     payout.items = items
     if status == "SUCCESS" and payout_item_id:
-        booked = db.scalar(select(LedgerEntry.id).where(LedgerEntry.payout_item_id == payout_item_id))
-        if booked is None:
-            db.add(
-                LedgerEntry(
-                    type=LedgerType.payout,
-                    amount=item["amount_cents"],
-                    currency=payout.currency,
-                    project_id=item["project_id"],
-                    payout_item_id=payout_item_id,
+        if item.get("procurement_id"):
+            # The purchase's expense is booked once, either at batch acceptance or here.
+            from app import procurement as procurement_service
+
+            procurement = db.get(Procurement, int(item["procurement_id"]))
+            if procurement is not None:
+                procurement_service.mark_paid(
+                    db, procurement, batch_id=payout.paypal_batch_id, settings=get_settings()
                 )
-            )
+        else:
+            booked = db.scalar(select(LedgerEntry.id).where(LedgerEntry.payout_item_id == payout_item_id))
+            if booked is None:
+                db.add(
+                    LedgerEntry(
+                        type=LedgerType.payout,
+                        amount=item["amount_cents"],
+                        currency=payout.currency,
+                        project_id=item["project_id"],
+                        payout_item_id=payout_item_id,
+                    )
+                )
     return True
 
 

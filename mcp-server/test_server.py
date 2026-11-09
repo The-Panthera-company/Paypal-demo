@@ -98,3 +98,31 @@ def test_evidence_queue_reads_the_internal_route(api):
     assert api.requests[-1].headers["Authorization"] == "Bearer t0ken"
     tools = {t.name: t for t in asyncio.run(server.server.list_tools())}
     assert tools["list_evidence_queue"].annotations.read_only_hint is True
+
+
+def test_procurement_tools_call_the_internal_routes(api):
+    api.reply = (200, [{"id": 1, "name": "Nakuru Books & Stationery"}])
+    assert payload(call("list_procurement_suppliers", project_id=4))[0]["id"] == 1
+    assert api.requests[-1].url.path == "/internal/procurement/suppliers"
+    assert api.requests[-1].url.params["project_id"] == "4"
+
+    api.reply = (200, [])
+    call("list_procurement_requests")
+    assert api.requests[-1].url.path == "/internal/procurement/requests"
+
+    api.reply = (200, {"id": 9, "status": "proposed"})
+    lines = [{"description": "40 reading sets", "quantity": 40, "unit_amount_cents": 75}]
+    call("propose_procurement", procurement_id=9, supplier_id=1, amount_cents=3000, line_items=lines, rationale="Local")
+    sent = api.requests[-1]
+    assert (sent.method, sent.url.path) == ("POST", "/internal/procurement/9/propose")
+    assert json.loads(sent.content) == {"supplier_id": 1, "amount_cents": 3000, "line_items": lines, "rationale": "Local"}
+
+    api.reply = (200, {"id": 9, "status": "paid"})
+    assert payload(call("pay_procurement", procurement_id=9))["status"] == "paid"
+    assert api.requests[-1].url.path == "/internal/procurement/9/pay"
+
+
+def test_pay_above_the_limit_tells_the_agent_to_wait(api):
+    api.reply = (409, {"detail": {"error": "APPROVAL_REQUIRED", "message": "Above the automatic limit"}})
+    with pytest.raises(ToolError, match="APPROVAL_REQUIRED"):
+        call("pay_procurement", procurement_id=9)

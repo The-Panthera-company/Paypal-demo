@@ -16,6 +16,10 @@ no database access, so an agent can't do more through it than the API allows.
 | `open_watchdog_case` | `POST /internal/watchdog/cases` | freezes a project's matching |
 | `list_evidence_queue` | `GET /internal/milestones/evidence` (tranches with uploaded evidence, and their documents) | no |
 | `request_milestone_payout` | `POST /internal/payout-requests` | releases a tranche, or holds it for an admin |
+| `list_procurement_requests` | `GET /internal/procurement/requests` | no |
+| `list_procurement_suppliers` | `GET /internal/procurement/suppliers?project_id=` (eligible suppliers, no PayPal emails) | no |
+| `propose_procurement` | `POST /internal/procurement/{id}/propose` | records the chosen supplier and price |
+| `pay_procurement` | `POST /internal/procurement/{id}/pay` | pays the supplier through PayPal Payouts, or `APPROVAL_REQUIRED` above the limit |
 | `log_decision` | `POST /internal/audit` | writes to the agent log |
 
 A rejection comes back as data (`status: rejected`, `rule_result: excluded_tag`); an API error (unknown run,

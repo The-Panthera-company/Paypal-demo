@@ -15,6 +15,7 @@ from app.models import (
     DonationStatus,
     MilestoneStatus,
     PayoutStatus,
+    ProcurementStatus,
     ProjectStatus,
     RoundStatus,
     TargetType,
@@ -567,8 +568,10 @@ class CaseResolveIn(BaseModel):
 class PayoutItem(BaseModel):
     project_id: int
     milestone_id: int | None
+    procurement_id: int | None = Field(None, description="Managed procurement this item pays, when it is a purchase")
     amount_cents: int
-    receiver: str | None = Field(description="Null until the project has a payout account")
+    receiver: str | None = Field(description="Null until the project has a payout account or a supplier proposal")
+    sender_item_id: str | None = Field(None, description="Our deterministic id for this item, e.g. procurement-7")
     status: str = Field(description="NEW before sending, then PayPal's: PENDING, SUCCESS, UNCLAIMED, FAILED, ...")
     payout_item_id: str | None = None
     error: str | None = Field(None, description="Why it wasn't sent, e.g. NO_PAYOUT_ACCOUNT or a PayPal issue")
@@ -609,6 +612,152 @@ class PayoutOut(BaseModel):
 class MilestoneReviewIn(BaseModel):
     approve: bool
     note: str | None = None
+
+
+# --- Managed procurement ----------------------------------------------------------------
+
+
+class ProcurementRequestIn(BaseModel):
+    model_config = _example(
+        {
+            "milestone_id": 7,
+            "description": "40 copies of the Grade 3 reading set",
+            "quantity": 40,
+            "max_amount_cents": 3000,
+        }
+    )
+    milestone_id: int = Field(description="Milestone this purchase is for")
+    description: str = Field(min_length=1, max_length=500, description="What the project needs bought")
+    quantity: int = Field(gt=0, description="How many units the request covers")
+    max_amount_cents: int = Field(gt=0, description="Most the supplier may be paid, in cents")
+
+
+class ProcurementProposeIn(BaseModel):
+    model_config = _example(
+        {
+            "supplier_id": 1,
+            "amount_cents": 3000,
+            "line_items": [{"description": "40 reading sets", "quantity": 40, "unit_amount_cents": 75}],
+            "rationale": "Lowest eligible quote, delivery included",
+        }
+    )
+    supplier_id: int = Field(description="Supplier chosen from GET /internal/procurement/suppliers")
+    amount_cents: int = Field(gt=0, description="What the supplier will be paid, in cents")
+    line_items: list[dict] = Field(default_factory=list, description="The quoted lines; kept on the receipt")
+    rationale: str = Field(min_length=1, max_length=2000, description="Why this supplier and price were chosen")
+
+
+class ProcurementApproveIn(BaseModel):
+    model_config = _example({"approve": True, "note": "Three quotes checked by phone"})
+    approve: bool = Field(True, description="True to approve payment, false to decline the proposal")
+    note: str | None = Field(None, description="Optional admin note, kept in the audit log")
+
+
+class ProcurementOut(BaseModel):
+    model_config = _example(
+        {
+            "id": 3,
+            "project_id": 1,
+            "milestone_id": 7,
+            "description": "40 copies of the Grade 3 reading set",
+            "quantity": 40,
+            "max_amount_cents": 3000,
+            "currency": "USD",
+            "status": "paid",
+            "supplier_id": 1,
+            "supplier_name": "Nakuru Books & Stationery",
+            "amount_cents": 3000,
+            "line_items": [{"description": "40 reading sets", "quantity": 40, "unit_amount_cents": 75}],
+            "rationale": "Lowest eligible quote, delivery included",
+            "admin_approved": False,
+            "approved_by": None,
+            "approved_at": None,
+            "payout_id": 8,
+            "receipt_document_id": 21,
+            "error": None,
+            "created_at": "2026-11-09T09:00:00Z",
+            "updated_at": "2026-11-09T09:02:00Z",
+        }
+    )
+    id: int = Field(description="Procurement id")
+    project_id: int = Field(description="Project that requested the purchase")
+    milestone_id: int = Field(description="Milestone the purchase belongs to")
+    description: str = Field(description="What the project needs bought")
+    quantity: int = Field(description="How many units the request covers")
+    max_amount_cents: int = Field(description="Most the supplier may be paid, in cents")
+    currency: str = Field(description="Currency of the request")
+    status: ProcurementStatus = Field(description="requested, proposed, approved, paid, failed or cancelled")
+    supplier_id: int | None = Field(None, description="Supplier chosen by the Procurement Agent")
+    supplier_name: str | None = Field(None, description="Supplier's name, joined for display")
+    amount_cents: int | None = Field(None, description="Proposed supplier price, in cents")
+    line_items: list[dict] = Field(default_factory=list, description="The supplier's quoted lines")
+    rationale: str | None = Field(None, description="Why the agent chose this supplier and price")
+    admin_approved: bool = Field(description="Whether an admin approved a purchase above the automatic limit")
+    approved_by: str | None = Field(None, description="Who approved it")
+    approved_at: datetime | None = Field(None, description="When it was approved")
+    payout_id: int | None = Field(None, description="PayPal Payouts batch that pays the supplier")
+    receipt_document_id: int | None = Field(None, description="Receipt document created from the PayPal batch")
+    error: str | None = Field(None, description="Why the last payment attempt failed, when it did")
+    created_at: datetime = Field(description="When the request was created (UTC)")
+    updated_at: datetime = Field(description="When the request last changed (UTC)")
+
+
+class ProcurementProjectOut(BaseModel):
+    id: int = Field(description="Project id")
+    title: str = Field(description="Project title")
+    goal_cents: int = Field(description="Project funding goal, in cents")
+    tags: list[str] = Field(description="Project tags the supplier can match")
+    region: str | None = Field(description="Project region, null when hidden")
+
+
+class ProcurementMilestoneOut(BaseModel):
+    id: int = Field(description="Milestone id")
+    title: str = Field(description="Milestone title")
+    amount_cents: int = Field(description="Milestone amount, in cents")
+    match_amount_cents: int = Field(description="Matching money added to the milestone, in cents")
+    currency: str = Field(description="Milestone currency")
+    status: MilestoneStatus = Field(description="Current milestone status")
+
+
+class ProcurementRequestOut(ProcurementOut):
+    model_config = _example(
+        {
+            **ProcurementOut.model_config["json_schema_extra"]["example"],
+            "project": {"id": 1, "title": "Lanet Library", "goal_cents": 600000, "tags": ["books", "literacy"],
+                        "region": "Nakuru"},
+            "milestone": {"id": 7, "title": "Buy 40 books", "amount_cents": 3000, "match_amount_cents": 0,
+                          "currency": "USD", "status": "open"},
+            "project_title": "Lanet Library",
+            "milestone_title": "Buy 40 books",
+            "goal_cents": 600000,
+            "tags": ["books", "literacy"],
+            "region": "Nakuru",
+        }
+    )
+    project: ProcurementProjectOut = Field(description="The requesting project")
+    milestone: ProcurementMilestoneOut = Field(description="The milestone this purchase is for")
+    project_title: str = Field(description="Project title, for a compact agent prompt")
+    milestone_title: str = Field(description="Milestone title, for a compact agent prompt")
+    goal_cents: int = Field(description="Project funding goal, in cents")
+    tags: list[str] = Field(description="Project tags, for supplier matching")
+    region: str | None = Field(description="Project region, for supplier matching")
+
+
+class SupplierOut(BaseModel):
+    model_config = _example(
+        {
+            "id": 1,
+            "name": "Nakuru Books & Stationery",
+            "categories": ["Education"],
+            "tags": ["books", "literacy", "schools"],
+            "region": "Nakuru",
+        }
+    )
+    id: int = Field(description="Supplier id")
+    name: str = Field(description="Supplier business name")
+    categories: list[str | int] = Field(description="Category names or ids the supplier serves")
+    tags: list[str | int] = Field(description="Project tags the supplier can supply")
+    region: str | None = Field(description="Supplier's service area")
 
 
 # --- Agent (internal) endpoints --------------------------------------------------------

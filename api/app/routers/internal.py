@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import audit, kill_switch, payouts
+from app import audit, kill_switch, payouts, procurement as procurement_service
 from app.auth import require_internal
 from app.config import Settings, get_settings
 from app.db import get_db
@@ -29,7 +29,10 @@ from app.models import (
     Milestone,
     MilestoneStatus,
     Payout,
+    Procurement,
+    ProcurementStatus,
     Project,
+    Supplier,
     TargetType,
     WatchdogCase,
 )
@@ -54,6 +57,10 @@ from app.schemas import (
     MandateRunOut,
     PayoutRequestIn,
     PayoutRequestOut,
+    ProcurementOut,
+    ProcurementProposeIn,
+    ProcurementRequestOut,
+    SupplierOut,
 )
 
 router = APIRouter(prefix="/internal", tags=["internal (agents)"], dependencies=[Depends(require_internal)])
@@ -363,6 +370,8 @@ def payout_request(
     milestone = db.get(Milestone, body.milestone_id)
     if milestone is None:
         raise _error(404, "MILESTONE_NOT_FOUND", "No such milestone")
+    if procurement_service.managed_procurement(db, milestone.id) is not None:
+        raise _error(409, "PROCUREMENT_MANAGED", "This milestone is paid through a managed procurement")
     if milestone.status not in (MilestoneStatus.open, MilestoneStatus.evidence_submitted):
         raise _error(409, "MILESTONE_NOT_OPEN", f"Milestone is already {milestone.status.value}")
 
@@ -398,6 +407,179 @@ def payout_request(
     )
     db.commit()
     return PayoutRequestOut(status=status, payout_id=payout.id if payout else None, reason=reason)
+
+
+@router.get("/procurement/requests", response_model=list[ProcurementRequestOut])
+def procurement_requests(db: Session = Depends(get_db)):
+    """Purchase requests waiting for a supplier proposal, with the project, milestone, goal, tags
+    and region the Procurement Agent uses to choose an eligible supplier."""
+    rows = list(
+        db.scalars(
+            select(Procurement)
+            .where(Procurement.status.in_((ProcurementStatus.requested, ProcurementStatus.proposed)))
+            .order_by(Procurement.id)
+        )
+    )
+    return [procurement_service.procurement_request_out(db, p) for p in rows]
+
+
+@router.get(
+    "/procurement/suppliers",
+    response_model=list[SupplierOut],
+    responses={404: {"model": ErrorOut}},
+)
+def procurement_suppliers(project_id: int, db: Session = Depends(get_db)):
+    """Active suppliers whose categories or tags and service region match the project. Only the id,
+    name, categories, tags and region are returned: the agent never needs the PayPal email."""
+    project = db.get(Project, project_id)
+    if project is None:
+        raise _error(404, "PROJECT_NOT_FOUND", "No such project")
+    suppliers = db.scalars(select(Supplier).where(Supplier.active.is_(True)).order_by(Supplier.name))
+    return [
+        SupplierOut(
+            id=s.id,
+            name=s.name,
+            categories=list(s.categories or []),
+            tags=list(s.tags or []),
+            region=s.region,
+        )
+        for s in suppliers
+        if procurement_service.supplier_eligible(db, s, project)
+    ]
+
+
+@router.post(
+    "/procurement/{procurement_id}/propose",
+    response_model=ProcurementOut,
+    responses={**NOT_FOUND, 409: {"model": ErrorOut},
+                422: {"model": ErrorOut, "description": "Supplier is not eligible, or the price is above the request or milestone"}},
+    dependencies=[Depends(require_agents_running)],
+)
+def propose_procurement(procurement_id: int, body: ProcurementProposeIn, db: Session = Depends(get_db)):
+    """Choose an active, eligible supplier and a price within the request and the milestone.
+    A procurement gets one proposal; asking twice is a conflict."""
+    procurement = db.get(Procurement, procurement_id)
+    if procurement is None:
+        raise _error(404, "PROCUREMENT_NOT_FOUND", "No such procurement")
+    if procurement.status != ProcurementStatus.requested:
+        raise _error(409, "ALREADY_PROPOSED", f"Procurement is {procurement.status.value}")
+    supplier = db.get(Supplier, body.supplier_id)
+    project = db.get(Project, procurement.project_id)
+    if supplier is None or not supplier.active or project is None or not procurement_service.supplier_eligible(db, supplier, project):
+        raise _error(422, "INVALID_SUPPLIER", "Supplier is unknown, inactive or not eligible for this project")
+    if body.amount_cents > procurement.max_amount_cents:
+        raise _error(422, "AMOUNT_ABOVE_REQUEST",
+                     f"{body.amount_cents} is more than the {procurement.max_amount_cents} requested")
+    milestone = db.get(Milestone, procurement.milestone_id)
+    total = milestone.amount + milestone.match_amount
+    if body.amount_cents > total:
+        raise _error(422, "AMOUNT_ABOVE_MILESTONE", f"{body.amount_cents} is more than the milestone's {total}")
+
+    procurement.supplier_id = supplier.id
+    procurement.amount_cents = body.amount_cents
+    procurement.line_items = body.line_items
+    procurement.rationale = body.rationale
+    procurement.status = ProcurementStatus.proposed
+    audit.write(
+        db,
+        actor="procurement-agent",
+        action="procurement_proposed",
+        inputs={"procurement_id": procurement.id, "supplier_id": supplier.id, "amount_cents": body.amount_cents},
+        rule_result="proposed",
+        reason=body.rationale,
+    )
+    db.commit()
+    return procurement_service.procurement_out(db, procurement)
+
+
+@router.post(
+    "/procurement/{procurement_id}/pay",
+    response_model=ProcurementOut,
+    responses={**NOT_FOUND, 409: {"model": ErrorOut},
+                422: {"model": ErrorOut, "description": "The supplier is inactive, or the price is above the milestone"}},
+    dependencies=[Depends(require_agents_running)],
+)
+def pay_procurement(
+    procurement_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    paypal: PayPalClient = Depends(get_paypal),
+):
+    """Pay the proposed supplier through one deterministic PayPal Payouts batch. Above the
+    automatic limit it answers 409 APPROVAL_REQUIRED until an admin approves. Paying twice
+    returns the first result; a PayPal refusal leaves a failed, retryable batch."""
+    procurement = db.get(Procurement, procurement_id)
+    if procurement is None:
+        raise _error(404, "PROCUREMENT_NOT_FOUND", "No such procurement")
+    if procurement.status == ProcurementStatus.paid:
+        return procurement_service.procurement_out(db, procurement)
+    if procurement.status not in (ProcurementStatus.proposed, ProcurementStatus.approved, ProcurementStatus.failed):
+        raise _error(409, "PROCUREMENT_NOT_PROPOSED", f"Procurement is {procurement.status.value}")
+    if not procurement.amount_cents:
+        raise _error(409, "PROCUREMENT_NOT_PROPOSED", "The procurement has no supplier proposal")
+    if procurement.amount_cents > settings.procurement_auto_approve_cents and not (
+        procurement.admin_approved or procurement.status == ProcurementStatus.approved
+    ):
+        raise _error(409, "APPROVAL_REQUIRED",
+                     f"{procurement.amount_cents} is above the {settings.procurement_auto_approve_cents} automatic limit")
+    supplier = db.get(Supplier, procurement.supplier_id)
+    if supplier is None or not supplier.active:
+        raise _error(422, "INVALID_SUPPLIER", "The supplier is unknown or inactive")
+    milestone = db.get(Milestone, procurement.milestone_id)
+    total = milestone.amount + milestone.match_amount
+    if procurement.amount_cents > total:
+        raise _error(422, "AMOUNT_ABOVE_MILESTONE", f"{procurement.amount_cents} is more than the milestone's {total}")
+
+    payout = db.get(Payout, procurement.payout_id) if procurement.payout_id else None
+    if payout is None:
+        payout = Payout(
+            sender_batch_id=f"procurement-{procurement.id}-{procurement.currency}",
+            currency=procurement.currency,
+            items=[
+                {
+                    "project_id": procurement.project_id,
+                    "milestone_id": procurement.milestone_id,
+                    "procurement_id": procurement.id,
+                    "amount_cents": procurement.amount_cents,
+                    "receiver": supplier.paypal_email,
+                    "sender_item_id": f"procurement-{procurement.id}",
+                    "status": "NEW",
+                }
+            ],
+        )
+        db.add(payout)
+        db.flush()
+        procurement.payout_id = payout.id
+        db.commit()  # keep the deterministic batch id before talking to PayPal
+
+    ensure_agents_running(db)
+    payouts.send(db, paypal, payout)
+    if payout.paypal_batch_id:
+        procurement_service.mark_paid(
+            db, procurement, batch_id=payout.paypal_batch_id, settings=settings
+        )
+        audit.write(
+            db,
+            actor="procurement-agent",
+            action="procurement_paid",
+            inputs={"procurement_id": procurement.id, "payout_id": payout.id,
+                    "amount_cents": procurement.amount_cents, "batch_id": payout.paypal_batch_id},
+            rule_result="paid",
+            reason=f"Paid {supplier.name} from the milestone",
+        )
+    else:
+        procurement.status = ProcurementStatus.failed
+        procurement.error = next((i.get("error") for i in payout.items or [] if i.get("error")), "PAYOUT_FAILED")
+        audit.write(
+            db,
+            actor="procurement-agent",
+            action="procurement_failed",
+            inputs={"procurement_id": procurement.id, "payout_id": payout.id},
+            rule_result=procurement.error,
+            reason="PayPal did not accept the supplier batch; retry the same procurement",
+        )
+    db.commit()
+    return procurement_service.procurement_out(db, procurement)
 
 
 @router.post("/audit", response_model=AuditOut, status_code=201, response_model_exclude_unset=True)

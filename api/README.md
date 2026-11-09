@@ -207,6 +207,25 @@ Instead of one-off top-ups, a donor can fund the agent monthly ([`app/subscripti
 - The Milestone Agent reads `GET /internal/milestones/evidence` (tranches with evidence and their documents), then calls `POST /internal/payout-requests` as above.
 - Admin: `GET /admin/projects/{id}/documents` for verification; `POST /admin/projects/{id}/owner-token` issues a new token (lost token, or seeded projects, which have none).
 
+### Managed procurement
+
+The other way to release a tranche ([`app/procurement.py`](app/procurement.py)): instead of paying the project and checking its receipts afterwards, the platform buys the goods and PayPal Payouts pays the supplier directly.
+
+1. **Owner asks:** `POST /projects/{id}/procurement-requests` with `X-Project-Token`, body `milestone_id`, `description`, `quantity`, `max_amount_cents`. The milestone must be `open` or `evidence_submitted`, the budget at most the tranche (amount + match), and the milestone must have no other active request. Status `requested`.
+2. **Procurement Agent reads:** `GET /internal/procurement/requests` (requested and proposed, with project, milestone, goal, tags and region). `GET /internal/procurement/suppliers?project_id=` lists active suppliers whose region fits and whose categories or tags match the project's. It returns id, name, categories, tags and region, never the PayPal email.
+3. **Agent proposes:** `POST /internal/procurement/{id}/propose` with `supplier_id`, `amount_cents`, `line_items`, `rationale`. The supplier must be active and eligible (422 otherwise), and the amount within the budget and the tranche. One proposal per request. Status `proposed`.
+4. **Pay:** `POST /internal/procurement/{id}/pay`.
+   - Up to `PROCUREMENT_AUTO_APPROVE_CENTS` (default 5,000 = 50 USD), it pays straight away.
+   - Above that limit it answers 409 `APPROVAL_REQUIRED` until an admin approves with `POST /admin/procurement/{id}/approve` `{"approve": true}`. `false` cancels the request. `GET /admin/procurement` lists all requests.
+   - It sends one batch, `procurement-<id>-<currency>`, to the supplier.
+   - Once PayPal accepts the batch, the purchase is `paid`, the milestone `released`, an `expense` ledger entry is booked, and a receipt document (the PayPal batch link, with supplier, amount, date, batch id and line items) is linked as `receipt_document_id`.
+   - Paying again returns the same result. A PayPal error leaves it `failed` with the error and can be retried, without a second batch.
+5. **One release path:** a milestone with a requested, proposed, approved or paid purchase can't also be released as a tranche. `POST /internal/payout-requests` and `POST /admin/milestones/{id}/review` answer 409 `PROCUREMENT_MANAGED`.
+6. **Payout webhooks** carry `procurement_id` on the payout item, so a webhook or admin refresh can finish a purchase too. The expense and receipt are still booked once.
+7. **Reconciliation:** expenses count as money paid out (`procurement_expense_cents`). Seeded backers aren't PayPal money, so paying the seeded purchase on a database without real PayPal donations shows `negative_platform_balance`. Real sandbox donations cover it.
+
+**Seed:** three suppliers in Nakuru and Kisumu, plus a 30 USD "40 copies of the Grade 3 reading set" request on Lanet Library's first milestone, with no matching on it, so the purchase is the whole tranche. For a real sandbox payout, run the seed with `SEED_SUPPLIER_EMAILS` set to three of your PayPal sandbox business accounts, comma-separated. They replace the placeholder addresses.
+
 ### Refunds
 
 `POST /admin/donations/{id}/refund` `{"amount_cents": 500, "reason": "..."}` (leave out `amount_cents` for everything left) refunds a PayPal-paid donation through PayPal. A `COMPLETED` refund is booked at once; a `PENDING` one when the `PAYMENT.CAPTURE.REFUNDED` webhook arrives. Each refund is booked once per PayPal refund id, so the webhook for an admin refund changes nothing. Agent gifts from a funded balance can't be refunded this way (409 `NOT_REFUNDABLE`).
