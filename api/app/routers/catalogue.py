@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import audit
+from app import audit, procurement as procurement_service
 from app.auth import check_owner_token, new_owner_token
 from app.config import Settings, get_settings
 from app.db import get_db
@@ -21,6 +21,8 @@ from app.models import (
     Milestone,
     MilestoneStatus,
     PayoutAccount,
+    Procurement,
+    ProcurementStatus,
     Project,
     ProjectDocument,
     ProjectStatus,
@@ -34,6 +36,8 @@ from app.schemas import (
     FundingPoint,
     MilestoneOut,
     ErrorOut,
+    ProcurementOut,
+    ProcurementRequestIn,
     ProjectApplicationIn,
     ProjectApplicationOut,
     ProjectDetail,
@@ -247,6 +251,60 @@ def add_document(
                 reason="Evidence submitted" if milestone is not None and body.kind in EVIDENCE else None)
     db.commit()
     return document_out(doc)
+
+
+@router.post(
+    "/projects/{project_id}/procurement-requests",
+    response_model=ProcurementOut,
+    status_code=201,
+    responses={401: {"model": ErrorOut}, 404: {"model": ErrorOut}, 409: {"model": ErrorOut},
+                422: {"model": ErrorOut, "description": "The request is more than the milestone's amount plus match"}},
+)
+def request_procurement(
+    project_id: int,
+    body: ProcurementRequestIn,
+    x_project_token: str | None = Header(None, description="The owner_token from the application"),
+    db: Session = Depends(get_db),
+):
+    """A project owner asks for something to be bought from a milestone's money. One active
+    request per milestone; the Procurement Agent chooses an eligible supplier and price."""
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(404, detail={"error": "PROJECT_NOT_FOUND", "message": "No such project"})
+    check_owner_token(x_project_token, project.owner_token_hash)
+    milestone = db.get(Milestone, body.milestone_id)
+    if milestone is None or milestone.project_id != project.id:
+        raise HTTPException(404, detail={"error": "MILESTONE_NOT_FOUND", "message": "No such milestone on this project"})
+    if milestone.status not in (MilestoneStatus.open, MilestoneStatus.evidence_submitted):
+        raise HTTPException(409, detail={"error": "MILESTONE_NOT_OPEN", "message": f"Milestone is {milestone.status.value}"})
+    total = milestone.amount + milestone.match_amount
+    if body.max_amount_cents > total:
+        raise HTTPException(422, detail={
+            "error": "AMOUNT_ABOVE_MILESTONE",
+            "message": f"The request is {body.max_amount_cents} cents; the milestone has {total}",
+        })
+    if procurement_service.active_procurement(db, milestone.id) is not None:
+        raise HTTPException(409, detail={
+            "error": "PROCUREMENT_EXISTS",
+            "message": "This milestone already has an active procurement request",
+        })
+    procurement = Procurement(
+        project_id=project.id,
+        milestone_id=milestone.id,
+        description=body.description,
+        quantity=body.quantity,
+        max_amount_cents=body.max_amount_cents,
+        currency=milestone.currency,
+        status=ProcurementStatus.requested,
+    )
+    db.add(procurement)
+    db.flush()
+    audit.write(db, actor="project-owner", action="procurement_requested",
+                inputs={"procurement_id": procurement.id, "project_id": project.id, "milestone_id": milestone.id,
+                        "max_amount_cents": body.max_amount_cents},
+                rule_result="requested", reason=body.description)
+    db.commit()
+    return procurement_service.procurement_out(db, procurement)
 
 
 def project_gifts(db: Session, project_ids: list[int]) -> list[tuple[int, int | None, int, datetime]]:

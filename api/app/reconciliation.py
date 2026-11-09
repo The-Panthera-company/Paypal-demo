@@ -107,7 +107,8 @@ def report(db: Session, now: datetime | None = None) -> dict:
           [p.id for p in payouts if not p.paypal_batch_id])
     paid_items = set(db.scalars(select(LedgerEntry.payout_item_id).where(LedgerEntry.type == LedgerType.payout)))
     issue("payout_success_not_booked", "error", "Payout batches with a successful item that has no payout ledger entry",
-          [p.id for p in payouts if any(i.get("status") == "SUCCESS" and i.get("payout_item_id") not in paid_items
+          [p.id for p in payouts if any(i.get("status") == "SUCCESS" and not i.get("procurement_id")
+                                         and i.get("payout_item_id") not in paid_items
                                          for i in p.items or [])])
     issue("payout_unclaimed", "warning", "Payouts sent to an email with no PayPal account yet (returned after 30 days)",
           [p.id for p in payouts if any(i.get("status") == "UNCLAIMED" for i in p.items or [])])
@@ -123,8 +124,11 @@ def report(db: Session, now: datetime | None = None) -> dict:
     issue("match_over_pool", "error", "Closed rounds that matched more than their pool", over_pool)
 
     received = sum(d.amount for d in paypal_paid)
-    refunds, fees, payouts_paid = _ledger(db, LedgerType.refund), _ledger(db, LedgerType.fee), _ledger(db, LedgerType.payout)
-    balance = received - refunds - fees - payouts_paid
+    refunds, fees = _ledger(db, LedgerType.refund), _ledger(db, LedgerType.fee)
+    payouts_paid = _ledger(db, LedgerType.payout)
+    expenses = _ledger(db, LedgerType.expense)
+    paid_out = payouts_paid + expenses
+    balance = received - refunds - fees - paid_out
     if balance < 0:
         issue("negative_platform_balance", "error", "Paid out more than was received", [balance])
 
@@ -133,7 +137,8 @@ def report(db: Session, now: datetime | None = None) -> dict:
         "received_via_paypal_cents": received,
         "refunded_cents": refunds,
         "paypal_fees_cents": fees,
-        "paid_out_cents": payouts_paid,
+        "paid_out_cents": paid_out,
+        "procurement_expense_cents": expenses,
         "platform_balance_cents": balance,
         "agent_budget_unspent_cents": sum(b for b in balances.values() if b > 0),
         "tranches_released_cents": tranches,

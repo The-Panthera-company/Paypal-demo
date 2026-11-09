@@ -28,6 +28,7 @@ The SQLite file is relative to where the API starts, so run this from the same f
 Against Render: set DATABASE_URL to the External Database URL for that one command.
 """
 
+import os
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -49,11 +50,14 @@ from app.models import (
     MilestoneStatus,
     Payout,
     PayoutStatus,
+    Procurement,
+    ProcurementStatus,
     Project,
     ProjectDocument,
     ProjectStatus,
     Round,
     RoundStatus,
+    Supplier,
     TargetType,
 )
 
@@ -398,6 +402,34 @@ MILESTONES = {
 EVIDENCE_URL = "https://files.example.com/seed/milestone-{id}-{kind}.jpg"
 SEED_PAYEE = "seed-payee@example.com"
 
+# Demo suppliers. For a real sandbox payout, set SEED_SUPPLIER_EMAILS to three of your PayPal
+# sandbox business accounts (Developer Dashboard -> Sandbox -> Accounts), comma-separated, in this
+# order; they replace the placeholder addresses below. Suppliers are matched by name, so changing
+# an email later updates the supplier instead of adding another.
+SUPPLIERS = [
+    {
+        "name": "Nakuru Books & Stationery",
+        "paypal_email": "orders@nakurubooks.co.ke",
+        "categories": ["Education"],
+        "tags": ["books", "literacy", "schools"],
+        "region": "Nakuru",
+    },
+    {
+        "name": "Kaptembwo School Furniture",
+        "paypal_email": "accounts@kaptembwodesks.co.ke",
+        "categories": ["Education"],
+        "tags": ["furniture", "schools"],
+        "region": "Nakuru",
+    },
+    {
+        "name": "Kisumu Science Supplies",
+        "paypal_email": "sales@kisumuscience.co.ke",
+        "categories": ["Education"],
+        "tags": ["stem", "girls", "books"],
+        "region": "Kisumu",
+    },
+]
+
 
 def seed_milestones(db: Session, project: Project, today: date) -> None:
     """Adds the project's missing milestones; an existing one only gets a due date if it has none."""
@@ -466,6 +498,40 @@ def main() -> None:
 
         for project in db.scalars(select(Project).where(Project.title.in_(list(MILESTONES)))):
             seed_milestones(db, project, now.date())
+
+        emails = [e.strip() for e in os.environ.get("SEED_SUPPLIER_EMAILS", "").split(",") if e.strip()]
+        for n, data in enumerate(SUPPLIERS):
+            data = {**data, "paypal_email": emails[n] if n < len(emails) else data["paypal_email"]}
+            supplier = db.scalar(select(Supplier).where(Supplier.name == data["name"]))
+            if supplier is None:
+                supplier = Supplier(**data)
+                db.add(supplier)
+            else:
+                supplier.paypal_email = data["paypal_email"]
+                supplier.categories = data["categories"]
+                supplier.tags = data["tags"]
+                supplier.region = data["region"]
+                supplier.active = True
+        db.flush()
+
+        lanet = db.scalar(select(Project).where(Project.title == "Lanet Library"))
+        books = (db.scalar(
+            select(Milestone).where(Milestone.project_id == lanet.id, Milestone.seq == 1)
+        ) if lanet else None)
+        if books is not None:
+            # The demo purchase is the whole tranche: 30 USD of books and no matching on it.
+            books.match_amount = 0
+            if db.scalar(select(Procurement).where(Procurement.milestone_id == books.id)) is None:
+                db.add(Procurement(
+                    project_id=lanet.id,
+                    milestone_id=books.id,
+                    description="40 copies of the Grade 3 reading set",
+                    quantity=40,
+                    max_amount_cents=3000,
+                    currency="USD",
+                    status=ProcurementStatus.requested,
+                    line_items=[],
+                ))
 
         round_ = db.scalar(select(Round).where(Round.status == RoundStatus.open))
         if round_ is None:

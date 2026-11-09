@@ -802,6 +802,162 @@
         }
       }
     },
+    "/projects/{project_id}/procurement-requests": {
+      "post": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "Request Procurement",
+        "description": "A project owner asks for something to be bought from a milestone's money. One active\nrequest per milestone; the Procurement Agent chooses an eligible supplier and price.",
+        "operationId": "request_procurement",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Project id.",
+              "example": 1
+            },
+            "description": "Project id.",
+            "example": 1
+          },
+          {
+            "name": "x-project-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "The owner_token from the application",
+              "nullable": true,
+              "example": "x-project-token"
+            },
+            "description": "The owner_token from the application",
+            "example": "x-project-token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcurementRequestIn"
+              },
+              "example": {
+                "description": "40 copies of the Grade 3 reading set",
+                "max_amount_cents": 3000,
+                "milestone_id": 7,
+                "quantity": 40
+              }
+            }
+          },
+          "description": "A project owner's request for something to be bought from one milestone."
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcurementOut"
+                },
+                "example": {
+                  "admin_approved": false,
+                  "amount_cents": 3000,
+                  "created_at": "2026-11-09T09:00:00Z",
+                  "currency": "USD",
+                  "description": "40 copies of the Grade 3 reading set",
+                  "id": 3,
+                  "line_items": [
+                    {
+                      "description": "40 reading sets",
+                      "quantity": 40,
+                      "unit_amount_cents": 75
+                    }
+                  ],
+                  "max_amount_cents": 3000,
+                  "milestone_id": 7,
+                  "payout_id": 8,
+                  "project_id": 1,
+                  "quantity": 40,
+                  "rationale": "Lowest eligible quote, delivery included",
+                  "receipt_document_id": 21,
+                  "status": "paid",
+                  "supplier_id": 1,
+                  "supplier_name": "Nakuru Books & Stationery",
+                  "updated_at": "2026-11-09T09:02:00Z"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "The request is more than the milestone's amount plus match",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/donations/orders": {
       "post": {
         "tags": [
@@ -3401,6 +3557,272 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/admin/procurement": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Procurement",
+        "description": "Managed purchase requests, newest first. Filter by status to see proposals awaiting an\nadmin decision. None of these responses includes a supplier's PayPal email.",
+        "operationId": "list_procurement",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ProcurementStatus"
+            },
+            "description": "Only items in this status.",
+            "example": "requested"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProcurementOut"
+                  },
+                  "description": "List of: A managed purchase request, its supplier proposal, PayPal batch and receipt. Supplier PayPal emails are never returned.",
+                  "example": [
+                    {
+                      "admin_approved": false,
+                      "amount_cents": 3000,
+                      "created_at": "2026-11-09T09:00:00Z",
+                      "currency": "USD",
+                      "description": "40 copies of the Grade 3 reading set",
+                      "id": 3,
+                      "line_items": [
+                        {
+                          "description": "40 reading sets",
+                          "quantity": 40,
+                          "unit_amount_cents": 75
+                        }
+                      ],
+                      "max_amount_cents": 3000,
+                      "milestone_id": 7,
+                      "payout_id": 8,
+                      "project_id": 1,
+                      "quantity": 40,
+                      "rationale": "Lowest eligible quote, delivery included",
+                      "receipt_document_id": 21,
+                      "status": "paid",
+                      "supplier_id": 1,
+                      "supplier_name": "Nakuru Books & Stationery",
+                      "updated_at": "2026-11-09T09:02:00Z"
+                    }
+                  ]
+                },
+                "example": [
+                  {
+                    "admin_approved": false,
+                    "amount_cents": 3000,
+                    "created_at": "2026-11-09T09:00:00Z",
+                    "currency": "USD",
+                    "description": "40 copies of the Grade 3 reading set",
+                    "id": 3,
+                    "line_items": [
+                      {
+                        "description": "40 reading sets",
+                        "quantity": 40,
+                        "unit_amount_cents": 75
+                      }
+                    ],
+                    "max_amount_cents": 3000,
+                    "milestone_id": 7,
+                    "payout_id": 8,
+                    "project_id": 1,
+                    "quantity": 40,
+                    "rationale": "Lowest eligible quote, delivery included",
+                    "receipt_document_id": 21,
+                    "status": "paid",
+                    "supplier_id": 1,
+                    "supplier_name": "Nakuru Books & Stationery",
+                    "updated_at": "2026-11-09T09:02:00Z"
+                  }
+                ]
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/procurement/{procurement_id}/approve": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Approve Procurement",
+        "description": "Approve a purchase above the automatic limit, or decline the proposal. Approval is needed\nonly when the proposed amount is over PROCUREMENT_AUTO_APPROVE_CENTS. A request with no body\napproves.",
+        "operationId": "approve_procurement",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "procurement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Managed procurement id.",
+              "example": 3
+            },
+            "description": "Managed procurement id.",
+            "example": 3
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ProcurementApproveIn"
+                  }
+                ],
+                "nullable": true,
+                "description": "An admin's decision on a managed purchase above the automatic approval limit.",
+                "example": {
+                  "approve": true,
+                  "note": "Three quotes checked by phone"
+                }
+              },
+              "example": {
+                "approve": true,
+                "note": "Three quotes checked by phone"
+              }
+            }
+          },
+          "description": "An admin's decision on a managed purchase above the automatic approval limit."
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcurementOut"
+                },
+                "example": {
+                  "admin_approved": false,
+                  "amount_cents": 3000,
+                  "created_at": "2026-11-09T09:00:00Z",
+                  "currency": "USD",
+                  "description": "40 copies of the Grade 3 reading set",
+                  "id": 3,
+                  "line_items": [
+                    {
+                      "description": "40 reading sets",
+                      "quantity": 40,
+                      "unit_amount_cents": 75
+                    }
+                  ],
+                  "max_amount_cents": 3000,
+                  "milestone_id": 7,
+                  "payout_id": 8,
+                  "project_id": 1,
+                  "quantity": 40,
+                  "rationale": "Lowest eligible quote, delivery included",
+                  "receipt_document_id": 21,
+                  "status": "paid",
+                  "supplier_id": 1,
+                  "supplier_name": "Nakuru Books & Stationery",
+                  "updated_at": "2026-11-09T09:02:00Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/admin/milestones/{milestone_id}/review": {
@@ -6024,6 +6446,511 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/internal/procurement/requests": {
+      "get": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Procurement Requests",
+        "description": "Purchase requests waiting for a supplier proposal, with the project, milestone, goal, tags\nand region the Procurement Agent uses to choose an eligible supplier.",
+        "operationId": "procurement_requests",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProcurementRequestOut"
+                  },
+                  "type": "array",
+                  "description": "List of: A purchase request waiting for a proposal, with the project and milestone details the agent needs.",
+                  "example": [
+                    {
+                      "admin_approved": false,
+                      "amount_cents": 3000,
+                      "created_at": "2026-11-09T09:00:00Z",
+                      "currency": "USD",
+                      "description": "40 copies of the Grade 3 reading set",
+                      "goal_cents": 600000,
+                      "id": 3,
+                      "line_items": [
+                        {
+                          "description": "40 reading sets",
+                          "quantity": 40,
+                          "unit_amount_cents": 75
+                        }
+                      ],
+                      "max_amount_cents": 3000,
+                      "milestone": {
+                        "amount_cents": 3000,
+                        "currency": "USD",
+                        "id": 7,
+                        "match_amount_cents": 0,
+                        "status": "open",
+                        "title": "Buy 40 books"
+                      },
+                      "milestone_id": 7,
+                      "milestone_title": "Buy 40 books",
+                      "payout_id": 8,
+                      "project": {
+                        "goal_cents": 600000,
+                        "id": 1,
+                        "region": "Nakuru",
+                        "tags": [
+                          "books",
+                          "literacy"
+                        ],
+                        "title": "Lanet Library"
+                      },
+                      "project_id": 1,
+                      "project_title": "Lanet Library",
+                      "quantity": 40,
+                      "rationale": "Lowest eligible quote, delivery included",
+                      "receipt_document_id": 21,
+                      "region": "Nakuru",
+                      "status": "paid",
+                      "supplier_id": 1,
+                      "supplier_name": "Nakuru Books & Stationery",
+                      "tags": [
+                        "books",
+                        "literacy"
+                      ],
+                      "updated_at": "2026-11-09T09:02:00Z"
+                    }
+                  ]
+                },
+                "example": [
+                  {
+                    "admin_approved": false,
+                    "amount_cents": 3000,
+                    "created_at": "2026-11-09T09:00:00Z",
+                    "currency": "USD",
+                    "description": "40 copies of the Grade 3 reading set",
+                    "goal_cents": 600000,
+                    "id": 3,
+                    "line_items": [
+                      {
+                        "description": "40 reading sets",
+                        "quantity": 40,
+                        "unit_amount_cents": 75
+                      }
+                    ],
+                    "max_amount_cents": 3000,
+                    "milestone": {
+                      "amount_cents": 3000,
+                      "currency": "USD",
+                      "id": 7,
+                      "match_amount_cents": 0,
+                      "status": "open",
+                      "title": "Buy 40 books"
+                    },
+                    "milestone_id": 7,
+                    "milestone_title": "Buy 40 books",
+                    "payout_id": 8,
+                    "project": {
+                      "goal_cents": 600000,
+                      "id": 1,
+                      "region": "Nakuru",
+                      "tags": [
+                        "books",
+                        "literacy"
+                      ],
+                      "title": "Lanet Library"
+                    },
+                    "project_id": 1,
+                    "project_title": "Lanet Library",
+                    "quantity": 40,
+                    "rationale": "Lowest eligible quote, delivery included",
+                    "receipt_document_id": 21,
+                    "region": "Nakuru",
+                    "status": "paid",
+                    "supplier_id": 1,
+                    "supplier_name": "Nakuru Books & Stationery",
+                    "tags": [
+                      "books",
+                      "literacy"
+                    ],
+                    "updated_at": "2026-11-09T09:02:00Z"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/internal/procurement/suppliers": {
+      "get": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Procurement Suppliers",
+        "description": "Active suppliers whose categories or tags and service region match the project. Only the id,\nname, categories, tags and region are returned: the agent never needs the PayPal email.",
+        "operationId": "procurement_suppliers",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Project id.",
+              "example": 1
+            },
+            "description": "Project id.",
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SupplierOut"
+                  },
+                  "description": "List of: An eligible supplier: id, name, categories, tags and region. No PayPal email.",
+                  "example": [
+                    {
+                      "categories": [
+                        "Education"
+                      ],
+                      "id": 1,
+                      "name": "Nakuru Books & Stationery",
+                      "region": "Nakuru",
+                      "tags": [
+                        "books",
+                        "literacy",
+                        "schools"
+                      ]
+                    }
+                  ]
+                },
+                "example": [
+                  {
+                    "categories": [
+                      "Education"
+                    ],
+                    "id": 1,
+                    "name": "Nakuru Books & Stationery",
+                    "region": "Nakuru",
+                    "tags": [
+                      "books",
+                      "literacy",
+                      "schools"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                },
+                "example": {
+                  "detail": [
+                    {
+                      "loc": [
+                        "body",
+                        "amount_cents"
+                      ],
+                      "msg": "Field required",
+                      "type": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/procurement/{procurement_id}/propose": {
+      "post": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Propose Procurement",
+        "description": "Choose an active, eligible supplier and a price within the request and the milestone.\nA procurement gets one proposal; asking twice is a conflict.",
+        "operationId": "propose_procurement",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "procurement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Managed procurement id.",
+              "example": 3
+            },
+            "description": "Managed procurement id.",
+            "example": 3
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcurementProposeIn"
+              },
+              "example": {
+                "amount_cents": 3000,
+                "line_items": [
+                  {
+                    "description": "40 reading sets",
+                    "quantity": 40,
+                    "unit_amount_cents": 75
+                  }
+                ],
+                "rationale": "Lowest eligible quote, delivery included",
+                "supplier_id": 1
+              }
+            }
+          },
+          "description": "The Procurement Agent's chosen supplier, price, quoted lines and reason."
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcurementOut"
+                },
+                "example": {
+                  "admin_approved": false,
+                  "amount_cents": 3000,
+                  "created_at": "2026-11-09T09:00:00Z",
+                  "currency": "USD",
+                  "description": "40 copies of the Grade 3 reading set",
+                  "id": 3,
+                  "line_items": [
+                    {
+                      "description": "40 reading sets",
+                      "quantity": 40,
+                      "unit_amount_cents": 75
+                    }
+                  ],
+                  "max_amount_cents": 3000,
+                  "milestone_id": 7,
+                  "payout_id": 8,
+                  "project_id": 1,
+                  "quantity": 40,
+                  "rationale": "Lowest eligible quote, delivery included",
+                  "receipt_document_id": 21,
+                  "status": "paid",
+                  "supplier_id": 1,
+                  "supplier_name": "Nakuru Books & Stationery",
+                  "updated_at": "2026-11-09T09:02:00Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Supplier is not eligible, or the price is above the request or milestone",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/procurement/{procurement_id}/pay": {
+      "post": {
+        "tags": [
+          "internal (agents)"
+        ],
+        "summary": "Pay Procurement",
+        "description": "Pay the proposed supplier through one deterministic PayPal Payouts batch. Above the\nautomatic limit it answers 409 APPROVAL_REQUIRED until an admin approves. Paying twice\nreturns the first result; a PayPal refusal leaves a failed, retryable batch.",
+        "operationId": "pay_procurement",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "procurement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Managed procurement id.",
+              "example": 3
+            },
+            "description": "Managed procurement id.",
+            "example": 3
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcurementOut"
+                },
+                "example": {
+                  "admin_approved": false,
+                  "amount_cents": 3000,
+                  "created_at": "2026-11-09T09:00:00Z",
+                  "currency": "USD",
+                  "description": "40 copies of the Grade 3 reading set",
+                  "id": 3,
+                  "line_items": [
+                    {
+                      "description": "40 reading sets",
+                      "quantity": 40,
+                      "unit_amount_cents": 75
+                    }
+                  ],
+                  "max_amount_cents": 3000,
+                  "milestone_id": 7,
+                  "payout_id": 8,
+                  "project_id": 1,
+                  "quantity": 40,
+                  "rationale": "Lowest eligible quote, delivery included",
+                  "receipt_document_id": 21,
+                  "status": "paid",
+                  "supplier_id": 1,
+                  "supplier_name": "Nakuru Books & Stationery",
+                  "updated_at": "2026-11-09T09:02:00Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "The supplier is inactive, or the price is above the milestone",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorOut"
+                },
+                "example": {
+                  "detail": {
+                    "error": "NOT_IMPLEMENTED",
+                    "message": "Planned: matching engine"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/internal/audit": {
@@ -9730,6 +10657,12 @@
             "nullable": true,
             "example": 7
           },
+          "procurement_id": {
+            "type": "integer",
+            "description": "Managed procurement this item pays, when it is a purchase",
+            "nullable": true,
+            "example": 1
+          },
           "amount_cents": {
             "type": "integer",
             "description": "The tranche plus its match, in cents.",
@@ -9737,9 +10670,15 @@
           },
           "receiver": {
             "type": "string",
-            "description": "Null until the project has a payout account",
+            "description": "Null until the project has a payout account or a supplier proposal",
             "nullable": true,
             "example": "receiver"
+          },
+          "sender_item_id": {
+            "type": "string",
+            "description": "Our deterministic id for this item, e.g. procurement-7",
+            "nullable": true,
+            "example": "sender item id"
           },
           "status": {
             "type": "string",
@@ -9772,8 +10711,10 @@
         "example": {
           "project_id": 1,
           "milestone_id": 7,
+          "procurement_id": 1,
           "amount_cents": 2500,
           "receiver": "receiver",
+          "sender_item_id": "sender item id",
           "status": "status",
           "payout_item_id": "payout item id",
           "error": "error"
@@ -9973,6 +10914,685 @@
         },
         "title": "PendingApproval",
         "description": "An agent gift above the donor's approval threshold, waiting for their yes."
+      },
+      "ProcurementApproveIn": {
+        "properties": {
+          "approve": {
+            "type": "boolean",
+            "description": "True to approve payment, false to decline the proposal",
+            "default": true,
+            "example": true
+          },
+          "note": {
+            "type": "string",
+            "description": "Optional admin note, kept in the audit log",
+            "nullable": true,
+            "example": "Three quotes checked by phone"
+          }
+        },
+        "type": "object",
+        "example": {
+          "approve": true,
+          "note": "Three quotes checked by phone"
+        },
+        "title": "ProcurementApproveIn",
+        "description": "An admin's decision on a managed purchase above the automatic approval limit."
+      },
+      "ProcurementMilestoneOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Milestone id",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "description": "Milestone title",
+            "example": "Lanet Library"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "description": "Milestone amount, in cents",
+            "example": 2500
+          },
+          "match_amount_cents": {
+            "type": "integer",
+            "description": "Matching money added to the milestone, in cents",
+            "example": 2500
+          },
+          "currency": {
+            "type": "string",
+            "description": "Milestone currency",
+            "example": "USD"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MilestoneStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "amount_cents",
+          "match_amount_cents",
+          "currency",
+          "status"
+        ],
+        "title": "ProcurementMilestoneOut",
+        "description": "The milestone a purchase is for, with its amount and matching.",
+        "example": {
+          "id": 1,
+          "title": "Lanet Library",
+          "amount_cents": 2500,
+          "match_amount_cents": 2500,
+          "currency": "USD",
+          "status": "open"
+        }
+      },
+      "ProcurementOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Procurement id",
+            "example": 3
+          },
+          "project_id": {
+            "type": "integer",
+            "description": "Project that requested the purchase",
+            "example": 1
+          },
+          "milestone_id": {
+            "type": "integer",
+            "description": "Milestone the purchase belongs to",
+            "example": 7
+          },
+          "description": {
+            "type": "string",
+            "description": "What the project needs bought",
+            "example": "40 copies of the Grade 3 reading set"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "How many units the request covers",
+            "example": 40
+          },
+          "max_amount_cents": {
+            "type": "integer",
+            "description": "Most the supplier may be paid, in cents",
+            "example": 3000
+          },
+          "currency": {
+            "type": "string",
+            "description": "Currency of the request",
+            "example": "USD"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProcurementStatus"
+          },
+          "supplier_id": {
+            "type": "integer",
+            "description": "Supplier chosen by the Procurement Agent",
+            "nullable": true,
+            "example": 1
+          },
+          "supplier_name": {
+            "type": "string",
+            "description": "Supplier's name, joined for display",
+            "nullable": true,
+            "example": "Nakuru Books & Stationery"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "description": "Proposed supplier price, in cents",
+            "nullable": true,
+            "example": 3000
+          },
+          "line_items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object",
+              "description": "One item of: The supplier's quoted lines",
+              "example": {
+                "description": "40 reading sets",
+                "quantity": 40,
+                "unit_amount_cents": 75
+              }
+            },
+            "type": "array",
+            "description": "The supplier's quoted lines",
+            "example": [
+              {
+                "description": "40 reading sets",
+                "quantity": 40,
+                "unit_amount_cents": 75
+              }
+            ]
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Why the agent chose this supplier and price",
+            "nullable": true,
+            "example": "Lowest eligible quote, delivery included"
+          },
+          "admin_approved": {
+            "type": "boolean",
+            "description": "Whether an admin approved a purchase above the automatic limit",
+            "example": false
+          },
+          "approved_by": {
+            "type": "string",
+            "description": "Who approved it",
+            "nullable": true,
+            "example": "approved by"
+          },
+          "approved_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it was approved",
+            "nullable": true,
+            "example": "2026-11-03T09:00:00Z"
+          },
+          "payout_id": {
+            "type": "integer",
+            "description": "PayPal Payouts batch that pays the supplier",
+            "nullable": true,
+            "example": 8
+          },
+          "receipt_document_id": {
+            "type": "integer",
+            "description": "Receipt document created from the PayPal batch",
+            "nullable": true,
+            "example": 21
+          },
+          "error": {
+            "type": "string",
+            "description": "Why the last payment attempt failed, when it did",
+            "nullable": true,
+            "example": "error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the request was created (UTC)",
+            "example": "2026-11-09T09:00:00Z"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the request last changed (UTC)",
+            "example": "2026-11-09T09:02:00Z"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "milestone_id",
+          "description",
+          "quantity",
+          "max_amount_cents",
+          "currency",
+          "status",
+          "admin_approved",
+          "created_at",
+          "updated_at"
+        ],
+        "example": {
+          "admin_approved": false,
+          "amount_cents": 3000,
+          "created_at": "2026-11-09T09:00:00Z",
+          "currency": "USD",
+          "description": "40 copies of the Grade 3 reading set",
+          "id": 3,
+          "line_items": [
+            {
+              "description": "40 reading sets",
+              "quantity": 40,
+              "unit_amount_cents": 75
+            }
+          ],
+          "max_amount_cents": 3000,
+          "milestone_id": 7,
+          "payout_id": 8,
+          "project_id": 1,
+          "quantity": 40,
+          "rationale": "Lowest eligible quote, delivery included",
+          "receipt_document_id": 21,
+          "status": "paid",
+          "supplier_id": 1,
+          "supplier_name": "Nakuru Books & Stationery",
+          "updated_at": "2026-11-09T09:02:00Z"
+        },
+        "title": "ProcurementOut",
+        "description": "A managed purchase request, its supplier proposal, PayPal batch and receipt. Supplier PayPal emails are never returned."
+      },
+      "ProcurementProjectOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Project id",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "description": "Project title",
+            "example": "Lanet Library"
+          },
+          "goal_cents": {
+            "type": "integer",
+            "description": "Project funding goal, in cents",
+            "example": 600000
+          },
+          "tags": {
+            "items": {
+              "type": "string",
+              "description": "One item of: Project tags the supplier can match",
+              "example": "books"
+            },
+            "type": "array",
+            "description": "Project tags the supplier can match",
+            "example": [
+              "books",
+              "literacy"
+            ]
+          },
+          "region": {
+            "type": "string",
+            "description": "Project region, null when hidden",
+            "nullable": true,
+            "example": "Nakuru"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "goal_cents",
+          "tags",
+          "region"
+        ],
+        "title": "ProcurementProjectOut",
+        "description": "The project requesting a purchase, with the goal, tags and region used to match suppliers.",
+        "example": {
+          "id": 1,
+          "title": "Lanet Library",
+          "goal_cents": 600000,
+          "tags": [
+            "books",
+            "literacy"
+          ],
+          "region": "Nakuru"
+        }
+      },
+      "ProcurementProposeIn": {
+        "properties": {
+          "supplier_id": {
+            "type": "integer",
+            "description": "Supplier chosen from GET /internal/procurement/suppliers",
+            "example": 1
+          },
+          "amount_cents": {
+            "type": "integer",
+            "description": "What the supplier will be paid, in cents",
+            "minimum": 1.0,
+            "example": 3000
+          },
+          "line_items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object",
+              "description": "One item of: The quoted lines; kept on the receipt",
+              "example": {
+                "description": "40 reading sets",
+                "quantity": 40,
+                "unit_amount_cents": 75
+              }
+            },
+            "type": "array",
+            "description": "The quoted lines; kept on the receipt",
+            "example": [
+              {
+                "description": "40 reading sets",
+                "quantity": 40,
+                "unit_amount_cents": 75
+              }
+            ]
+          },
+          "rationale": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "description": "Why this supplier and price were chosen",
+            "example": "Lowest eligible quote, delivery included"
+          }
+        },
+        "type": "object",
+        "required": [
+          "supplier_id",
+          "amount_cents",
+          "rationale"
+        ],
+        "example": {
+          "amount_cents": 3000,
+          "line_items": [
+            {
+              "description": "40 reading sets",
+              "quantity": 40,
+              "unit_amount_cents": 75
+            }
+          ],
+          "rationale": "Lowest eligible quote, delivery included",
+          "supplier_id": 1
+        },
+        "title": "ProcurementProposeIn",
+        "description": "The Procurement Agent's chosen supplier, price, quoted lines and reason."
+      },
+      "ProcurementRequestIn": {
+        "properties": {
+          "milestone_id": {
+            "type": "integer",
+            "description": "Milestone this purchase is for",
+            "example": 7
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "description": "What the project needs bought",
+            "example": "40 copies of the Grade 3 reading set"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "How many units the request covers",
+            "minimum": 1.0,
+            "example": 40
+          },
+          "max_amount_cents": {
+            "type": "integer",
+            "description": "Most the supplier may be paid, in cents",
+            "minimum": 1.0,
+            "example": 3000
+          }
+        },
+        "type": "object",
+        "required": [
+          "milestone_id",
+          "description",
+          "quantity",
+          "max_amount_cents"
+        ],
+        "example": {
+          "description": "40 copies of the Grade 3 reading set",
+          "max_amount_cents": 3000,
+          "milestone_id": 7,
+          "quantity": 40
+        },
+        "title": "ProcurementRequestIn",
+        "description": "A project owner's request for something to be bought from one milestone."
+      },
+      "ProcurementRequestOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Procurement id",
+            "example": 3
+          },
+          "project_id": {
+            "type": "integer",
+            "description": "Project that requested the purchase",
+            "example": 1
+          },
+          "milestone_id": {
+            "type": "integer",
+            "description": "Milestone the purchase belongs to",
+            "example": 7
+          },
+          "description": {
+            "type": "string",
+            "description": "What the project needs bought",
+            "example": "40 copies of the Grade 3 reading set"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "How many units the request covers",
+            "example": 40
+          },
+          "max_amount_cents": {
+            "type": "integer",
+            "description": "Most the supplier may be paid, in cents",
+            "example": 3000
+          },
+          "currency": {
+            "type": "string",
+            "description": "Currency of the request",
+            "example": "USD"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProcurementStatus"
+          },
+          "supplier_id": {
+            "type": "integer",
+            "description": "Supplier chosen by the Procurement Agent",
+            "nullable": true,
+            "example": 1
+          },
+          "supplier_name": {
+            "type": "string",
+            "description": "Supplier's name, joined for display",
+            "nullable": true,
+            "example": "Nakuru Books & Stationery"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "description": "Proposed supplier price, in cents",
+            "nullable": true,
+            "example": 3000
+          },
+          "line_items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object",
+              "description": "One item of: The supplier's quoted lines",
+              "example": {
+                "description": "40 reading sets",
+                "quantity": 40,
+                "unit_amount_cents": 75
+              }
+            },
+            "type": "array",
+            "description": "The supplier's quoted lines",
+            "example": [
+              {
+                "description": "40 reading sets",
+                "quantity": 40,
+                "unit_amount_cents": 75
+              }
+            ]
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Why the agent chose this supplier and price",
+            "nullable": true,
+            "example": "Lowest eligible quote, delivery included"
+          },
+          "admin_approved": {
+            "type": "boolean",
+            "description": "Whether an admin approved a purchase above the automatic limit",
+            "example": false
+          },
+          "approved_by": {
+            "type": "string",
+            "description": "Who approved it",
+            "nullable": true,
+            "example": "approved by"
+          },
+          "approved_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it was approved",
+            "nullable": true,
+            "example": "2026-11-03T09:00:00Z"
+          },
+          "payout_id": {
+            "type": "integer",
+            "description": "PayPal Payouts batch that pays the supplier",
+            "nullable": true,
+            "example": 8
+          },
+          "receipt_document_id": {
+            "type": "integer",
+            "description": "Receipt document created from the PayPal batch",
+            "nullable": true,
+            "example": 21
+          },
+          "error": {
+            "type": "string",
+            "description": "Why the last payment attempt failed, when it did",
+            "nullable": true,
+            "example": "error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the request was created (UTC)",
+            "example": "2026-11-09T09:00:00Z"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the request last changed (UTC)",
+            "example": "2026-11-09T09:02:00Z"
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProcurementProjectOut"
+          },
+          "milestone": {
+            "$ref": "#/components/schemas/ProcurementMilestoneOut"
+          },
+          "project_title": {
+            "type": "string",
+            "description": "Project title, for a compact agent prompt",
+            "example": "Lanet Library"
+          },
+          "milestone_title": {
+            "type": "string",
+            "description": "Milestone title, for a compact agent prompt",
+            "example": "Buy 40 books"
+          },
+          "goal_cents": {
+            "type": "integer",
+            "description": "Project funding goal, in cents",
+            "example": 600000
+          },
+          "tags": {
+            "items": {
+              "type": "string",
+              "description": "One item of: Project tags, for supplier matching",
+              "example": "books"
+            },
+            "type": "array",
+            "description": "Project tags, for supplier matching",
+            "example": [
+              "books",
+              "literacy"
+            ]
+          },
+          "region": {
+            "type": "string",
+            "description": "Project region, for supplier matching",
+            "nullable": true,
+            "example": "Nakuru"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "milestone_id",
+          "description",
+          "quantity",
+          "max_amount_cents",
+          "currency",
+          "status",
+          "admin_approved",
+          "created_at",
+          "updated_at",
+          "project",
+          "milestone",
+          "project_title",
+          "milestone_title",
+          "goal_cents",
+          "tags",
+          "region"
+        ],
+        "example": {
+          "admin_approved": false,
+          "amount_cents": 3000,
+          "created_at": "2026-11-09T09:00:00Z",
+          "currency": "USD",
+          "description": "40 copies of the Grade 3 reading set",
+          "goal_cents": 600000,
+          "id": 3,
+          "line_items": [
+            {
+              "description": "40 reading sets",
+              "quantity": 40,
+              "unit_amount_cents": 75
+            }
+          ],
+          "max_amount_cents": 3000,
+          "milestone": {
+            "amount_cents": 3000,
+            "currency": "USD",
+            "id": 7,
+            "match_amount_cents": 0,
+            "status": "open",
+            "title": "Buy 40 books"
+          },
+          "milestone_id": 7,
+          "milestone_title": "Buy 40 books",
+          "payout_id": 8,
+          "project": {
+            "goal_cents": 600000,
+            "id": 1,
+            "region": "Nakuru",
+            "tags": [
+              "books",
+              "literacy"
+            ],
+            "title": "Lanet Library"
+          },
+          "project_id": 1,
+          "project_title": "Lanet Library",
+          "quantity": 40,
+          "rationale": "Lowest eligible quote, delivery included",
+          "receipt_document_id": 21,
+          "region": "Nakuru",
+          "status": "paid",
+          "supplier_id": 1,
+          "supplier_name": "Nakuru Books & Stationery",
+          "tags": [
+            "books",
+            "literacy"
+          ],
+          "updated_at": "2026-11-09T09:02:00Z"
+        },
+        "title": "ProcurementRequestOut",
+        "description": "A purchase request waiting for a proposal, with the project and milestone details the agent needs."
+      },
+      "ProcurementStatus": {
+        "type": "string",
+        "enum": [
+          "requested",
+          "proposed",
+          "approved",
+          "paid",
+          "failed",
+          "cancelled"
+        ],
+        "title": "ProcurementStatus",
+        "description": "requested: waiting for a supplier proposal; proposed: waiting to pay or for admin approval; approved: over the automatic limit and approved; paid: PayPal accepted the supplier batch; failed: PayPal refused it and it can be retried; cancelled: withdrawn.",
+        "example": "requested"
       },
       "ProjectApplicationIn": {
         "properties": {
@@ -11443,6 +13063,75 @@
         },
         "title": "SubscriptionOut",
         "description": "A donor's monthly PayPal subscription for the Giving Agent's budget."
+      },
+      "SupplierOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Supplier id",
+            "example": 1
+          },
+          "name": {
+            "type": "string",
+            "description": "Supplier business name",
+            "example": "Nakuru Books & Stationery"
+          },
+          "categories": {
+            "items": {
+              "type": "string",
+              "description": "One item of: Category names or ids the supplier serves",
+              "example": "Education"
+            },
+            "type": "array",
+            "description": "Category names or ids the supplier serves",
+            "example": [
+              "Education"
+            ]
+          },
+          "tags": {
+            "items": {
+              "type": "string",
+              "description": "One item of: Project tags the supplier can supply",
+              "example": "books"
+            },
+            "type": "array",
+            "description": "Project tags the supplier can supply",
+            "example": [
+              "books",
+              "literacy",
+              "schools"
+            ]
+          },
+          "region": {
+            "type": "string",
+            "description": "Supplier's service area",
+            "nullable": true,
+            "example": "Nakuru"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "categories",
+          "tags",
+          "region"
+        ],
+        "example": {
+          "categories": [
+            "Education"
+          ],
+          "id": 1,
+          "name": "Nakuru Books & Stationery",
+          "region": "Nakuru",
+          "tags": [
+            "books",
+            "literacy",
+            "schools"
+          ]
+        },
+        "title": "SupplierOut",
+        "description": "An eligible supplier: id, name, categories, tags and region. No PayPal email."
       },
       "SweepOut": {
         "properties": {

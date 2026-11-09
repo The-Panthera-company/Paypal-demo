@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # Milestone tranches (including their match) up to this many cents release without an admin.
     milestone_auto_release_cents: int = 50_000
 
+    # Managed purchases up to this many cents pay the supplier without an admin. Above it the
+    # procurement waits in status `proposed` for an admin to approve it.
+    procurement_auto_approve_cents: int = 5_000
+
     # The website, for PayPal's return and cancel links after a donor approves a subscription.
     web_url: str = "https://giving-web.onrender.com"
 

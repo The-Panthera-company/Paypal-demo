@@ -1,6 +1,6 @@
 """The fourteen tables from the System Design data model, plus webhook_events, payout_accounts,
-category_gifts, category_allocations, paypal_plans, agent_subscriptions, the audit hash-chain
-state and system flags.
+category_gifts, category_allocations, paypal_plans, agent_subscriptions, suppliers,
+procurements, the audit hash-chain state and system flags.
 
 Amounts are integers in minor units. List fields (tags, categories) are JSON so the
 same models run on Postgres and on SQLite in tests.
@@ -40,6 +40,7 @@ class LedgerType(str, enum.Enum):
     match = "match"
     tranche = "tranche"
     payout = "payout"
+    expense = "expense"  # managed procurement paid directly to a supplier
     fee = "fee"
 
 
@@ -78,6 +79,15 @@ class PayoutStatus(str, enum.Enum):
     processing = "processing"
     success = "success"
     denied = "denied"
+
+
+class ProcurementStatus(str, enum.Enum):
+    requested = "requested"  # the project owner needs something bought
+    proposed = "proposed"  # the Procurement Agent has chosen a supplier and price
+    approved = "approved"  # an admin approved a purchase above the automatic limit
+    paid = "paid"  # PayPal accepted the supplier batch
+    failed = "failed"  # PayPal refused it; the same batch can be retried
+    cancelled = "cancelled"  # the owner or admin withdrew the request
 
 
 class CaseStatus(str, enum.Enum):
@@ -133,6 +143,8 @@ class LedgerEntry(Base):
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"))
     donation_id: Mapped[int | None] = mapped_column(ForeignKey("donations.id"))
     payout_item_id: Mapped[str | None] = mapped_column(String(64))
+    # Managed procurement: the expense is booked once per purchase, whichever event gets there first.
+    procurement_id: Mapped[int | None] = mapped_column(ForeignKey("procurements.id"))
     # Refunds: PayPal's refund id, so an admin refund and its webhook are booked once.
     paypal_refund_id: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -277,6 +289,56 @@ class Payout(Base):
     items: Mapped[list] = mapped_column(JSON, default=list)
     paypal_batch_id: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Supplier(Base):
+    """A business the Procurement Agent may buy from. Categories are category names or ids,
+    tags are neutral project tags, and region is the supplier's service area."""
+
+    __tablename__ = "suppliers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(160))
+    paypal_email: Mapped[str] = mapped_column(String(254))
+    categories: Mapped[list] = mapped_column(JSON, default=list)
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    region: Mapped[str | None] = mapped_column(String(60))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Procurement(Base):
+    """A project owner's purchase request and the supplier proposal that pays it.
+
+    The Payout item carries procurement_id too, so the ordinary payout webhooks can finish a
+    payment whose HTTP response was lost. A purchase is one release path for its milestone:
+    the tranche route refuses a milestone that has an active or paid procurement.
+    """
+
+    __tablename__ = "procurements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    milestone_id: Mapped[int] = mapped_column(ForeignKey("milestones.id"))
+    description: Mapped[str] = mapped_column(Text)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    max_amount_cents: Mapped[int] = mapped_column(BigInteger)
+    currency: Mapped[str] = mapped_column(String(3))
+    status: Mapped[ProcurementStatus] = mapped_column(
+        Enum(ProcurementStatus, native_enum=False), default=ProcurementStatus.requested
+    )
+    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"))
+    amount_cents: Mapped[int | None] = mapped_column(BigInteger)
+    line_items: Mapped[list] = mapped_column(JSON, default=list)
+    rationale: Mapped[str | None] = mapped_column(Text)
+    admin_approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    approved_by: Mapped[str | None] = mapped_column(String(120))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payout_id: Mapped[int | None] = mapped_column(ForeignKey("payouts.id"))
+    receipt_document_id: Mapped[int | None] = mapped_column(ForeignKey("project_documents.id"))
+    error: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
 
 class WatchdogCase(Base):

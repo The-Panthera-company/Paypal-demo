@@ -150,6 +150,8 @@ def test_spec_is_fully_documented():
 
 def test_request_examples_are_valid():
     """Each request body's example in the spec is accepted by the model the route really uses."""
+    from typing import get_args
+
     from fastapi.routing import APIRoute
 
     schemas = app.openapi()["components"]["schemas"]
@@ -157,7 +159,9 @@ def test_request_examples_are_valid():
     for route in app.routes:
         if isinstance(route, APIRoute) and route.body_field is not None:
             model = route.body_field.type_
-            example = schemas.get(model.__name__, {}).get("example")
+            # An optional body (`Model | None`) is checked as its model.
+            model = next((a for a in get_args(model) if a is not type(None)), model)
+            example = schemas.get(getattr(model, "__name__", ""), {}).get("example")
             if hasattr(model, "model_validate") and example is not None:
                 model.model_validate(example)
                 checked += 1
