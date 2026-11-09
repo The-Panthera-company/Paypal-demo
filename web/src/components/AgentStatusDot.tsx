@@ -30,7 +30,7 @@ export function AgentStatusDot() {
   }, [pathname]);
   if (paused === null) return null;
   return (
-    <Link href="/agents" className="inline-flex items-center gap-2 text-sm text-white hover:text-accent" title={paused ? "Agents paused: no money can move" : "Agents are running"}>
+    <Link href="/agents" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 text-sm text-white hover:text-accent" title={paused ? "Agents paused: no money can move" : "Agents are running"}>
       <span className={`size-2.5 ${paused ? "bg-cat-health ring-2 ring-accent" : "bg-cobalt-green"}`} aria-hidden />
       <span className={paused ? "font-bold" : "sr-only"}>{paused ? "Agents paused" : "Agents are running"}</span>
     </Link>

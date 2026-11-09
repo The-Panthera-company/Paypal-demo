@@ -211,7 +211,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   return (
     <>
-      <PageTitle title="Project details" crumb={p.title} />
+      <PageTitle title="Project details" crumb={p.title} main={false} />
       <section className="bg-surface-alt pb-20 pt-12 lg:pb-28 lg:pt-[100px]">
         <div className="container-k grid gap-10 lg:grid-cols-2">
           <div className="aspect-[4/3]">

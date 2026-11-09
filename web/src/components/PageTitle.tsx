@@ -4,11 +4,12 @@ import { GlobeBackdrop, type GlobePin } from "./GlobeBackdrop";
 // Krowd page-title band: dark band below the header, title left, breadcrumb right, mint corner bottom-left.
 // With `globe`, a dimmed turning globe rises from the bottom of the band (F1-intro style), with
 // project pins to hover; it fills the band's empty middle on pages with little above the fold.
-export function PageTitle({ title, crumb, globe }: { title: string; crumb: string; globe?: GlobePin[] }) {
+export function PageTitle({ title, crumb, globe, main = true }: { title: string; crumb: string; globe?: GlobePin[]; main?: boolean }) {
+  const H = main ? "h1" : "p";
   return (
     <section className="relative mt-20 overflow-hidden bg-ink bg-[linear-gradient(135deg,#0b2e33_0%,#005a73_60%,#007190_100%)] lg:mt-[110px]">
       <div className="container-k relative z-10 flex pointer-events-none [&_a]:pointer-events-auto min-h-[200px] flex-wrap items-center justify-between gap-4 py-10 lg:min-h-[330px]">
-        <h1 className="text-4xl text-white lg:text-6xl">{title}</h1>
+        <H className="font-display text-4xl text-white lg:text-6xl">{title}</H>
         <nav aria-label="Breadcrumb" className="text-lg font-medium text-white">
           <Link href="/" className="hover:text-accent">
             Home

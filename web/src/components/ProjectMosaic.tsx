@@ -1,4 +1,5 @@
 import type { Project } from "@/lib/types";
+import { ShowMore } from "./ShowMore";
 import { MosaicCard } from "./MosaicCard";
 import { ProjectCard } from "./ProjectCard";
 
@@ -12,10 +13,12 @@ export function ProjectMosaic({ projects, photos, sort = true }: { projects: Pro
   const ordered = sort ? [...projects].sort((a, b) => b.urgency - a.urgency || a.backerCount - b.backerCount) : projects;
   return (
     <>
-      <div className="grid gap-6 sm:hidden">
-        {ordered.map((p) => (
-          <ProjectCard key={p.id} project={p} photo={photos[p.id]} size="lg" />
-        ))}
+      <div className="sm:hidden">
+        <ShowMore className="grid gap-6">
+          {ordered.map((p) => (
+            <ProjectCard key={p.id} project={p} photo={photos[p.id]} size="lg" />
+          ))}
+        </ShowMore>
       </div>
       <div className="hidden gap-5 sm:columns-2 sm:block">
         {ordered.map((p, i) => {

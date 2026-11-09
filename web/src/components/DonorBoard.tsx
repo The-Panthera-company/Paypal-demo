@@ -30,6 +30,8 @@ const nameOf = (r: DonorBoardRow) => r.displayName ?? (r.isMe ? "You" : r.alias)
 export function DonorBoard({ rows, currency, wallpaper }: { rows: DonorBoardRow[]; currency: string; wallpaper: string }) {
   const [ladderId, setLadderId] = useState("impact");
   const [scope, setScope] = useState<"all" | "named">("all");
+  const [all, setAll] = useState(false);
+  const LIMIT = 10;
   const ladder = LADDERS.find((l) => l.id === ladderId)!;
   const money = (c: number) => new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(c / 100);
 
@@ -102,7 +104,7 @@ export function DonorBoard({ rows, currency, wallpaper }: { rows: DonorBoardRow[
           )}
 
           <ol className="divide-y divide-line bg-white ring-1 ring-line">
-            {ranked.map(({ r, rank }) => (
+            {ranked.filter((x, k) => all || k < LIMIT || x.r.isMe).map(({ r, rank }) => (
               <li key={r.alias} className={`flex items-center gap-4 px-4 py-3 ${r.isMe ? "bg-accent/40" : ""}`}>
                 <RankBadge rank={rank} />
                 <Avatar name={r.displayName ?? undefined} seed={r.alias} anonymous={!r.displayName} size={40} label="" />
@@ -119,6 +121,11 @@ export function DonorBoard({ rows, currency, wallpaper }: { rows: DonorBoardRow[
               </li>
             ))}
           </ol>
+          {ranked.length > LIMIT && (
+            <button type="button" onClick={() => setAll((x) => !x)} aria-expanded={all} className="mt-3 min-h-11 w-full border border-line bg-white px-4 font-medium text-ink hover:border-primary">
+              {all ? "Show the top 10" : `Show all ${ranked.length} donors`}
+            </button>
+          )}
         </>
       )}
       <p className="text-sm">Donors are anonymous unless they turn their name on in My Impact. Rankings use this round&apos;s captured gifts only.</p>

@@ -96,7 +96,7 @@ export function CategoryCheckout({ category, projects }: { category: Category; p
                 className={`flex cursor-pointer flex-col gap-1 border p-4 ${rule === r.id ? "border-primary bg-primary-container" : "border-line bg-white hover:border-primary"}`}
               >
                 <span className="flex items-center gap-2 font-medium text-ink">
-                  <input type="radio" name="rule" value={r.id} checked={rule === r.id} onChange={() => setRule(r.id)} className="accent-[#007190]" />
+                  <input type="radio" name="rule" value={r.id} checked={rule === r.id} onChange={() => setRule(r.id)} className="size-5 accent-[#007190]" />
                   {r.label}
                 </span>
                 <span className="text-sm">{r.help}</span>

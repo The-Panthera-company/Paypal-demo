@@ -301,3 +301,13 @@ body {
     transform: none;
   }
 }
+
+/* Phone featured strip: the current project's segment fills while it waits */
+@keyframes strip-fill {
+  from {
+    height: 0;
+  }
+  to {
+    height: 100%;
+  }
+}

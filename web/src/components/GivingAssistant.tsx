@@ -112,10 +112,11 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed bottom-24 right-4 z-30 flex min-h-12 items-center gap-2 bg-ink px-5 font-medium text-white shadow-lg hover:bg-primary lg:bottom-8 lg:right-8"
+          aria-label="Ask the giving assistant"
+          className="fixed bottom-24 right-4 z-30 flex min-h-12 min-w-12 items-center justify-center gap-2 bg-ink px-3 font-medium sm:px-5 text-white shadow-lg hover:bg-primary lg:bottom-8 lg:right-8"
         >
           <Icon name="chat" size={20} className="text-cobalt-green" />
-          Ask the giving assistant
+          <span className="max-sm:hidden">Ask the giving assistant</span>
         </button>
       )}
 
