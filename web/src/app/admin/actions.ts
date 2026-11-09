@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getAuditChain, pauseAgents, resolveCaseRemoving, resumeAgents, verifyAuditChain, type ChainCheck, type ChainRow, closeRound, createRound, getDonation, newOwnerToken, refundDonation, resolveCase, reviewMilestone, updateRound, verifyProject, type DonationInfo, type RefundResult, type RoundFields } from "@/lib/admin";
+import { retryProcurement, reviewProcurement, getAuditChain, pauseAgents, resolveCaseRemoving, resumeAgents, verifyAuditChain, type ChainCheck, type ChainRow, closeRound, createRound, getDonation, newOwnerToken, refundDonation, resolveCase, reviewMilestone, updateRound, verifyProject, type DonationInfo, type RefundResult, type RoundFields } from "@/lib/admin";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
 
@@ -123,4 +123,12 @@ export async function verifyChainAction(): Promise<{ ok: true; check: ChainCheck
 }
 export async function confirmAndRemoveAction(id: string, note?: string) {
   return run(() => resolveCaseRemoving(id, note), "Case confirmed and the project removed; its donations are refunded.");
+}
+
+// ---- Procurement ----
+export async function reviewProcurementAction(id: number, approve: boolean) {
+  return run(() => reviewProcurement(id, approve), approve ? "Purchase approved. The agent pays the supplier on its next step." : "Purchase rejected.");
+}
+export async function retryProcurementAction(id: number) {
+  return run(() => retryProcurement(id), "Payment sent again with the same PayPal batch.");
 }

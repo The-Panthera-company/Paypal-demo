@@ -6,6 +6,7 @@ import type { Category } from "@/lib/types";
 import { DonatePanel } from "./DonatePanel";
 import { MonthlyGiving } from "./MonthlyGiving";
 import { AgentRunViewer } from "./AgentRunViewer";
+import { MandateDraft, type DraftValues } from "./MandateDraft";
 import { categoryIcon, Icon } from "./Icon";
 
 // Giving Agent setup (#23). The donor's rules (mandate) are enforced by the core API, never by the
@@ -94,6 +95,14 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
     })();
   }, [live, categories]);
 
+  // A drafted mandate only fills the form; Save (PUT) stays the only writer
+  const applyDraft = (v: DraftValues) => {
+    setCats(v.cats);
+    setBudget(v.budget);
+    setPerProject(v.perProject);
+    setThreshold(v.threshold);
+    setExcluded(v.excluded);
+  };
   const cents = (v: string) => Math.round(Number(v) * 100);
   const errors = {
     cats: cats.length === 0 ? "Choose at least one cause." : null,
@@ -222,6 +231,23 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
         </nav>
 
         <div key={step} className="animate-[showcase-in_.4s_ease-out] space-y-6">
+        {step === 0 && (
+            <MandateDraft
+              current={{ cats, budget, perProject, threshold, excluded }}
+              categories={categories}
+              onAccept={(v) => {
+                applyDraft(v);
+                // Review only when the drafted rules pass the same checks as the steps
+                const c = (x: string) => Math.round(Number(x) * 100);
+                const rulesOk = c(v.budget) >= 100 && c(v.perProject) >= 100 && c(v.perProject) <= c(v.budget) && c(v.threshold) >= 0;
+                go(v.cats.length === 0 ? 0 : rulesOk ? 2 : 1);
+              }}
+              onEdit={(v) => {
+                applyDraft(v);
+                go(1);
+              }}
+            />
+          )}
         {step === 0 && (
             <div className="space-y-6 border border-line bg-white p-6">
               <fieldset>
@@ -450,7 +476,7 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
               </button>
             )}
             {step === 2 && (
-              <button type="button" disabled={saving || donorMissing} onClick={async () => (await save()) && go(3)} className="btn btn-2 disabled:opacity-50">
+              <button type="button" disabled={saving || donorMissing || !stepOk[0] || !stepOk[1]} onClick={async () => (await save()) && go(3)} className="btn btn-2 disabled:opacity-50">
                 {saving ? "Saving…" : "Save and continue →"}
               </button>
             )}

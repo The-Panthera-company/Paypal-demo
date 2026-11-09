@@ -1,6 +1,7 @@
 // Admin console data. Server-only: ADMIN_TOKEN (the core API's admin bearer token) must never reach
 // the browser, so these run in server components and server actions, never in client code.
 import "server-only";
+import type { Procurement } from "./procurement";
 
 const API_URL = (process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL)?.replace(/\/$/, "");
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "";
@@ -336,4 +337,36 @@ export async function getAuditChain(limit = 100): Promise<ChainRow[]> {
 export async function resolveCaseRemoving(id: string, note?: string) {
   if (!API_URL || !ADMIN_TOKEN) return;
   await adminFetch(`/admin/cases/${id}/resolve`, { method: "POST", body: JSON.stringify({ action: "confirm", remove_project: true, note }) });
+}
+
+// ---- Procurement (managed purchases) ----
+export type AdminProcurement = Procurement & { projectTitle: string; milestoneTitle: string };
+
+export async function listProcurement(): Promise<AdminProcurement[]> {
+  if (!API_URL || !ADMIN_TOKEN) return [];
+  const rows = await adminFetch<Procurement[]>("/admin/procurement");
+  // Titles: one project-detail read per project (a handful at most)
+  const ids = [...new Set(rows.map((r) => r.project_id))];
+  const details = await Promise.all(
+    ids.map((id) =>
+      adminFetch<{ id: number; title: string; milestones?: { id: number; title: string }[] }>(`/projects/${id}`).catch(() => null),
+    ),
+  );
+  const byId = new Map(details.filter(Boolean).map((d) => [d!.id, d!]));
+  return rows.map((r) => {
+    const d = byId.get(r.project_id);
+    return {
+      ...r,
+      projectTitle: d?.title ?? `Project ${r.project_id}`,
+      milestoneTitle: d?.milestones?.find((m) => m.id === r.milestone_id)?.title ?? `Milestone ${r.milestone_id}`,
+    };
+  });
+}
+export async function reviewProcurement(id: number, approve: boolean, note?: string) {
+  if (!API_URL || !ADMIN_TOKEN) return;
+  await adminFetch(`/admin/procurement/${id}/approve`, { method: "POST", body: JSON.stringify({ approve, note }) });
+}
+export async function retryProcurement(id: number) {
+  if (!API_URL || !ADMIN_TOKEN) return;
+  await adminFetch(`/admin/procurement/${id}/retry`, { method: "POST" });
 }
