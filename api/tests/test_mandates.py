@@ -54,12 +54,80 @@ def test_mandate_validation(client):
     _top_up(client)
     put = lambda **kw: client.put("/donors/1/mandate", json=MANDATE | kw).json()["detail"]["error"]
     assert put(categories=[99]) == "CATEGORY_NOT_FOUND"
-    assert put(per_project_max_cents=5000) == "INVALID_MANDATE"
+    assert put(categories=[]) == "CATEGORIES_REQUIRED"
+    assert put(per_project_max_cents=5000) == "PER_PROJECT_OVER_BUDGET"
+    assert put(approval_threshold_cents=5000) == "THRESHOLD_OVER_BUDGET"
+    assert put(per_project_max_cents=50) == "AMOUNT_TOO_LOW"
+    assert put(monthly_budget_cents=2_000_000, per_project_max_cents=400) == "BUDGET_TOO_HIGH"
+    assert put(excluded_tags=[f"tag-{n}" for n in range(21)]) == "TOO_MANY_TAGS"
+    assert put(excluded_tags=["x" * 41]) == "TAG_TOO_LONG"
     assert put(weight_overrides={"few_backers": 90}) == "INVALID_WEIGHTS"
     assert put(weight_overrides={"vibes": 10}) == "INVALID_WEIGHTS"
     assert client.put("/donors/1/mandate", json=MANDATE | {"weight_overrides": {"few_backers": 45}}).status_code == 200
     assert client.get("/donors/2/mandate").status_code == 404
     assert client.get("/donors/1/mandate").json()["weight_overrides"] == {"few_backers": 45}
+
+
+def test_a_422_lists_every_problem_with_its_field(client):
+    _top_up(client)  # creates donor 1
+    r = client.put("/donors/1/mandate", json=MANDATE | {
+        "categories": [99], "approval_threshold_cents": 5000, "weight_overrides": {"urgency": 99}})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["error"] == "CATEGORY_NOT_FOUND"  # the first problem leads
+    assert [(e["field"], e["code"]) for e in detail["errors"]] == [
+        ("categories", "CATEGORY_NOT_FOUND"),
+        ("approval_threshold_cents", "THRESHOLD_OVER_BUDGET"),
+        ("weight_overrides.urgency", "INVALID_WEIGHTS"),
+    ]
+
+
+def test_tags_are_saved_trimmed_lowercased_and_deduped(client):
+    _top_up(client)  # creates donor 1
+    r = client.put("/donors/1/mandate", json=MANDATE | {"excluded_tags": [" Faith-Based ", "faith-based", "", "STEM"]})
+    assert r.json()["excluded_tags"] == ["faith-based", "stem"]
+
+
+def test_preview_checks_without_saving(client, db_session_factory):
+    _top_up(client)  # creates donor 1
+    bad = client.post("/donors/1/mandate/preview", json=MANDATE | {"approval_threshold_cents": 5000,
+                                                                   "excluded_tags": [" STEM "]})
+    assert bad.status_code == 200
+    assert bad.json()["ok"] is False
+    assert bad.json()["errors"] == [{"field": "approval_threshold_cents", "code": "THRESHOLD_OVER_BUDGET",
+                                     "message": "Approval threshold can't be more than the monthly budget"}]
+    assert bad.json()["normalized"]["excluded_tags"] == ["stem"]
+
+    good = client.post("/donors/1/mandate/preview", json=MANDATE).json()
+    assert good == {"ok": True, "errors": [], "normalized": good["normalized"]}
+    # Nothing was saved, and nothing was logged.
+    assert client.get("/donors/1/mandate").status_code == 404
+    with db_session_factory() as db:
+        assert not db.scalars(select(AuditLog).where(AuditLog.action == "mandate_updated")).all()
+    assert client.post("/donors/99/mandate/preview", json=MANDATE).status_code == 404
+
+
+def test_every_save_is_audited_with_before_and_after(client, db_session_factory):
+    _top_up(client)  # creates donor 1
+    client.put("/donors/1/mandate", json=MANDATE)
+    client.put("/donors/1/mandate", json=MANDATE | {"monthly_budget_cents": 2000})
+    with db_session_factory() as db:
+        logs = db.scalars(select(AuditLog).where(AuditLog.action == "mandate_updated").order_by(AuditLog.id)).all()
+    assert [(log.actor, log.rule_result) for log in logs] == [("donor", "ok"), ("donor", "ok")]
+    assert logs[0].inputs["before"] is None and logs[0].inputs["after"]["monthly_budget_cents"] == 1000
+    assert logs[1].inputs["before"]["monthly_budget_cents"] == 1000
+    assert logs[1].inputs["after"]["monthly_budget_cents"] == 2000
+    # A refused mandate writes nothing.
+    client.put("/donors/1/mandate", json=MANDATE | {"categories": []})
+    with db_session_factory() as db:
+        assert len(db.scalars(select(AuditLog).where(AuditLog.action == "mandate_updated")).all()) == 2
+
+
+def test_constraints_are_public(client):
+    c = client.get("/mandates/constraints").json()
+    assert c["default_weights"]["few_backers"] == 35 and c["max_weight_shift"] == 20
+    assert c["max_budget_cents"] == 1_000_000 and c["max_tags"] == 20 and c["max_tag_length"] == 40
+    assert c["min_per_project_cents"] == c["min_approval_threshold_cents"] == 100
 
 
 def test_gift_within_rules_is_recorded_and_counts_as_donors(client, db_session_factory):

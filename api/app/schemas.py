@@ -354,6 +354,53 @@ class MandateIn(BaseModel):
     active: bool = True
 
 
+class MandateConstraintsOut(BaseModel):
+    model_config = _example(
+        {
+            "default_weights": {"few_backers": 35, "progress": 25, "urgency": 20, "evidence": 10, "days_since_funded": 10},
+            "max_weight_shift": 20,
+            "max_budget_cents": 1000000,
+            "max_tags": 20,
+            "max_tag_length": 40,
+            "min_per_project_cents": 100,
+            "max_per_project_cents": 1000000,
+            "min_approval_threshold_cents": 100,
+            "max_approval_threshold_cents": 1000000,
+        }
+    )
+    default_weights: dict[str, float] = Field(description="The agent's score weights; weight_overrides move them")
+    max_weight_shift: float = Field(description="How far each weight may move from its default, either way")
+    max_budget_cents: int = Field(description="Highest monthly budget a mandate may set")
+    max_tags: int = Field(description="Most excluded tags a mandate may have")
+    max_tag_length: int = Field(description="Longest excluded tag, in characters")
+    min_per_project_cents: int = Field(description="Lowest per-project max")
+    max_per_project_cents: int = Field(description="Also never more than the mandate's monthly budget")
+    min_approval_threshold_cents: int = Field(description="Lowest approval threshold")
+    max_approval_threshold_cents: int = Field(description="Also never more than the mandate's monthly budget")
+
+
+class MandateProblem(BaseModel):
+    field: str = Field(description="The field at fault, e.g. per_project_max_cents or weight_overrides.urgency")
+    code: str = Field(description="A stable code, e.g. THRESHOLD_OVER_BUDGET")
+    message: str = Field(description="What is wrong, for people")
+
+
+class MandatePreviewOut(BaseModel):
+    model_config = _example(
+        {
+            "ok": False,
+            "errors": [{"field": "approval_threshold_cents", "code": "THRESHOLD_OVER_BUDGET",
+                        "message": "Approval threshold can't be more than the monthly budget"}],
+            "normalized": {"monthly_budget_cents": 1000, "categories": [2], "excluded_tags": ["faith-based"],
+                           "per_project_max_cents": 400, "approval_threshold_cents": 5000,
+                           "weight_overrides": None, "active": True},
+        }
+    )
+    ok: bool = Field(description="True when PUT would save it as it is")
+    errors: list[MandateProblem]
+    normalized: MandateIn = Field(description="What would be saved: tags trimmed, lowercased and deduped")
+
+
 class MandateOut(MandateIn):
     model_config = _example(
         {

@@ -53,6 +53,7 @@ app.add_middleware(
 )
 for module in (catalogue, donations, donors, rounds, admin, internal, webhooks, paypal_config, agent_public):
     app.include_router(module.router)
+app.include_router(donors.constraints_router)  # GET /mandates/constraints
 
 
 def _openapi() -> dict:
