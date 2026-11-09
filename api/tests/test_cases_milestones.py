@@ -1,19 +1,41 @@
 """Watchdog cases, milestone payout requests, admin review and project verification."""
 
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import select
 
-from app.models import LedgerEntry, Milestone, Project
+from app.engine import run_round
+from app.models import (
+    CaseStatus,
+    Donation,
+    DonationStatus,
+    Donor,
+    LedgerEntry,
+    Milestone,
+    Project,
+    Round,
+    RoundStatus,
+    TargetType,
+    WatchdogCase,
+)
 
 ADMIN = {"Authorization": "Bearer admin-test-token"}
 INTERNAL = {"Authorization": "Bearer internal-test-token"}
 PASS = {"receipt_total_within_10pct": True, "supplier_matches_plan": True, "photo_not_duplicate": True, "dated_in_window": True}
 
 
-def _case(client, project_id=1, rule="new_payer_burst", donor_ids=(1, 2)):
-    r = client.post("/internal/watchdog/cases", headers=INTERNAL,
-                    json={"project_id": project_id, "rule": rule, "evidence": {"donor_ids": list(donor_ids)}})
+def _case(client, project_id=1, rule="new_payer_burst", donor_ids=(1, 2), evidence=None):
+    body = {"project_id": project_id, "rule": rule,
+            "evidence": evidence if evidence is not None else {"donor_ids": list(donor_ids)}}
+    r = client.post("/internal/watchdog/cases", headers=INTERNAL, json=body)
     assert r.status_code == 201, r.text
     return r.json()
+
+
+def _donors(db_session_factory, *ids):
+    with db_session_factory() as db:
+        db.add_all([Donor(id=donor_id) for donor_id in ids])
+        db.commit()
 
 
 def _resolve(client, case_id, **body):
@@ -61,6 +83,110 @@ def test_case_errors_and_auth(client):
     assert client.post("/internal/watchdog/cases", json=body).status_code == 401
     assert client.post("/internal/watchdog/cases", headers=INTERNAL, json=body).status_code == 404
     assert _resolve(client, 99).status_code == 404
+
+
+def test_collusion_cluster_opens_graph_case_without_auto_confirming(client, db_session_factory):
+    _donors(db_session_factory, 10, 11)
+    evidence = {
+        "donor_ids": [10, 11],
+        "graph": {
+            "nodes": [
+                {"id": 10, "type": "donor", "label": "Donor 3FA2C1"},
+                {"id": 11, "type": "donor", "label": "Donor 81B4D0"},
+                {"id": 1, "type": "project", "label": "Lanet Library"},
+            ],
+            "edges": [
+                {"source": 10, "target": 1, "weight": 1},
+                {"source": 11, "target": 1, "weight": 1},
+            ],
+        },
+    }
+    case = _case(client, rule="collusion_cluster", evidence=evidence)
+    assert case["rule"] == "collusion_cluster" and case["status"] == "open"
+    assert case["evidence"] == evidence
+    assert _frozen(db_session_factory) == (True, "active")
+    with db_session_factory() as db:
+        stored = db.get(WatchdogCase, case["id"])
+        assert stored.status == CaseStatus.open
+        assert stored.resolved_by is None
+
+
+def test_collusion_cluster_rejects_non_integer_and_unknown_donor_ids(client, db_session_factory):
+    _donors(db_session_factory, 10, 11)
+    url = "/internal/watchdog/cases"
+
+    for donor_ids in ([10, "PAYER123"], [10, 11.0], [10, True]):
+        r = client.post(url, headers=INTERNAL, json={
+            "project_id": 1, "rule": "collusion_cluster", "evidence": {"donor_ids": donor_ids},
+        })
+        assert r.status_code == 422, (donor_ids, r.text)
+        assert r.json()["detail"]["error"] == "INVALID_EVIDENCE"
+
+    r = client.post(url, headers=INTERNAL, json={
+        "project_id": 1, "rule": "collusion_cluster", "evidence": {"donor_ids": [10, 999]},
+    })
+    assert r.status_code == 422
+    assert "Unknown donor_ids" in r.json()["detail"]["message"]
+
+
+def test_collusion_cluster_graph_shape_is_validated(client, db_session_factory):
+    _donors(db_session_factory, 10, 11)
+    url = "/internal/watchdog/cases"
+    bad_graphs = [
+        {"nodes": [{"id": 10, "type": "donor"}]},  # no label
+        {"nodes": [{"id": 10, "type": "", "label": "Donor"}]},  # no type
+        {"edges": [{"source": 10, "target": 1}]},  # no weight
+        {"edges": [{"source": 10, "target": 1, "weight": "strong"}]},  # weight not a number
+        {"nodes": "not-a-list"},
+    ]
+    for graph in bad_graphs:
+        r = client.post(url, headers=INTERNAL, json={
+            "project_id": 1,
+            "rule": "collusion_cluster",
+            "evidence": {"donor_ids": [10, 11], "graph": graph},
+        })
+        assert r.status_code == 422, (graph, r.text)
+        assert r.json()["detail"]["error"] == "INVALID_EVIDENCE"
+
+
+def test_confirm_merges_collusion_cluster_in_the_engine(client, db_session_factory):
+    _donors(db_session_factory, 10, 11)
+    now = datetime.now(timezone.utc)
+    with db_session_factory() as db:
+        round_ = Round(
+            name="Collusion round",
+            starts_at=now - timedelta(days=1),
+            ends_at=now + timedelta(days=1),
+            matching_pool=1000,
+            currency="USD",
+            status=RoundStatus.open,
+            project_cap_pct=100,
+        )
+        db.add(round_)
+        for donor_id in (10, 11):
+            db.add(Donation(
+                donor_id=donor_id,
+                target_type=TargetType.PROJECT,
+                project_id=2,
+                amount=100,
+                currency="USD",
+                status=DonationStatus.captured,
+                captured_at=now,
+            ))
+        db.commit()
+        round_id = round_.id
+        before = {r.project_id: r for r in run_round(db, round_)}
+        db.commit()
+
+    assert before[2].score > 0  # two separate people before the admin confirms
+
+    case = _case(client, project_id=1, rule="collusion_cluster", donor_ids=(10, 11))
+    assert _resolve(client, case["id"], action="confirm").json()["status"] == "confirmed"
+    assert _frozen(db_session_factory, project_id=1) == (False, "active")
+
+    with db_session_factory() as db:
+        after = {r.project_id: r for r in run_round(db, db.get(Round, round_id))}
+    assert after[2].score == 0  # one person after the cluster merge
 
 
 # --- milestones ---------------------------------------------------------------------------

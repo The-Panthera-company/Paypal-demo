@@ -521,11 +521,39 @@ class CaseOut(BaseModel):
 
 class CaseIn(BaseModel):
     project_id: int
-    rule: Literal["new_payer_burst", "reciprocal_backing", "owner_donation", "refund_spike"]
+    rule: Literal[
+        "new_payer_burst", "reciprocal_backing", "owner_donation", "refund_spike", "collusion_cluster"
+    ]
     evidence: dict = Field(
         description='Include "donor_ids": [..] for the suspected cluster; if an admin confirms the case, '
-        "the matching engine counts those donors as one person."
+        "the matching engine counts those donors as one person. collusion_cluster also accepts an "
+        'optional "graph": {"nodes": [{"id", "type", "label"}], "edges": [{"source", "target", "weight"}]}.'
     )
+
+
+class DonationEventOut(BaseModel):
+    model_config = _example(
+        {
+            "donation_id": 4,
+            "project_id": 1,
+            "donor_id": 12,
+            "status": "captured",
+            "amount_cents": 2000,
+            "captured_at": "2026-11-08T14:02:00Z",
+            "donor_created_at": "2026-11-01T09:00:00Z",
+            "owner_donor_id": 3,
+            "is_guest": False,
+        }
+    )
+    donation_id: int
+    project_id: int | None
+    donor_id: int | None
+    status: DonationStatus
+    amount_cents: int
+    captured_at: datetime
+    donor_created_at: datetime | None
+    owner_donor_id: int | None
+    is_guest: bool
 
 
 class CaseResolveIn(BaseModel):

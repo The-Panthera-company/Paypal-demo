@@ -61,6 +61,7 @@ SCHEMAS = {
     "DocumentKind": "registration and plan support verification; receipt and photo are milestone evidence.",
     "DocumentOut": "A stored project document with the fields extracted from it.",
     "DonationOut": "A donation and its PayPal references.",
+    "DonationEventOut": "One donation event for the Watchdog: captured or refunded, with internal Donor ids (never PayPal payer ids).",
     "DonationStatus": "created: order made, not paid; pending: PayPal is holding the payment; captured: received; failed: declined, denied or abandoned; refunded: refunded in full.",
     "DonorOut": "A donor's profile. Donations are anonymous unless show_on_leaderboard is true.",
     "DonorReport": "\"Where your money went\": gifts, matching unlocked, impact updates and the Giving Agent's report.",
@@ -161,9 +162,11 @@ FIELDS = {
     "currency": "ISO 4217 currency code. All PayPal money moves in USD.",
     "date": "The day (UTC).",
     "dated_in_window": "The evidence is dated inside the milestone's window.",
+    "captured_at": "When PayPal captured the donation (UTC).",
     "decisions": "The run's reasoning: candidates with scores, chosen projects with amounts, skipped projects with reasons.",
     "display_name": "Name shown on the leaderboard if the donor opts in.",
     "donation_id": "Donation id.",
+    "donor_created_at": "When the donor record was created (UTC).",
     "donor_id": "Donor id.",
     "due_date": "When the milestone should be reached.",
     "ends_at": "When the round ends (UTC); donations after this go to the next round.",
@@ -208,6 +211,7 @@ FIELDS = {
     "name": "Name.",
     "note": "Optional note, kept in the audit log.",
     "order_id": "PayPal order id: return it from the JS SDK's createOrder.",
+    "owner_donor_id": "Internal Donor.id of the project's owner, or null when it has none.",
     "payout_id": "The payout batch sending this tranche, if one was created.",
     "payout_item_id": "PayPal's id for this payment, once sent.",
     "paypal_batch_id": "PayPal's id for the batch, once it accepted it.",
@@ -273,8 +277,10 @@ SCHEMA_FIELDS = {
     ("HTTPValidationError", "detail"): "One item per problem.",
     ("ReconciliationIssue", "detail"): "What the check looks for.",
     ("ReconciliationIssue", "refs"): "Ids of the rows involved (donations, payouts, milestones...).",
-    ("CaseIn", "rule"): "new_payer_burst, reciprocal_backing, owner_donation or refund_spike.",
+    ("CaseIn", "rule"): "new_payer_burst, reciprocal_backing, owner_donation, refund_spike or collusion_cluster.",
     ("CaseOut", "rule"): "The Watchdog rule that fired.",
+    ("DonationEventOut", "donor_id"): "Internal Donor.id integer, never a PayPal payer id.",
+    ("DonationEventOut", "owner_donor_id"): "Internal Donor.id of the project owner, never a PayPal payer id.",
     ("CreateOrderIn", "rule"): "CATEGORY only: crowd (20% equally, 80% by backers; default), equal, or closest_to_goal.",
     ("CategoryPreviewOut", "rule"): "The split rule used.",
     ("CategoryPreviewIn", "amount_cents"): "The gift to preview, in cents.",
@@ -371,6 +377,7 @@ PARAMS = {
     "run_id": "Giving Agent run id.",
     "before_id": "Return entries older than this audit-log id (cursor paging).",
     "include_hash": "Include each audit row's seq, prev_hash and hash for independent checks.",
+    "since": "Only donations captured at or after this ISO timestamp (UTC).",
 }
 
 # --- examples for schemas that have none ------------------------------------------------------
@@ -378,9 +385,27 @@ PARAMS = {
 # Hand-written where a generated example would be invalid or misleading.
 EXAMPLES = {
     "CreateOrderIn": {"target_type": "PROJECT", "project_id": 1, "amount_cents": 2000},
-    "CaseIn": {"project_id": 6, "rule": "new_payer_burst",
-               "evidence": {"donor_ids": [12, 13, 14], "window_minutes": 15, "median_amount_cents": 100}},
-    "CaseResolveIn": {"action": "confirm", "remove_project": False, "note": "Same device for all three payers"},
+    "CaseIn": {
+        "project_id": 6,
+        "rule": "collusion_cluster",
+        "evidence": {
+            "donor_ids": [12, 13, 14],
+            "graph": {
+                "nodes": [
+                    {"id": 12, "type": "donor", "label": "Donor 3FA2C1"},
+                    {"id": 13, "type": "donor", "label": "Donor 81B4D0"},
+                    {"id": 14, "type": "donor", "label": "Donor C27A9E"},
+                    {"id": 6, "type": "project", "label": "Lanet Library"},
+                ],
+                "edges": [
+                    {"source": 12, "target": 6, "weight": 1},
+                    {"source": 13, "target": 6, "weight": 1},
+                    {"source": 14, "target": 6, "weight": 1},
+                ],
+            },
+        },
+    },
+    "CaseResolveIn": {"action": "confirm", "remove_project": False, "note": "Three accounts shared a device"},
     "AuditIn": {"actor": "giving-agent", "action": "skip", "inputs": {"project_id": 5}, "rule_result": "excluded_tag",
                 "reason": "Tagged gambling-recovery, which the donor excluded"},
     "MandateIn": {"monthly_budget_cents": 1000, "categories": [2], "excluded_tags": ["faith-based"],
@@ -467,6 +492,7 @@ OPERATIONS = {
     "pause_agents": "Stop every money-moving agent route with one request. Audit remains writable so agents can record the pause.",
     "resume_agents": "Turn the global agent kill switch back off.",
     "internal_status": "The agent service's read-only view of the kill switch; reachable while paused.",
+    "donation_events": "Watchdog's event feed: captured and refunded donations since a timestamp, newest first, with internal Donor ids.",
     "review_queue": "Projects in a status for the admin, by default those waiting for verification.",
     "list_cases": "Watchdog cases, by default the open ones, newest first.",
     "list_payouts": "PayPal Payouts batches, newest first, with each item's status.",
@@ -484,12 +510,12 @@ PARAM_EXAMPLES = {
     "project_id": 1, "donation_id": 4, "donor_id": 1, "order_id": "8E825560D88497210", "payout_id": 1,
     "round_id": 1, "milestone_id": 7, "case_id": 2, "actor": "giving-agent", "early": True,
     "run_id": 7, "before_id": 100,
-    "include_hash": True,
+    "include_hash": True, "since": "2026-11-08T00:00:00Z",
 }
 
 # Literal fields become named enums (APIMatic flags inline enums); same values share one name.
 ENUM_NAMES = {
-    ("new_payer_burst", "reciprocal_backing", "owner_donation", "refund_spike"): "WatchdogRule",
+    ("new_payer_burst", "reciprocal_backing", "owner_donation", "refund_spike", "collusion_cluster"): "WatchdogRule",
     ("clear", "confirm"): "CaseAction",
     ("crowd", "equal", "closest_to_goal"): "SplitRuleName",
     ("recorded", "awaiting_donor_approval", "rejected"): "CheckedDonationStatus",

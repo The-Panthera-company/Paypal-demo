@@ -138,12 +138,16 @@ def request_checked_donation(mandate_run_id: int, project_id: int, amount_cents:
 @server.tool(annotations=ACT)
 def open_watchdog_case(
     project_id: int,
-    rule: Literal["new_payer_burst", "reciprocal_backing", "owner_donation", "refund_spike"],
+    rule: Literal[
+        "new_payer_burst", "reciprocal_backing", "owner_donation", "refund_spike", "collusion_cluster"
+    ],
     evidence: dict[str, Any],
 ) -> dict[str, Any]:
     """Freeze a project's matching (not its donations) and open a case for an admin. Put the
-    suspected donors in evidence["donor_ids"]: if the admin confirms, matching counts them as one
-    person. The same rule on a project with an open case returns that case."""
+    suspected donors in evidence["donor_ids"] as internal Donor.id integers (never PayPal payer
+    ids): if the admin confirms, matching counts them as one person. collusion_cluster also
+    accepts evidence["graph"] with nodes (id/type/label) and edges (source/target/weight).
+    The same rule on a project with an open case returns that case."""
     return _call("POST", "/internal/watchdog/cases", json={"project_id": project_id, "rule": rule, "evidence": evidence})
 
 

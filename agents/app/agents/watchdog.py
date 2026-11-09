@@ -1,7 +1,7 @@
 """Watchdog: plain rules over donation events. No LLM.
 
-The donation-events endpoint does not exist yet (spec section 7), so the agent reads through an
-EventsSource interface. Swap FakeEventsSource for the real one when Person 1 ships it.
+Events come through EventsSource; the core API serves them at GET /internal/donation-events.
+Every donor reference is an internal Donor.id integer, never a PayPal payer id.
 """
 from __future__ import annotations
 
@@ -26,8 +26,8 @@ class EventsSource(Protocol):
 
 
 class FakeEventsSource:
-    """Test/seeded events. Each event: donation_id, project_id, status, amount_cents,
-    captured_at, payer_id, is_guest, donor_created_at, owner_payer_id."""
+    """Test/seeded events. Each event: donation_id, project_id, donor_id, status, amount_cents,
+    captured_at, is_guest, donor_created_at, owner_donor_id."""
 
     def __init__(self, events: list[dict] | None = None) -> None:
         self.events = list(events or [])
@@ -72,7 +72,7 @@ def new_payer_burst(events: list[dict], now: datetime | None = None) -> list[dic
                     "project_id": project_id,
                     "rule": "new_payer_burst",
                     "evidence": {
-                        "donor_ids": [e.get("payer_id") for e in in_window],
+                        "donor_ids": [e.get("donor_id") for e in in_window],
                         "counts": {"donations": len(in_window)},
                         "window": {"minutes": cfg["window_minutes"],
                                    "from": start["_t"].isoformat(),
@@ -88,11 +88,11 @@ def reciprocal_backing(events: list[dict]) -> list[dict]:
     pairs: dict[tuple, set] = {}
     totals: dict[tuple, int] = {}
     for event in events:
-        payer = event.get("payer_id")
+        donor = event.get("donor_id")
         project = event.get("project_id")
-        if payer is None or project is None:
+        if donor is None or project is None:
             continue
-        pairs.setdefault(project, set()).add(payer)
+        pairs.setdefault(project, set()).add(donor)
     donors_by_project = pairs
     projects = sorted(donors_by_project)
     hits = []
@@ -104,7 +104,7 @@ def reciprocal_backing(events: list[dict]) -> list[dict]:
             key = (first, second)
             total = sum(
                 1 for e in events
-                if e.get("payer_id") in shared and e.get("project_id") in key
+                if e.get("donor_id") in shared and e.get("project_id") in key
             )
             if total >= cfg["min_total"]:
                 hits.append({
@@ -120,13 +120,13 @@ def reciprocal_backing(events: list[dict]) -> list[dict]:
 def owner_donation(events: list[dict]) -> list[dict]:
     hits = []
     for event in events:
-        owner = event.get("owner_payer_id")
-        payer = event.get("payer_id")
-        if owner and payer and owner == payer:
+        owner = event.get("owner_donor_id")
+        donor = event.get("donor_id")
+        if owner is not None and donor is not None and owner == donor:
             hits.append({
                 "project_id": event.get("project_id"),
                 "rule": "owner_donation",
-                "evidence": {"donor_ids": [payer], "counts": {"donations": 1},
+                "evidence": {"donor_ids": [donor], "counts": {"donations": 1},
                              "window": {"donation_id": event.get("donation_id")}},
             })
     return hits
@@ -151,7 +151,7 @@ def refund_spike(events: list[dict], now: datetime | None = None) -> list[dict]:
             hits.append({
                 "project_id": project_id,
                 "rule": "refund_spike",
-                "evidence": {"donor_ids": [e.get("payer_id") for e in refunded],
+                "evidence": {"donor_ids": [e.get("donor_id") for e in refunded],
                              "counts": {"refunds": len(refunded), "donations": total},
                              "window": {"hours": cfg["window_hours"]}},
             })
