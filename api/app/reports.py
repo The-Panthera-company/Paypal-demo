@@ -56,15 +56,20 @@ def stories(db: Session, project_ids: list[int], limit: int = 50) -> list[StoryO
             if item.get("milestone_id") in ids:
                 released_at.setdefault(item["milestone_id"], _aware(p.created_at))
     evidence: dict[int, list[str]] = defaultdict(list)
+    captions: dict[int, str] = {}
     for doc in db.scalars(select(ProjectDocument).where(ProjectDocument.milestone_id.in_(ids)).order_by(ProjectDocument.id)):
         if doc.kind.value in EVIDENCE:
             evidence[doc.milestone_id].append(doc.file_url)
+        caption = (doc.extracted_fields or {}).get("caption") if isinstance(doc.extracted_fields, dict) else None
+        if isinstance(caption, str) and caption.strip():
+            captions.setdefault(doc.milestone_id, caption.strip())
     titles = dict(db.execute(select(Project.id, Project.title).where(Project.id.in_(project_ids))).all())
 
     out = []
     for m in milestones:
         total = to_paypal(m.amount + m.match_amount, m.currency)
-        body = f"{m.currency} {total} released to {titles.get(m.project_id, 'the project')}"
+        body = (captions[m.id] + " ") if m.id in captions else ""
+        body += f"{m.currency} {total} released to {titles.get(m.project_id, 'the project')}"
         if m.match_amount:
             body += f", including {m.currency} {to_paypal(m.match_amount, m.currency)} of matching"
         body += ", after its receipts and photos were checked." if evidence[m.id] else ", after its evidence was checked."

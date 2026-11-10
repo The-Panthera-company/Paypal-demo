@@ -82,6 +82,18 @@ LAST = "ABCDEFGHJKLMNOPRSTUW"
 SPONSORS = [("Lakeside Rotary (demo)", 600_000), ("Kisumu Tech Hub (demo)", 250_000), (None, 150_000)]
 DONORS = 640
 
+# Short impact stories for the released milestones (shown first in the project's updates)
+STORIES = {
+    "200 household filters": "200 families in Tatopani now filter their own water: no more boiling river water while the pipes are rebuilt.",
+    "Survey and anchors": "Engineers surveyed the crossing and set the first two anchors; the footbridge route is marked on both banks.",
+    "First month of medicines": "The clinic team walked to six villages the road no longer reaches and treated 410 people in four weeks.",
+    "Malaria and cholera kits": "Volunteers handed out 600 malaria and cholera kits to families stranded by the Nyando floods.",
+    "Books and uniforms": "300 children in Ahero went back to class with new books and uniforms the week the water receded.",
+    "Five first-aid posts": "Five neighbourhood first-aid posts opened in Lara, each with a trained volunteer and a full kit.",
+    "120 shelter kits": "120 families in Ad Dweim put up tarpaulin shelters before the cold nights started.",
+    "Chlorine and testing": "Wells in four Teknaf neighbourhoods were chlorinated and tested safe after the floods.",
+}
+
 
 def main() -> None:
     for cat, title, tags, cause, group, region, urg, goal, summary, fac, ms in INCIDENT_PROJECTS:
@@ -138,6 +150,14 @@ def main() -> None:
             db.flush()
             db.add(PoolContribution(donation_id=gift.id, round_id=round_.id, sponsor_name=name, added_to_pool=True))
             round_.matching_pool += cents
+
+        from app.models import DocumentKind, Milestone, ProjectDocument
+        for title, text in STORIES.items():
+            m = db.scalar(select(Milestone).where(Milestone.title == title))
+            doc = m and db.scalar(select(ProjectDocument).where(ProjectDocument.milestone_id == m.id,
+                                                                ProjectDocument.kind == DocumentKind.photo))
+            if doc is not None:
+                doc.extracted_fields = {**(doc.extracted_fields or {}), "caption": text}
 
         # Giving Agent runs for the demo mandate (the public Agent Trace page)
         water, clinic, bridge, sudan = incident[0], incident[2], incident[1], incident[6]
