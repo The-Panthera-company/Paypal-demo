@@ -13,9 +13,11 @@ from app.agents.mandate_draft import (
     Proposal,
     clean_tag,
     match_category,
+    LLM_SYSTEM,
     parse_amounts,
     parse_categories,
     safe_weights,
+    system_prompt,
 )
 from app.core import FakeCore
 from app.llm import FakeLLM, LLMUnavailable
@@ -45,11 +47,44 @@ def test_match_category_passes_ids_through():
     assert match_category("2", []) == 2
 
 
+CATALOGUE = [{"id": 2, "name": "Education"}, {"id": 3, "name": "Environment"},
+             {"id": 1, "name": "Health"}, {"id": 4, "name": "Water"}]
+
+
 def test_match_category_resolves_names_and_slugs():
     cats = [{"id": 2, "name": "Education"}, {"id": 3, "name": "Environment"}]
     assert match_category("education", cats) == 2
     assert match_category("Environment", cats) == 3
     assert match_category("food-security", cats) is None
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("Clean water", 4),
+    ("water", 4),
+    ("WATER ", 4),
+    ("Water", 4),
+    ("waters", 4),
+    ("girls education", 2),
+    ("Education", 2),
+])
+def test_match_category_accepts_tolerant_forms(value, expected):
+    assert match_category(value, CATALOGUE) == expected
+
+
+@pytest.mark.parametrize("value", ["clean energy", "food security", "", "   "])
+def test_match_category_never_guesses_when_nothing_matches(value):
+    assert match_category(value, CATALOGUE) is None
+
+
+def test_match_category_refuses_ambiguity():
+    """Two categories inside one string is a question, not an answer."""
+    cats = [{"id": 1, "name": "Water"}, {"id": 2, "name": "Water Sanitation"}]
+    assert match_category("clean water sanitation", cats) is None
+
+
+def test_match_category_does_not_match_inside_longer_words():
+    cats = [{"id": 1, "name": "Cleaner"}]
+    assert match_category("clean water", cats) is None
 
 
 def test_clean_tag_trims_lowercases_and_caps():
@@ -204,6 +239,44 @@ class DeadLLM(FakeLLM):
     async def complete_json(self, system, user, schema):
         self.calls.append(('json', system, user))
         raise LLMUnavailable('DEEPSEEK_API_KEY is not set')
+
+
+def test_system_prompt_lists_allowed_names():
+    prompt = system_prompt(CATALOGUE)
+    for name in ("Education", "Environment", "Health", "Water"):
+        assert name in prompt
+    assert "exactly" in prompt
+    assert "Clean water" in prompt  # named as the counter-example the model must avoid
+
+
+def test_system_prompt_without_catalogue_is_still_valid():
+    assert system_prompt([]) == LLM_SYSTEM
+
+
+@pytest.mark.asyncio
+async def test_model_is_given_the_catalogue():
+    """The prompt must reach the model with the names in it, not just exist as a helper."""
+    llm = FakeLLM(json_replies=[Proposal(categories=["Water"])])
+    a = MandateDraftAgent(core=FakeCore(), llm=llm,
+                          mcp=FakeMcpClient({"search_projects": []}))
+    await a.draft("clean water", Current())
+    kind, system, _ = llm.calls[0]
+    assert kind == "json"
+    assert "Water" in system and "Education" in system
+
+
+@pytest.mark.asyncio
+async def test_report_repro_clean_water_is_accepted():
+    """The prod bug, end to end: a model that echoes the donor's phrase is rescued."""
+    a = MandateDraftAgent(
+        core=FakeCore(),
+        llm=FakeLLM(json_replies=[Proposal(categories=["Clean water"],
+                                    monthly_budget_cents=1000,
+                                    per_project_max_cents=300)]),
+        mcp=FakeMcpClient({"search_projects": []}))
+    out = await a.draft("Clean water, $10 a month, $3 per project", Current())
+    assert out["proposed"]["categories"] == [4]
+    assert out["rejected"] == []
 
 
 @pytest.mark.asyncio

@@ -81,9 +81,22 @@ class Proposal(BaseModel):
 LLM_SYSTEM = (
     "Turn a donor own words into a draft of their giving rules. Reply with JSON only. "
     "Use a field only when the text states it; leave it null or empty otherwise. Never "
-    "invent an amount, a category or a tag. Amounts are whole cents: forty dollars is 4000. "
-    "If the text says to skip something, put it in excluded_tags."
+    "invent an amount or a tag. Amounts are whole cents: forty dollars is 4000. "
+    "If the text says to skip something, put it in excluded_tags. "
+    "For categories, copy the exact name from the allowed list below into categories. "
+    "Never use a donor's phrase as a category name: for clean water, return Water, "
+    "not Clean water. If the donor names something that is not on the list, leave "
+    "categories empty."
 )
+
+
+def system_prompt(categories: list[dict]) -> str:
+    """The system prompt with the catalogue spliced in, so names come back exactly."""
+    names = sorted({str(c.get("name")).strip() for c in categories
+                    if str(c.get("name") or "").strip()})
+    if not names:
+        return LLM_SYSTEM
+    return LLM_SYSTEM + "\n\nAllowed categories (use these names exactly): " + ", ".join(names)
 
 
 def _now() -> float:
@@ -123,10 +136,27 @@ def slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
 
 
-def match_category(value: int | str, categories: list[dict]) -> int | str | None:
-    """Resolve a name or slug to an id. An id, or an id-shaped string, passes through.
+def _singular(word: str) -> str:
+    """Crude singular form, used only to compare one word against another."""
+    if len(word) > 3 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 4 and word.endswith("es") and word[-3] in "sxzh":
+        return word[:-2]
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
 
-    Returns None when the value cannot be matched, so the caller can refuse to guess.
+
+def match_category(value: int | str, categories: list[dict]) -> int | str | None:
+    """Resolve one returned category to an id, or None when the answer is not certain.
+
+    In order: an id or id-shaped string passes through; an exact name match (case and
+    spacing ignored) wins; then a whole-word match, so "Clean water" finds Water. Whole
+    words are compared in singular form, so "waters" also finds Water, but a fragment of a
+    longer word never matches ("clean" must not hit "cleaner").
+
+    Ambiguity is never guessed: a string that matches more than one category returns None,
+    and the caller reports it as rejected.
     """
     if isinstance(value, int):
         return value
@@ -135,11 +165,28 @@ def match_category(value: int | str, categories: list[dict]) -> int | str | None
         return None
     if text.isdigit():
         return int(text)
-    wanted = slug(text)
+
+    by_name: dict[str, object] = {}
     for category in categories:
-        name = str(category.get("name") or "")
-        if slug(name) == wanted or str(category.get("id")) == text:
+        name = str(category.get("name") or "").strip()
+        if not name:
+            continue
+        if str(category.get("id")) == text:
             return category.get("id")
+        by_name.setdefault(slug(name), category.get("id"))
+
+    wanted = slug(text)
+    if wanted in by_name:
+        return by_name[wanted]
+
+    words = {_singular(w) for w in wanted.split("-") if w}
+    hits = set()
+    for name_slug, cat_id in by_name.items():
+        parts = {_singular(w) for w in name_slug.split("-") if w}
+        if parts and parts.issubset(words):
+            hits.add(cat_id)
+    if len(hits) == 1:
+        return hits.pop()
     return None
 
 
@@ -248,14 +295,16 @@ class MandateDraftAgent:
         """
         if not text:
             return None, False
+        # The catalogue goes into the prompt so the model answers with exact names.
+        known = await self.categories.get(self.core)
         try:
             reply = await asyncio.wait_for(
-                self.llm.complete_json(LLM_SYSTEM, data_block("donor text", text), Proposal),
+                self.llm.complete_json(system_prompt(known), data_block("donor text", text),
+                                       Proposal),
                 timeout=LLM_SECONDS)
             return reply, True
         except (LLMUnavailable, asyncio.TimeoutError) as exc:
             log.info("draft LLM unavailable, falling back to plain parsing: %s", exc)
-        known = await self.categories.get(self.core)
         return await self._fallback(text, known), False
 
     async def _fallback(self, text: str, known: list) -> Proposal:
