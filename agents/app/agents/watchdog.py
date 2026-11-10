@@ -9,6 +9,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
+from . import graph
+
 log = logging.getLogger(__name__)
 
 # Thresholds in one place (spec 5.3).
@@ -25,6 +27,50 @@ class EventsSource(Protocol):
         ...
 
 
+# The feed caps at `limit` (1000 is its ceiling) newest-first, so a full page may be a truncated
+# window: the oldest events the scan needs could be missing, which weakens any rule that counts
+# people. Worth a warning, not an error.
+FEED_PAGE_LIMIT = 1000
+
+
+class CoreEventsSource:
+    """Events from the core API: GET /internal/donation-events?since=<iso>&limit=1000.
+
+    The endpoint already sends the Bearer header for any /internal path, so the token is not
+    handled here. Fails soft: a core outage means no events this scan, not a crashed job, and
+    the rules simply see nothing rather than acting on partial data.
+    """
+
+    def __init__(self, core=None, limit: int = FEED_PAGE_LIMIT) -> None:
+        from ..core import build_core
+
+        self.core = core or build_core()
+        self.limit = limit
+
+    async def since(self, iso: str) -> list[dict]:
+        from ..core import CoreError
+
+        try:
+            data = await self.core.get("/internal/donation-events", since=iso, limit=self.limit)
+        except CoreError as exc:
+            log.warning("donation-events unavailable, scanning nothing this run: %s", exc)
+            return []
+        if not isinstance(data, list):
+            log.warning("donation-events returned %s, expected a list", type(data).__name__)
+            return []
+        events = [e for e in data if isinstance(e, dict)]
+        if len(events) >= self.limit:
+            log.warning(
+                "donation-events returned the full %s-event page: older events in the window may "
+                "be missing, so donor counts can be low",
+                len(events),
+            )
+        return events
+
+    async def aclose(self) -> None:
+        await self.core.aclose()
+
+
 class FakeEventsSource:
     """Test/seeded events. Each event: donation_id, project_id, donor_id, status, amount_cents,
     captured_at, is_guest, donor_created_at, owner_donor_id."""
@@ -34,6 +80,9 @@ class FakeEventsSource:
 
     async def since(self, iso: str) -> list[dict]:
         return list(self.events)
+
+    async def aclose(self) -> None:
+        """Nothing to close. Present so the scheduler can close either source the same way."""
 
 
 def _parse(ts: Any) -> datetime | None:
@@ -158,6 +207,40 @@ def refund_spike(events: list[dict], now: datetime | None = None) -> list[dict]:
     return hits
 
 
+def _open_key(donors: list[int]) -> tuple[int, ...]:
+    return tuple(sorted(int(d) for d in donors))
+
+
+def _is_subset(candidate: tuple[int, ...], others: list[tuple[int, ...]]) -> bool:
+    """True when this donor set was already opened, or is contained in one that was."""
+    mine = set(candidate)
+    return any(mine <= set(other) for other in others)
+
+
+def _drop_shadowed_reciprocal(hits: list[dict]) -> list[dict]:
+    """Drop a reciprocal_backing hit that a larger collusion cluster already covers.
+
+    Same project: if the cluster names more donors than the pair rule found, the cluster is
+    the better case and the pair hit would only duplicate it. Otherwise both are kept.
+    """
+    clusters = [h for h in hits if h["rule"] == graph.RULE]
+    kept = []
+    for hit in hits:
+        if hit["rule"] == "reciprocal_backing":
+            mine = set(hit["evidence"].get("donor_ids") or [])
+            shadowed = any(
+                other["project_id"] == hit["project_id"]
+                and len(other["evidence"].get("donor_ids") or []) > len(mine)
+                and mine <= set(other["evidence"].get("donor_ids") or [])
+                for other in clusters)
+            if shadowed:
+                log.info("reciprocal_backing on project %s dropped: a larger cluster covers it",
+                         hit["project_id"])
+                continue
+        kept.append(hit)
+    return kept
+
+
 class WatchdogAgent:
     def __init__(self, mcp=None, source: EventsSource | None = None) -> None:
         from ..mcp_client import build_client
@@ -165,18 +248,43 @@ class WatchdogAgent:
         self.mcp = mcp or build_client()
         self.source = source or FakeEventsSource()
         self._last_iso: str | None = None
+        # Donor sets already opened (or already seen this process). The API also returns an
+        # existing open case for the same project+rule, so this is about not re-reporting the
+        # same people when the cluster moves to a different project.
+        self._seen_clusters: list[tuple[int, ...]] = []
 
     async def scan(self, now: datetime | None = None) -> list[dict]:
-        iso = self._last_iso or (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        moment = now or datetime.now(timezone.utc)
+        # The existing rules keep their own 1-day window; the graph needs the full window, so
+        # fetch from the earlier of the two and let each rule filter what it wants.
+        graph_iso = (moment - timedelta(days=graph.CONFIG["window_days"])).isoformat()
+        short_iso = (moment - timedelta(days=1)).isoformat()
+        iso = min(self._last_iso or graph_iso, graph_iso) if self._last_iso else graph_iso
         events = await self.source.since(iso)
         if not events:
             return []
+
+        # Rules: unchanged behaviour, same short window they always used.
+        recent = [e for e in events
+                  if (ts := _parse(e.get("captured_at"))) is not None
+                  and ts >= (moment - timedelta(days=1))]
         hits = (
-            new_payer_burst(events, now)
-            + reciprocal_backing(events)
-            + owner_donation(events)
-            + refund_spike(events, now)
+            new_payer_burst(recent, moment)
+            + reciprocal_backing(recent)
+            + owner_donation(recent)
+            + refund_spike(recent, moment)
         )
+
+        # Graph: the full window, appended after the rules.
+        clusters = graph.find_clusters(events, moment)
+        fresh = [c for c in clusters
+                 if not _is_subset(_open_key(c["donor_ids"]), self._seen_clusters)]
+        if fresh:
+            titles = await graph.project_titles(self.mcp,
+                                                [c["project_id"] for c in fresh])
+            hits = hits + graph.hits(fresh, titles)
+        hits = _drop_shadowed_reciprocal(hits)
+
         opened = []
         for hit in hits:
             answer = await self.mcp.call(
@@ -186,5 +294,7 @@ class WatchdogAgent:
                 evidence=hit["evidence"],
             )
             opened.append({"project_id": hit["project_id"], "rule": hit["rule"], "case": answer})
-        self._last_iso = (now or datetime.now(timezone.utc)).isoformat()
+            if hit["rule"] == graph.RULE:
+                self._seen_clusters.append(_open_key(hit["evidence"]["donor_ids"]))
+        self._last_iso = short_iso
         return opened

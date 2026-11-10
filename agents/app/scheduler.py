@@ -9,7 +9,7 @@ import logging
 
 from .agents.giving import GivingAgent
 from .agents.milestone import MilestoneAgent
-from .agents.watchdog import WatchdogAgent
+from .agents.watchdog import CoreEventsSource, FakeEventsSource, WatchdogAgent
 from .config import Settings, settings
 
 log = logging.getLogger(__name__)
@@ -35,12 +35,17 @@ async def run_giving_for_all() -> list[dict]:
     return results
 
 
-async def run_watchdog() -> list[dict]:
-    agent = WatchdogAgent()
+async def run_watchdog(cfg: Settings | None = None) -> list[dict]:
+    """Scan for abuse. The source follows FAKE_CORE: the real feed in a deployment, seeded
+    (empty) events under the fake, so a test or demo never reaches for the network."""
+    cfg = cfg or settings()
+    source = FakeEventsSource() if cfg.fake_core else CoreEventsSource()
+    agent = WatchdogAgent(source=source)
     try:
         return await agent.scan()
     finally:
         await agent.mcp.aclose()
+        await source.aclose()  # both sources have aclose; FakeEventsSource gains one below
 
 
 async def run_milestones() -> list[dict]:
