@@ -1,5 +1,5 @@
 import "server-only";
-import { formatDate, formatMoney, getImpactUpdates, getLeaderboard, getProject, getProjects } from "./api";
+import { formatDate, formatMoney, getImpactUpdates, getLeaderboard, getProject, getProjects, mapLimit } from "./api";
 import type { Money, Project } from "./types";
 
 // Impact hub: articles drafted automatically from verified platform data only (released
@@ -26,7 +26,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export async function getImpactHub() {
   const [projects, updates, lb] = await Promise.all([getProjects(), getImpactUpdates(), getLeaderboard()]);
   const backed = projects.filter((p) => p.backerCount > 0);
-  const detailed = (await Promise.all(backed.map((p) => getProject(p.id).catch(() => undefined)))).filter((p): p is Project => Boolean(p));
+  const detailed = (await mapLimit(backed, 8, (p) => getProject(p.id).catch(() => undefined))).filter((p): p is Project => Boolean(p));
   const released = detailed.flatMap((p) => (p.milestones ?? []).filter((m) => m.status === "released").map((m) => ({ p, m })));
   const currency = projects[0]?.goal.currency ?? "USD";
   const money = (a: number) => formatMoney({ amount: a, currency });
