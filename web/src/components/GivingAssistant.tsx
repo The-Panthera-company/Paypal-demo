@@ -1,5 +1,6 @@
 "use client";
 
+import { BundiIcon } from "./BundiIcon";
 import { doodleTile, doodleUrl } from "@/lib/doodles";
 import { Avatar } from "./Avatar";
 
@@ -112,11 +113,11 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          aria-label="Ask the giving assistant"
+          aria-label="Ask Bundi, the giving assistant"
           className="fixed bottom-24 right-4 z-30 flex min-h-12 min-w-12 items-center justify-center gap-2 bg-ink px-3 font-medium sm:px-5 text-white shadow-lg hover:bg-primary lg:bottom-8 lg:right-8"
         >
-          <Icon name="chat" size={20} className="text-cobalt-green" />
-          <span className="max-sm:hidden">Ask the giving assistant</span>
+          <span className="grid size-9 place-items-center bg-[#fffaf2] text-[#6b4a3a]"><BundiIcon size={30} /></span>
+          <span className="max-sm:hidden">Ask Bundi</span>
         </button>
       )}
 
