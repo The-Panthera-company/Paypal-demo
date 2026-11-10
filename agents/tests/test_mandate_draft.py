@@ -13,6 +13,8 @@ from app.agents.mandate_draft import (
     Proposal,
     clean_tag,
     match_category,
+    parse_amounts,
+    parse_categories,
     safe_weights,
 )
 from app.core import FakeCore
@@ -171,6 +173,59 @@ async def test_empty_text_makes_no_llm_call():
     assert a.llm.calls == []
 
 
+# --- rule-based fallback ---------------------------------------------------------------
+
+
+def test_parse_amounts_reads_the_reported_sentence():
+    text = 'Clean water, $10 a month, $3 per project'
+    assert parse_amounts(text) == {'monthly_budget_cents': 1000, 'per_project_max_cents': 300}
+
+
+@pytest.mark.parametrize('text,expected', [
+    ('20 dollars each month', {'monthly_budget_cents': 2000}),
+    ('monthly budget of 40', {'monthly_budget_cents': 4000}),
+    ('5 per project max', {'per_project_max_cents': 500}),
+    ('I like helping out', {}),
+    ('', {}),
+])
+def test_parse_amounts_variants(text, expected):
+    assert parse_amounts(text) == expected
+
+
+def test_parse_categories_is_case_insensitive():
+    cats = [{'id': 4, 'name': 'Water'}, {'id': 2, 'name': 'Education'}]
+    assert parse_categories('clean WATER please', cats) == [4]
+    assert parse_categories('no match here', cats) == []
+
+
+class DeadLLM(FakeLLM):
+    """Raises LLMUnavailable the way a missing DEEPSEEK_API_KEY does."""
+
+    async def complete_json(self, system, user, schema):
+        self.calls.append(('json', system, user))
+        raise LLMUnavailable('DEEPSEEK_API_KEY is not set')
+
+
+@pytest.mark.asyncio
+async def test_fallback_reads_amounts_when_the_llm_is_dead():
+    text = 'Clean water, $10 a month, $3 per project'
+    a = MandateDraftAgent(core=FakeCore(), llm=DeadLLM(),
+                          mcp=FakeMcpClient({'search_projects': []}))
+    out = await a.draft(text, Current())
+    assert out['used_llm'] is False
+    assert out['proposed']['monthly_budget_cents'] == 1000
+    assert out['proposed']['per_project_max_cents'] == 300
+    assert out['proposed']['categories'] == [4]
+
+
+@pytest.mark.asyncio
+async def test_fallback_still_raises_when_it_reads_nothing():
+    a = MandateDraftAgent(core=FakeCore(), llm=DeadLLM(),
+                          mcp=FakeMcpClient({'search_projects': []}))
+    with pytest.raises(LLMUnavailable):
+        await a.draft('I would like to help somehow', Current())
+
+
 # --- through the route -----------------------------------------------------------------
 
 
@@ -223,6 +278,38 @@ def test_route_returns_503_when_nothing_can_be_read(monkeypatch):
         mcp=FakeMcpClient({"search_projects": []})))
     with TestClient(main_module.app) as c:
         r = c.post("/agents/mandate/draft", json={"text": "hello", "current": {}})
+    main_module._hits.clear()
+    assert r.status_code == 503
+
+
+def test_route_returns_200_with_cents_when_the_llm_is_unavailable(monkeypatch):
+    """The reported bug, end to end: no API key, a readable sentence, a real 200."""
+    main_module._hits.clear()
+    monkeypatch.setattr(main_module.cfg, 'rate_limit_per_min', 1000, raising=False)
+    monkeypatch.setattr(main_module, 'MandateDraftAgent', lambda: MandateDraftAgent(
+        core=FakeCore(), llm=DeadLLM(),
+        mcp=FakeMcpClient({'search_projects': []})))
+    with TestClient(main_module.app) as c:
+        r = c.post('/agents/mandate/draft', json={
+            'text': 'Clean water, $10 a month, $3 per project',
+            'current': {},
+        })
+    main_module._hits.clear()
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body['used_llm'] is False
+    assert body['proposed']['monthly_budget_cents'] == 1000
+    assert body['proposed']['per_project_max_cents'] == 300
+    assert body['proposed']['categories'] == [4]
+
+
+def test_route_still_503s_when_the_text_yields_nothing(monkeypatch):
+    main_module._hits.clear()
+    monkeypatch.setattr(main_module, 'MandateDraftAgent', lambda: MandateDraftAgent(
+        core=FakeCore(), llm=DeadLLM(),
+        mcp=FakeMcpClient({'search_projects': []})))
+    with TestClient(main_module.app) as c:
+        r = c.post('/agents/mandate/draft', json={'text': 'help somehow', 'current': {}})
     main_module._hits.clear()
     assert r.status_code == 503
 

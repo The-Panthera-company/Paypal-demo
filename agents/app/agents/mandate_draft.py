@@ -147,6 +147,66 @@ def clean_tag(tag: object) -> str:
     return str(tag or "").strip().lower()[:MAX_TAG_LENGTH]
 
 
+# --- rule-based fallback -----------------------------------------------------------------
+
+# A currency amount: an optional dollar sign and a whole-dollar figure, with optional cents.
+# "$10", "10 dollars", "$3.50". Cents are ignored: the API takes whole cents.
+_AMOUNT = r"\$?[ \s]*([0-9]{1,7})(?:\.[0-9]{1,2})?"
+_MONTHLY = re.compile(
+    _AMOUNT + r"[ \s]*(?:dollars?|bucks?)?[\s]*(?:per|a|each|every)[\s]*(?:month|mo)\b"
+    r"|\bmonthly[\s]*(?:budget[\s]*)?(?:of[\s]*)?" + _AMOUNT,
+    re.IGNORECASE)
+_PER_PROJECT = re.compile(
+    _AMOUNT + r"[ \s]*(?:dollars?|bucks?)?[\s]*(?:per|a|each|every)[\s]*project\b"
+    r"|\bper[\s-]*project[\s]*(?:max(?:imum)?[\s]*)?(?:of[\s]*)?" + _AMOUNT,
+    re.IGNORECASE)
+_PERCENT = re.compile(r"([0-9]{1,3})[\s]*%")
+
+
+def _first_int(match):
+    """The first non-empty group that is a number."""
+    if match is None:
+        return None
+    for group in match.groups():
+        if group:
+            return int(group)
+    return None
+
+
+def parse_amounts(text: str) -> dict:
+    """Read amounts out of plain prose. No model involved, so it cannot fail."""
+    found = {}
+    monthly = _first_int(_MONTHLY.search(text))
+    if monthly:
+        found["monthly_budget_cents"] = monthly * 100
+    per_project = _first_int(_PER_PROJECT.search(text))
+    if per_project:
+        found["per_project_max_cents"] = per_project * 100
+    percent = _PERCENT.search(text)
+    if percent and "monthly_budget_cents" in found:
+        # "gifts over 10% wait for me" -> a threshold relative to the monthly budget.
+        found["approval_threshold_cents"] = found["monthly_budget_cents"] * int(percent.group(1)) // 100
+    return found
+
+
+def parse_categories(text: str, categories: list) -> list:
+    """Category names mentioned in the text, matched case-insensitively."""
+    if not text or not categories:
+        return []
+    lowered = text.lower()
+    words = set(slug(lowered).split("-"))
+    found = []
+    for category in categories:
+        name = str(category.get("name") or "")
+        if not name:
+            continue
+        if name.lower() in lowered or slug(name) in words:
+            value = category.get("id")
+            if value not in found:
+                found.append(value)
+    return found
+
+
 def safe_weights(values: dict) -> tuple[dict[str, float], list[tuple[str, float]]]:
     """Keep the overrides the API will accept; report the ones it would reject."""
     kept: dict[str, float] = {}
@@ -181,6 +241,11 @@ class MandateDraftAgent:
         return await self._merge(proposal, current, used_llm, bool(text))
 
     async def _propose(self, text: str) -> tuple[Proposal | None, bool]:
+        """The model first; plain parsing when it is unreachable or too slow.
+
+        The fallback is not decoration: with no API key the whole endpoint still has to read
+        "$10 a month, $3 per project", so it never returns None for non-empty text.
+        """
         if not text:
             return None, False
         try:
@@ -189,8 +254,25 @@ class MandateDraftAgent:
                 timeout=LLM_SECONDS)
             return reply, True
         except (LLMUnavailable, asyncio.TimeoutError) as exc:
-            log.info("draft LLM unavailable, keeping the form as it is: %s", exc)
-            return None, False
+            log.info("draft LLM unavailable, falling back to plain parsing: %s", exc)
+        known = await self.categories.get(self.core)
+        return await self._fallback(text, known), False
+
+    async def _fallback(self, text: str, known: list) -> Proposal:
+        """Read what plain prose allows: whole-dollar amounts and named categories."""
+        amounts = parse_amounts(text)
+        names = parse_categories(text, known)
+        categories: list = []
+        for name in names:
+            resolved = match_category(name, known)
+            if resolved is not None and resolved not in categories:
+                categories.append(resolved)
+        return Proposal(
+            monthly_budget_cents=amounts.get("monthly_budget_cents"),
+            per_project_max_cents=amounts.get("per_project_max_cents"),
+            approval_threshold_cents=amounts.get("approval_threshold_cents"),
+            categories=categories,
+        )
 
     async def _merge(self, proposal: Proposal | None, current: Current, used_llm: bool,
                      had_text: bool) -> dict:
@@ -228,7 +310,8 @@ class MandateDraftAgent:
                         + str(round(using, 4)))
                 warnings.append(text)
 
-        # 503 is only for "read nothing at all". An unchanged form is still an answer.
+        # 503 means "nothing could read this text": no model answer and no rule-based read.
+        # A model that answered but proposed no change is still a successful read.
         if had_text and not used_llm and not proposed:
             raise LLMUnavailable("the text could not be read and nothing was proposed")
 
