@@ -19,8 +19,9 @@ from pydantic import BaseModel, Field
 
 from .agents.discovery import DiscoveryAgent
 from .agents.giving import GivingAgent
+from .agents.mandate_draft import DraftIn, MandateDraftAgent
 from .config import settings
-from .llm import LLM, build_llm
+from .llm import LLM, LLMUnavailable, build_llm
 from .mcp_client import FakeMcpClient, McpClient, build_client
 
 logging.basicConfig(level=logging.INFO)
@@ -180,6 +181,24 @@ async def discovery_chat(body: ChatIn, request: Request) -> dict:
 @app.post("/agents/chat")
 async def chat_alias(body: ChatIn, request: Request) -> dict:
     return await _chat(body, request)
+
+
+@app.post("/agents/mandate/draft")
+async def mandate_draft(body: DraftIn, request: Request) -> dict:
+    """Turn a donor's own words into a draft of their giving rules.
+
+    Read-only: nothing here creates or changes a mandate. 429 is the shared rate limit;
+    503 means the text could not be read and nothing was proposed, so the web tells the
+    donor to use the form instead.
+    """
+    _rate_limit(request)
+    agent = MandateDraftAgent()
+    try:
+        return await agent.draft(body.text, body.current)
+    except LLMUnavailable as exc:
+        raise HTTPException(status_code=503, detail="cannot read text right now") from exc
+    finally:
+        await agent.aclose()
 
 
 @app.post("/agents/giving/run")
