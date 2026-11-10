@@ -224,14 +224,26 @@ export function daysLeft(p: Project) {
   return Math.max(0, Math.ceil((new Date(p.endsAt).getTime() - Date.now()) / 86_400_000));
 }
 
+/** Runs fn over items at most `limit` at a time: one request per project at once can exhaust the API's database pool. */
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
 /** Milestone evidence. The API calls these "stories" (written when a tranche is released). */
 export async function getImpactUpdates(projectId?: string): Promise<ImpactUpdate[]> {
   if (!API_URL) return impactUpdates.filter((u) => !projectId || u.projectId === projectId);
   // Only projects with backers can have released a milestone, so skip the rest (one call per project)
   const ids = projectId ? [projectId] : (await getProjects()).filter((p) => p.backerCount > 0).map((p) => p.id);
-  const lists = await Promise.all(
-    ids.map((id) => getBuilt<ApiStory[]>(`/projects/${id}/stories`, []).catch(() => [] as ApiStory[])),
-  );
+  const lists = await mapLimit(ids, 8, (id) => getBuilt<ApiStory[]>(`/projects/${id}/stories`, []).catch(() => [] as ApiStory[]));
   return lists
     .flat()
     .map((s) => ({
