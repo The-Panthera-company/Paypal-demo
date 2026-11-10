@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageTitle } from "@/components/PageTitle";
-import { CategoryArt } from "@/components/ui";
+import { DEMO_PHOTOS, CategoryArt } from "@/components/ui";
 import { formatDate, formatMoney } from "@/lib/api";
 import { getImpactHub, KIND_LABEL } from "@/lib/impact";
 
@@ -26,7 +26,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
           <h1 className="mt-3 text-4xl leading-tight lg:text-5xl">{a.title}</h1>
           <p className="mt-4 text-xl leading-9 text-ink">{a.dek}</p>
           <div className="my-8 aspect-[16/9]">
-            <CategoryArt id={a.project?.categoryId ?? "people"} seed={a.project?.id ?? a.slug} label="Photo placeholder until the project uploads its own" />
+            <CategoryArt id={a.project?.categoryId ?? "people"} photo={DEMO_PHOTOS[a.project?.title ?? ""]} seed={a.project?.id ?? a.slug} label="Photo placeholder until the project uploads its own" />
           </div>
           <div className="space-y-5 text-lg leading-9">
             {a.body.map((p, i) => (

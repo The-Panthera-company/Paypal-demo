@@ -27,10 +27,36 @@ export function photoFor(categoryId: string, seed = "") {
 }
 
 /** Give each project its own photo: within a category, no two projects share one until the list runs out */
-export function assignPhotos(projects: { id: string; categoryId: string }[]): Record<string, string> {
+// Demo-video branch: a fitting photo per project, by title (files in public/demo)
+const d = (f: string) => `/demo/${f}.jpg`;
+export const DEMO_PHOTOS: Record<string, string> = {
+  "Bhote Koshi Clean Water Filters": d("water-hands"),
+  "Tatopani Temporary Footbridge": d("bridge-nepal"),
+  "Sindhupalchok Mobile Flood Clinic": d("clinic-nepal-2"),
+  "Nyando Flood Medical Outreach": d("flood-street"),
+  "Back to School after the Nyando Floods": d("classroom"),
+  "Lara Earthquake First Aid Posts": d("first-aid"),
+  "White Nile Emergency Shelter Kits": d("shelter-rain"),
+  "Cox's Bazar Flood Water Points": d("water-tap-kids"),
+  "Nyando Riverbank Replanting": d("seedlings"),
+  "Village Borehole Repair": d("hand-pump-sudan"),
+  "School Rainwater Tanks": d("water-tap-bucket"),
+  "Idlib Mobile Maternity Unit": d("camp-aerial"),
+  "Lesbos Refugee Winter Kits": d("winter-blanket"),
+  "Faith Community Food Pantry, Detroit": d("food-bags"),
+  "Lanet Library": d("reading-group"),
+  "New Reading Corner": d("reading-tutor"),
+  "Mobile Eye Clinic": d("clinic-nepal"),
+};
+
+export function assignPhotos(projects: { id: string; categoryId: string; title?: string }[]): Record<string, string> {
   const used: Record<string, Set<number>> = {};
   const out: Record<string, string> = {};
   for (const p of projects) {
+    if (p.title && DEMO_PHOTOS[p.title]) {
+      out[p.id] = DEMO_PHOTOS[p.title];
+      continue;
+    }
     const list = PHOTOS[p.categoryId] ?? PHOTOS.people;
     const seen = (used[p.categoryId] ??= new Set());
     if (seen.size >= list.length) seen.clear();

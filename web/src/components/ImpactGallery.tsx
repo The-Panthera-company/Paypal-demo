@@ -1,5 +1,6 @@
 "use client";
 
+import { DEMO_PHOTOS } from "./ui";
 import { useRef, useState } from "react";
 import type { ImpactUpdate, Project } from "@/lib/types";
 import { CategoryArt } from "./ui";
@@ -25,7 +26,7 @@ export function ImpactGallery({ items, dateLabels }: { items: Item[]; dateLabels
             <button type="button" onClick={() => open(u)} className="group block w-full text-left">
               <div className="relative aspect-[4/3] overflow-hidden">
                 <div className="size-full transition-transform duration-300 group-hover:scale-110">
-                  <CategoryArt id={u.project?.categoryId ?? "education"} seed={u.id} label={u.title} />
+                  <CategoryArt id={u.project?.categoryId ?? "education"} seed={u.id} photo={DEMO_PHOTOS[u.project?.title ?? ""]} label={u.title} />
                 </div>
                 <span className="absolute left-4 top-4 bg-white px-3 text-xs font-bold uppercase leading-7 tracking-[2px] text-ink">
                   {u.kind === "receipt" ? "Receipt" : "Photo"}
@@ -49,7 +50,7 @@ export function ImpactGallery({ items, dateLabels }: { items: Item[]; dateLabels
         {active && (
           <div className="grid md:grid-cols-[1.4fr_1fr]">
             <div className="aspect-[4/3]">
-              <CategoryArt id={active.project?.categoryId ?? "education"} seed={active.id} label={active.title} />
+              <CategoryArt id={active.project?.categoryId ?? "education"} seed={active.id} photo={DEMO_PHOTOS[active.project?.title ?? ""]} label={active.title} />
             </div>
             <div className="space-y-3 p-6">
               <p className="tag">{active.kind}</p>

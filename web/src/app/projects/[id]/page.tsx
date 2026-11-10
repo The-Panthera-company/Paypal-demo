@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { PageTitle } from "@/components/PageTitle";
-import { CategoryArt, ProgressBar, StatBox } from "@/components/ui";
+import { DEMO_PHOTOS, CategoryArt, ProgressBar, StatBox } from "@/components/ui";
 import Link from "next/link";
 import { DonatePanel } from "@/components/DonatePanel";
 import { MilestoneTimeline } from "@/components/MilestoneTimeline";
@@ -215,7 +215,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <section className="bg-surface-alt pb-20 pt-12 lg:pb-28 lg:pt-[100px]">
         <div className="container-k grid gap-10 lg:grid-cols-2">
           <div className="aspect-[4/3]">
-            <CategoryArt id={p.categoryId} seed={p.id} label={`Photo for ${p.title}`} />
+            <CategoryArt id={p.categoryId} seed={p.id} photo={DEMO_PHOTOS[p.title]} label={`Photo for ${p.title}`} />
           </div>
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink">

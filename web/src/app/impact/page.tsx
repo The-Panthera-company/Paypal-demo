@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageTitle } from "@/components/PageTitle";
 import { RollingNumber } from "@/components/RollingNumber";
-import { CategoryArt, Eyebrow } from "@/components/ui";
+import { DEMO_PHOTOS, CategoryArt, Eyebrow } from "@/components/ui";
 import { formatDate, formatMoney } from "@/lib/api";
 import { getGlobePins } from "@/lib/globe";
 import { getImpactHub, KIND_LABEL, type Article } from "@/lib/impact";
@@ -15,7 +15,7 @@ function ArticleCard({ a, big = false }: { a: Article; big?: boolean }) {
     <article className={`group relative flex flex-col overflow-hidden bg-white shadow-[0_0_30px_rgba(0,0,0,0.05)] ${big ? "lg:flex-row" : ""}`}>
       <div className={`relative overflow-hidden ${big ? "aspect-[4/3] lg:aspect-auto lg:w-3/5" : "aspect-[16/10]"}`}>
         <div className="size-full transition-transform duration-700 group-hover:scale-105">
-          <CategoryArt id={a.project?.categoryId ?? "people"} seed={a.project?.id ?? a.slug} label={a.title} />
+          <CategoryArt id={a.project?.categoryId ?? "people"} photo={DEMO_PHOTOS[a.project?.title ?? ""]} seed={a.project?.id ?? a.slug} label={a.title} />
         </div>
         <span className="absolute left-0 top-4 bg-accent py-1 pl-4 pr-6 text-[11px] font-bold uppercase tracking-[2px] text-ink [clip-path:polygon(0_0,100%_0,88%_100%,0_100%)]">
           {KIND_LABEL[a.kind]}
