@@ -15,6 +15,11 @@ EXPECTED_MUTATING = {
     "open_watchdog_case",
     "request_milestone_payout",
     "log_decision",
+    # Procurement: recording a run is inert, but proposing commits a price and paying
+    # moves money. A DRY_RUN that let either through would be worse than no guard.
+    "record_procurement_run",
+    "propose_procurement",
+    "pay_procurement",
 }
 
 
@@ -24,7 +29,7 @@ def test_dry_run_is_true_by_default(monkeypatch):
     assert Settings().dry_run is True
 
 
-def test_mutating_tools_set_is_exactly_the_five():
+def test_mutating_tools_set_is_exactly_the_expected():
     """A new write tool must be added here and to MUTATING_TOOLS together."""
     assert MUTATING_TOOLS == EXPECTED_MUTATING
 

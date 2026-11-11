@@ -412,10 +412,12 @@ MILESTONES = {
 EVIDENCE_URL = "https://files.example.com/seed/milestone-{id}-{kind}.jpg"
 SEED_PAYEE = "seed-payee@example.com"
 
-# Demo suppliers. For a real sandbox payout, set SEED_SUPPLIER_EMAILS to three of your PayPal
-# sandbox business accounts (Developer Dashboard -> Sandbox -> Accounts), comma-separated, in this
-# order; they replace the placeholder addresses below. Suppliers are matched by name, so changing
-# an email later updates the supplier instead of adding another.
+# Demo suppliers, each with a unit price and a reliability score for the Procurement Agent to
+# compare. For a real sandbox payout, set SEED_SUPPLIER_EMAILS to your PayPal sandbox business
+# accounts (Developer Dashboard -> Sandbox -> Accounts), comma-separated, in this order; they
+# replace the placeholder addresses below (give four to cover Nakuru Books Sandbox, the last).
+# Suppliers are matched by name, so changing an email later updates the supplier instead of
+# adding another.
 SUPPLIERS = [
     {
         "name": "Nakuru Books & Stationery",
@@ -423,6 +425,8 @@ SUPPLIERS = [
         "categories": ["Education"],
         "tags": ["books", "literacy", "schools"],
         "region": "Nakuru",
+        "unit_amount_cents": 90,
+        "reliability": 82,
     },
     {
         "name": "Kaptembwo School Furniture",
@@ -430,6 +434,8 @@ SUPPLIERS = [
         "categories": ["Education"],
         "tags": ["furniture", "schools"],
         "region": "Nakuru",
+        "unit_amount_cents": 4500,
+        "reliability": 76,
     },
     {
         "name": "Kisumu Science Supplies",
@@ -437,6 +443,19 @@ SUPPLIERS = [
         "categories": ["Education"],
         "tags": ["stem", "girls", "books"],
         "region": "Kisumu",
+        "unit_amount_cents": 110,
+        "reliability": 88,
+    },
+    {
+        # The demo purchase's best fit: 40 reading sets at 75c is the whole 30 USD tranche. A PayPal
+        # sandbox-style address (example.com is reserved, so it can't be a real business's).
+        "name": "Nakuru Books Sandbox",
+        "paypal_email": "sb-nakurubooks@business.example.com",
+        "categories": ["Education"],
+        "tags": ["books", "literacy"],
+        "region": "Nakuru",
+        "unit_amount_cents": 75,
+        "reliability": 95,
     },
 ]
 
@@ -566,6 +585,8 @@ def main() -> None:
                 supplier.categories = data["categories"]
                 supplier.tags = data["tags"]
                 supplier.region = data["region"]
+                supplier.unit_amount_cents = data["unit_amount_cents"]
+                supplier.reliability = data["reliability"]
                 supplier.active = True
         db.flush()
 

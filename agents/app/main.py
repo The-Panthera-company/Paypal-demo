@@ -19,8 +19,10 @@ from pydantic import BaseModel, Field
 
 from .agents.discovery import DiscoveryAgent
 from .agents.giving import GivingAgent
+from .agents.mandate_draft import DraftIn, MandateDraftAgent
+from .agents.procurement import ProcurementAgent
 from .config import settings
-from .llm import LLM, build_llm
+from .llm import LLM, LLMUnavailable, build_llm
 from .mcp_client import FakeMcpClient, McpClient, build_client
 
 logging.basicConfig(level=logging.INFO)
@@ -154,6 +156,12 @@ class GivingIn(BaseModel):
     force: bool = False
 
 
+class ProcurementIn(BaseModel):
+    # None runs every open request; the agent itself abstains when there is no quote.
+    procurementId: int | None = None
+    force: bool = False
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "fake_core": cfg.fake_core, "dry_run": cfg.dry_run,
@@ -182,6 +190,24 @@ async def chat_alias(body: ChatIn, request: Request) -> dict:
     return await _chat(body, request)
 
 
+@app.post("/agents/mandate/draft")
+async def mandate_draft(body: DraftIn, request: Request) -> dict:
+    """Turn a donor's own words into a draft of their giving rules.
+
+    Read-only: nothing here creates or changes a mandate. 429 is the shared rate limit;
+    503 means the text could not be read and nothing was proposed, so the web tells the
+    donor to use the form instead.
+    """
+    _rate_limit(request)
+    agent = MandateDraftAgent()
+    try:
+        return await agent.draft(body.text, body.current)
+    except LLMUnavailable as exc:
+        raise HTTPException(status_code=503, detail="cannot read text right now") from exc
+    finally:
+        await agent.aclose()
+
+
 @app.post("/agents/giving/run")
 async def giving_run(body: GivingIn, authorization: str | None = Header(default=None)) -> dict:
     token = authorization.removeprefix("Bearer ").strip() if authorization else None
@@ -191,5 +217,32 @@ async def giving_run(body: GivingIn, authorization: str | None = Header(default=
         return await agent.run(body.mandateId, force=body.force)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    finally:
+        await agent.mcp.aclose()
+
+@app.post("/agents/procurement/run")
+async def procurement_run(body: ProcurementIn,
+                         authorization: str | None = Header(default=None)) -> dict:
+    """Propose and pay open purchase requests. Same internal token as giving/run.
+
+    procurementId names one request; omit it to consider them all. The agent abstains,
+    rather than guesses, when a supplier has no quote, and stops at the automatic limit
+    for an admin to approve.
+    """
+    token = authorization.removeprefix("Bearer ").strip() if authorization else None
+    _require_token(token)
+    agent = ProcurementAgent()
+    try:
+        return await agent.run(body.procurementId)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # An unexpected failure is ours, not the caller's: answer 502 and name the type so
+        # the trace shows where to look, without echoing a payload that may hold a contact.
+        log.exception("procurement run failed")
+        raise HTTPException(
+            status_code=502,
+            detail="procurement run failed: " + type(exc).__name__,
+        ) from exc
     finally:
         await agent.mcp.aclose()

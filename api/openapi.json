@@ -6970,7 +6970,7 @@
           "internal (agents)"
         ],
         "summary": "Procurement Suppliers",
-        "description": "Active suppliers whose categories or tags and service region match the project. Only the id,\nname, categories, tags and region are returned: the agent never needs the PayPal email.",
+        "description": "Active suppliers whose categories or tags and service region match the project, with each\none's unit price and reliability (null when unknown) to compare. The PayPal email is never\nreturned: the agent doesn't need it.",
         "operationId": "procurement_suppliers",
         "security": [
           {
@@ -7010,11 +7010,13 @@
                       "id": 1,
                       "name": "Nakuru Books & Stationery",
                       "region": "Nakuru",
+                      "reliability": 90,
                       "tags": [
                         "books",
                         "literacy",
                         "schools"
-                      ]
+                      ],
+                      "unit_amount_cents": 75
                     }
                   ]
                 },
@@ -7026,11 +7028,13 @@
                     "id": 1,
                     "name": "Nakuru Books & Stationery",
                     "region": "Nakuru",
+                    "reliability": 90,
                     "tags": [
                       "books",
                       "literacy",
                       "schools"
-                    ]
+                    ],
+                    "unit_amount_cents": 75
                   }
                 ]
               }
@@ -8380,19 +8384,32 @@
         "properties": {
           "project_id": {
             "type": "integer",
-            "description": "Project the agent chose",
+            "description": "Giving Agent: the project it chose. Procurement Agent: the project the purchase is for (null only if the run names no purchase)",
+            "nullable": true,
             "example": 1
           },
           "title": {
             "type": "string",
-            "description": "Project title, joined for display",
+            "description": "Project title; for a purchase, the supplier and the project",
             "nullable": true,
             "example": "Lanet Library"
           },
           "amount_cents": {
             "type": "integer",
-            "description": "What the agent asked the rules engine to give, in cents",
+            "description": "What the agent asked for: the gift, or the supplier's price, in cents",
             "example": 500
+          },
+          "supplier_id": {
+            "type": "integer",
+            "description": "Procurement Agent runs: the supplier it chose",
+            "nullable": true,
+            "example": 1
+          },
+          "supplier_name": {
+            "type": "string",
+            "description": "Procurement Agent runs: that supplier's name",
+            "nullable": true,
+            "example": "supplier name"
           }
         },
         "type": "object",
@@ -13914,6 +13931,20 @@
             "description": "Supplier's service area",
             "nullable": true,
             "example": "Nakuru"
+          },
+          "unit_amount_cents": {
+            "type": "integer",
+            "description": "The supplier's usual price for one unit, in cents; null when unknown",
+            "nullable": true,
+            "example": 75
+          },
+          "reliability": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "description": "How reliably it has delivered, 0 to 100; null when unknown",
+            "nullable": true,
+            "example": 90
           }
         },
         "type": "object",
@@ -13931,11 +13962,13 @@
           "id": 1,
           "name": "Nakuru Books & Stationery",
           "region": "Nakuru",
+          "reliability": 90,
           "tags": [
             "books",
             "literacy",
             "schools"
-          ]
+          ],
+          "unit_amount_cents": 75
         },
         "title": "SupplierOut",
         "description": "An eligible supplier: id, name, categories, tags and region. No PayPal email."

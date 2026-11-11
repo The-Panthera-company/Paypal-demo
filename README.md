@@ -6,8 +6,53 @@ The group decides where the money goes; AI agents protect it; rules keep it fair
 |---|---|---|
 | `web/` | Next.js website: donor app, project pages, admin console | Person 2 |
 | `api/` | Python (FastAPI) core API: PayPal, ledger, matching | Person 1 |
-| `agents/` | AI agents, seed data, Elastic | Person 3 |
+| `agents/` | AI agents (DeepSeek) and the MCP client | Person 3 |
 | `docs/` | Design docs, [team schedule](docs/TEAM_SCHEDULE.md), [UI ↔ backend guide](docs/UI_BACKEND_GUIDE.md) | All |
+
+## Try it (live demo)
+
+| | |
+|---|---|
+| **Website** | https://giving-web.onrender.com |
+| **What the agents did** (live trace and activity) | https://giving-web.onrender.com/agents |
+| **API docs** (try any route) | https://giving-api.onrender.com/docs |
+| **A real purchase receipt** (paid by the Procurement Agent through PayPal Payouts) | https://giving-api.onrender.com/procurements/1/receipt |
+
+The servers are on Render's free plan and sleep when idle: **the first page can take up to a minute to load**. After that it is fast.
+
+All payments are **PayPal sandbox**: no real money moves. To pay, use a sandbox buyer account in the PayPal window:
+
+- Email: `<sandbox buyer email>`
+- Password: `<sandbox buyer password>`
+
+Things to try:
+
+1. **Give $5 to a project** and watch its projected match: before you pay, the page shows what your gift adds to the matching pool. A small gift to a project with few backers adds the most.
+2. **Ask the assistant** on the projects page, e.g. *"clean water projects for children, nothing faith-based"*.
+3. **Set up a Giving Agent in plain words** on `/mandate`, e.g. *"About $20 a month, mostly water and health, at most $5 per project"*. The AI drafts the rules; nothing is saved until you approve.
+4. **Open `/agents`** to see each agent run step by step: what it considered, what it chose, what it skipped and why.
+5. **Open the leaderboard** to see how the matching pool is shared: people count, not just dollars.
+
+## Tools we used
+
+**AI model: DeepSeek V4 Flash** (`deepseek-v4-flash`, through DeepSeek's API). Every call is in [`agents/app/llm.py`](agents/app/llm.py). The model reads and writes text; **rules in code decide every gift, price and payout**, and the core API checks them again before any money moves. Every model reply is validated against a schema, with a rule-based fallback if the model fails.
+
+| Agent | What the model does | What rules decide |
+|---|---|---|
+| **Discovery assistant** | Turns a donor's question into search filters, and explains the results | Which projects match |
+| **Mandate drafting** | Turns a donor's own words into draft giving rules | Limits from `GET /mandates/constraints`; the donor approves before saving |
+| **Giving Agent** | Writes the donor's report on each run | Scores, choices, amounts; the API re-checks the mandate on every gift |
+| **Milestone Agent** | Reads receipt text: total, supplier, date | The four release checks and the auto-release limit |
+| **Procurement Agent** | No model | Supplier eligibility, price (unit price × quantity) and reliability; admin approval above $50 |
+| **Watchdog** | No model | Collusion rings found from the donation graph; a person confirms or clears |
+
+Project text, documents and receipts are passed to the model as data, never as instructions.
+
+**PayPal:** Checkout (JS SDK, Orders API) for donations, Subscriptions for monthly Giving Agent budgets, Payouts for milestone tranches and supplier purchases, Refunds, and webhooks to keep every record in step. All in sandbox.
+
+**MCP:** the agents reach the core API only through our MCP server ([`mcp-server/`](mcp-server/README.md)), so an agent can never do more than the API allows.
+
+**Built with:** Python (FastAPI, SQLAlchemy, Postgres) for the API and agents, Next.js for the website, Render for hosting, and APIMatic for the API portal and SDKs.
 
 ## Run the website on your computer
 

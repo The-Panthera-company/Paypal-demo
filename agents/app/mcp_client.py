@@ -25,6 +25,10 @@ MUTATING_TOOLS = {
     "open_watchdog_case",
     "request_milestone_payout",
     "log_decision",
+    # A procurement proposal and its payment: both must be blocked by DRY_RUN.
+    "record_procurement_run",
+    "propose_procurement",
+    "pay_procurement",
 }
 
 # Tools that always answer with a list. The decision is made here, by tool name, never by
@@ -33,6 +37,10 @@ MUTATING_TOOLS = {
 LIST_TOOLS = {
     "search_projects",
     "list_active_mandates",
+    # The procurement lists are lists too: a single open request or supplier comes back as
+    # one dict, and without this entry the agent iterates the dict's keys instead.
+    "list_procurement_requests",
+    "list_procurement_suppliers",
 }
 
 WAKE_TIMEOUT_SECONDS = 120
@@ -66,6 +74,26 @@ class FakeMcpClient:
             "open_watchdog_case": {"id": 1, "status": "open"},
             "request_milestone_payout": {"status": "held"},
             "log_decision": {"id": 1},
+            # Procurement: empty by default, so a test or demo sees "nothing to buy" rather
+            # than an invented purchase. The two write tools answer ProcurementOut-shaped
+            # objects so a caller that reads status/id gets the real shape, not {}.
+            "list_procurement_requests": [],
+            "list_procurement_suppliers": [],
+            "record_procurement_run": {"id": 1},
+            "propose_procurement": {
+                "id": args.get("procurement_id"), "project_id": None, "milestone_id": None,
+                "description": "", "quantity": 1, "max_amount_cents": 0, "currency": "USD",
+                "status": "proposed", "supplier_id": args.get("supplier_id"),
+                "amount_cents": args.get("amount_cents"),
+                "line_items": args.get("line_items") or [],
+                "rationale": args.get("rationale"), "admin_approved": False,
+            },
+            "pay_procurement": {
+                "id": args.get("procurement_id"), "project_id": None, "milestone_id": None,
+                "description": "", "quantity": 1, "max_amount_cents": 0, "currency": "USD",
+                "status": "paid", "supplier_id": None, "amount_cents": None,
+                "line_items": [], "rationale": None, "admin_approved": False,
+            },
         }
         return _coerce_shape(tool, defaults.get(tool, {}))
 

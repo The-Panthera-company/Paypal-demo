@@ -39,6 +39,7 @@ cd agents
 |---|---|---|
 | `GET /health` | none | liveness; shows `fake_core`, `dry_run`, model |
 | `POST /agents/discovery/chat` | none (rate limited) | discovery chat; `/agents/chat` is an alias |
+| `POST /agents/mandate/draft` | none (rate limited) | natural-language mandate draft; never writes |
 | `POST /agents/giving/run` | `Authorization: Bearer $INTERNAL_TOKEN` | run one mandate; body `{"mandateId": 1, "force": false}` |
 
 ### Chat contract
@@ -59,6 +60,58 @@ The web app (`web/src/components/GivingAssistant.tsx`) sends `{"message": "..."}
 `filters` values are always strings (the web renders `Object.values(filters)` as chips).
 `reply` and `projectIds` mirror the spec-9.1 shape; the web ignores them. `projects` and `history`
 are accepted in the request and ignored.
+
+### Mandate draft contract
+
+The web (`web/src/components/MandateDraft.tsx`) turns spoken or typed words into a draft of the
+donor's rules. Request:
+
+```json
+{
+  "text": "fifty a month, skip anything religious",
+  "current": {
+    "monthly_budget_cents": 4000,
+    "per_project_max_cents": 1000,
+    "approval_threshold_cents": 500,
+    "categories": [2],
+    "excluded_tags": []
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "proposed": {"monthly_budget_cents": 5000, "excluded_tags": ["faith-based"]},
+  "warnings": ["couldn't verify tag faith-based"],
+  "rejected": [],
+  "used_llm": true
+}
+```
+
+`proposed` carries only the fields the draft would change; anything absent stays as the donor had
+it. `warnings` and `rejected` are always lists of plain strings. Nothing here creates a mandate:
+the database row is written by the API after the donor confirms.
+
+Status codes: **429** from the shared rate limit, **503** only when the text could not be read
+*and* nothing was proposed, **422** for text over 1000 characters.
+
+Rules the endpoint enforces:
+
+- **Category ids come back in whatever domain they arrived.** The web sends API category ids when
+  it talks to a real API and slug strings (`"education"`) on mock data. Existing values are
+  returned untouched; `GET /categories` is used only to turn a newly named category into an id.
+  A category that cannot be matched goes into `rejected`, never into a guess.
+- **Tags are never dropped silently.** There is no public tag endpoint, so a named tag is checked
+  against the tags visible on projects. An unseen tag is still kept, with
+  `couldn't verify tag <name>` in `warnings`. A failed lookup flags every new tag rather than
+  trusting them.
+- **Weight overrides are clamped to what the API accepts** (at most 20 from each default, never
+  below 0) and the clamp is reported in `warnings`.
+- **Time budget:** 3 s for the catalogue lookup, 12 s for the LLM, inside the web's 20 s abort.
+  Categories are cached in memory for 10 minutes. A lookup failure skips the lookup, it never
+  fails the request.
 
 ## Scripts
 
@@ -104,6 +157,43 @@ All from env (see `.env.example`):
 Off unless `SCHEDULER_ENABLED=true`. Jobs: giving run for every active mandate, watchdog scan,
 milestone checks. Intervals: `GIVING_INTERVAL_HOURS`, `WATCHDOG_INTERVAL_SECONDS`,
 `MILESTONE_INTERVAL_SECONDS`.
+
+### Procurement run contract
+
+`POST /agents/procurement/run` proposes and pays open purchase requests. Same internal token as
+`/agents/giving/run`. Body:
+
+```json
+{"procurementId": 12}
+```
+
+`procurementId` is optional: omit it to consider every open request. Response:
+
+```json
+{
+  "runs": [
+    {"procurement_id": 12, "proposed": true, "supplier_id": 3,
+     "supplier_name": "Nakuru Books & Stationery", "amount_cents": 3000,
+     "status": "paid", "payment": {"...": "what the MCP pay call returned"}}
+  ],
+  "abstained": [
+    {"procurement_id": 13, "proposed": false, "reason": "no quote for any supplier"}
+  ]
+}
+```
+
+Every considered request lands in exactly one of `runs` or `abstained`; nothing is dropped
+silently. `status` is `paid`, or `awaiting_approval` when the amount is over the automatic limit.
+
+**Quote-source contract.** The agent reads its quote from the supplier row returned by
+`list_procurement_suppliers`. Each supplier must carry:
+
+- `unit_amount_cents` — integer cents per unit, never a float or a bool
+- `reliability` — a number in `0..1`
+
+Both are required. A supplier missing either field has **no quote**, and the agent abstains for
+that request rather than inventing a price. Person 1 needs to add both fields to
+`list_procurement_suppliers`; until then the real agent abstains on every request.
 
 ## Blocked on Person 1
 

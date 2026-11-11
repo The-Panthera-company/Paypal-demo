@@ -1,6 +1,7 @@
 """APScheduler wiring. Off unless SCHEDULER_ENABLED=true.
 
-Jobs: Giving run for every active mandate (monthly), Watchdog scan, Milestone checks.
+Jobs: Giving run for every active mandate (monthly), Watchdog scan, Milestone checks,
+Procurement proposals for open purchase requests.
 Nothing here starts on import; main.py only starts it when the flag is set.
 """
 from __future__ import annotations
@@ -9,7 +10,8 @@ import logging
 
 from .agents.giving import GivingAgent
 from .agents.milestone import MilestoneAgent
-from .agents.watchdog import WatchdogAgent
+from .agents.procurement import ProcurementAgent
+from .agents.watchdog import CoreEventsSource, FakeEventsSource, WatchdogAgent
 from .config import Settings, settings
 
 log = logging.getLogger(__name__)
@@ -35,18 +37,36 @@ async def run_giving_for_all() -> list[dict]:
     return results
 
 
-async def run_watchdog() -> list[dict]:
-    agent = WatchdogAgent()
+async def run_watchdog(cfg: Settings | None = None) -> list[dict]:
+    """Scan for abuse. The source follows FAKE_CORE: the real feed in a deployment, seeded
+    (empty) events under the fake, so a test or demo never reaches for the network."""
+    cfg = cfg or settings()
+    source = FakeEventsSource() if cfg.fake_core else CoreEventsSource()
+    agent = WatchdogAgent(source=source)
     try:
         return await agent.scan()
     finally:
         await agent.mcp.aclose()
+        await source.aclose()  # both sources have aclose; FakeEventsSource gains one below
 
 
 async def run_milestones() -> list[dict]:
     agent = MilestoneAgent()
     try:
         return await agent.scan()
+    finally:
+        await agent.mcp.aclose()
+
+
+async def run_procurement() -> dict:
+    """Propose (and pay, under the limit) every open purchase request.
+
+    The agent abstains on its own when a supplier has no quote, so this job is safe to run
+    before Person 1 adds the quote fields: it lists, finds nothing it can price, and stops.
+    """
+    agent = ProcurementAgent()
+    try:
+        return await agent.run()
     finally:
         await agent.mcp.aclose()
 
@@ -77,6 +97,13 @@ def build_scheduler(cfg: Settings | None = None):
         id="milestones",
         replace_existing=True,
     )
+    scheduler.add_job(
+        run_procurement,
+        "interval",
+        seconds=cfg.procurement_interval_seconds,
+        id="procurement",
+        replace_existing=True,
+    )
     return scheduler
 
 
@@ -87,7 +114,7 @@ def start_if_enabled(cfg: Settings | None = None):
         return None
     scheduler = build_scheduler(cfg)
     scheduler.start()
-    log.info("scheduler started: giving=%sh watchdog=%ss milestones=%ss",
+    log.info("scheduler started: giving=%sh watchdog=%ss milestones=%ss procurement=%ss",
              cfg.giving_interval_hours, cfg.watchdog_interval_seconds,
-             cfg.milestone_interval_seconds)
+             cfg.milestone_interval_seconds, cfg.procurement_interval_seconds)
     return scheduler
