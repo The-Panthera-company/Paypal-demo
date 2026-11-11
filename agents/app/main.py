@@ -234,5 +234,15 @@ async def procurement_run(body: ProcurementIn,
     agent = ProcurementAgent()
     try:
         return await agent.run(body.procurementId)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # An unexpected failure is ours, not the caller's: answer 502 and name the type so
+        # the trace shows where to look, without echoing a payload that may hold a contact.
+        log.exception("procurement run failed")
+        raise HTTPException(
+            status_code=502,
+            detail="procurement run failed: " + type(exc).__name__,
+        ) from exc
     finally:
         await agent.mcp.aclose()

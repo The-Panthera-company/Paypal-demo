@@ -184,6 +184,33 @@ def needs_approval(amount_cents: int, limit: int = AUTO_APPROVE_CENTS) -> bool:
     return amount_cents > limit
 
 
+def _usable_requests(raw: Any) -> tuple[list[dict], list[dict]]:
+    """The dicts in a list_procurement_requests answer, plus a note for everything else.
+
+    A malformed item must not take the whole run down: one bad row would otherwise stop the
+    agent from buying anything and surface as a 500. The note names the position and the type
+    so the trace shows what was dropped without echoing the payload (it can hold a contact).
+    """
+    if raw is None:
+        return [], []
+    if isinstance(raw, dict):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple)):
+        log.warning("list_procurement_requests returned %s, not a list", type(raw).__name__)
+        return [], [{"reason": "unexpected answer", "type": type(raw).__name__}]
+
+    usable: list[dict] = []
+    skipped: list[dict] = []
+    for index, item in enumerate(raw):
+        if isinstance(item, dict):
+            usable.append(item)
+        else:
+            skipped.append({"reason": "not an object", "index": index,
+                            "type": type(item).__name__})
+            log.warning("skipped procurement request %s: %s", index, type(item).__name__)
+    return usable, skipped
+
+
 class ProcurementAgent:
     def __init__(self, mcp=None, quote_source: QuoteSource | None = None, llm=None,
                  auto_approve_cents: int = AUTO_APPROVE_CENTS) -> None:
@@ -198,17 +225,19 @@ class ProcurementAgent:
         Answers {"runs": [...], "abstained": [...]}: each entry says what happened, so a caller
         never has to guess whether a purchase was made.
         """
-        requests = await self.mcp.call("list_procurement_requests") or []
+        raw = await self.mcp.call("list_procurement_requests")
+        requests, skipped = _usable_requests(raw)
         if procurement_id is not None:
             requests = [r for r in requests if r.get("id") == procurement_id]
             if not requests:
                 return {"runs": [], "abstained": [
-                    {"procurement_id": procurement_id, "reason": "not open"}]}
+                    {"procurement_id": procurement_id, "reason": "not open"}],
+                    "skipped": skipped}
         runs, abstained = [], []
         for request in requests:
             result = await self._one(request)
             (runs if result.get("proposed") else abstained).append(result)
-        return {"runs": runs, "abstained": abstained}
+        return {"runs": runs, "abstained": abstained, "skipped": skipped}
 
     async def _one(self, request: dict) -> dict:
         trace: list[dict] = []

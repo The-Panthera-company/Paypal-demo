@@ -37,6 +37,10 @@ MUTATING_TOOLS = {
 LIST_TOOLS = {
     "search_projects",
     "list_active_mandates",
+    # The procurement lists are lists too: a single open request or supplier comes back as
+    # one dict, and without this entry the agent iterates the dict's keys instead.
+    "list_procurement_requests",
+    "list_procurement_suppliers",
 }
 
 WAKE_TIMEOUT_SECONDS = 120
