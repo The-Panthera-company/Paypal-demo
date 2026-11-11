@@ -52,7 +52,16 @@ Project text, documents and receipts are passed to the model as data, never as i
 
 **MCP:** the agents reach the core API only through our MCP server ([`mcp-server/`](mcp-server/README.md)), so an agent can never do more than the API allows.
 
-**Built with:** Python (FastAPI, SQLAlchemy, Postgres) for the API and agents, Next.js for the website, Render for hosting, and APIMatic for the API portal and SDKs.
+**Built with:** Python (FastAPI, SQLAlchemy, Postgres) for the API and agents, and Next.js for the website.
+
+### Sponsor tools
+
+| Tool | What we use it for | Where |
+|---|---|---|
+| **AG Grid** | The leaderboard and the admin console: sortable, filterable grids for projects, cases, payouts and purchases | [`LeaderboardGrid.tsx`](web/src/components/LeaderboardGrid.tsx), [`AdminGrids.tsx`](web/src/components/admin/AdminGrids.tsx) |
+| **Bryntum Gantt** | Each project's milestone timeline: what's planned, what's been proven, what's been paid | [`MilestoneGantt.tsx`](web/src/components/MilestoneGantt.tsx) |
+| **APIMatic** | A developer portal and Python and TypeScript SDKs from our OpenAPI spec. We rewrote the spec generator to export OpenAPI 3.0 with full descriptions and examples, taking APIMatic's report from 1,490 issues to 0 errors and 1 warning | [`api/openapi.json`](api/openapi.json), [`api/app/openapi_docs.py`](api/app/openapi_docs.py) |
+| **Render** | Hosts everything from one Blueprint: the core API, the AI agents service, the website and Postgres | [`render.yaml`](render.yaml) |
 
 ## Run the website on your computer
 
