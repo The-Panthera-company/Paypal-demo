@@ -18,7 +18,7 @@ export type AgentRun = {
   run_at: string;
   report_text: string | null;
   trace: TraceStep[];
-  chosen: { project_id: number; title: string | null; amount_cents: number }[];
+  chosen: { project_id: number | null; title: string | null; amount_cents: number }[];
   skipped: { project_id: number | null; title: string | null; reason: string | null }[];
 };
 export type AgentActivity = {

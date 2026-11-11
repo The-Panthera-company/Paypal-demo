@@ -12,7 +12,7 @@ async function requireAdmin() {
   const given = scheme === "Basic" && encoded ? Buffer.from(encoded, "base64").toString().split(":").slice(1).join(":") : null;
   if (given !== password) throw new Error("Admin login required");
 }
-import { retryProcurement, reviewProcurement, getAuditChain, pauseAgents, resolveCaseRemoving, resumeAgents, verifyAuditChain, type ChainCheck, type ChainRow, closeRound, createRound, getDonation, newOwnerToken, refundDonation, resolveCase, reviewMilestone, updateRound, verifyProject, type DonationInfo, type RefundResult, type RoundFields } from "@/lib/admin";
+import { getPayoutEmail, setPayoutEmail, retryProcurement, reviewProcurement, getAuditChain, pauseAgents, resolveCaseRemoving, resumeAgents, verifyAuditChain, type ChainCheck, type ChainRow, closeRound, createRound, getDonation, newOwnerToken, refundDonation, resolveCase, reviewMilestone, updateRound, verifyProject, type DonationInfo, type RefundResult, type RoundFields } from "@/lib/admin";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
 
@@ -157,4 +157,54 @@ export async function reviewProcurementAction(id: number, approve: boolean) {
 export async function retryProcurementAction(id: number) {
   await requireAdmin();
   return run(() => retryProcurement(id), "Payment sent again with the same PayPal batch.");
+}
+
+// ---- Payout email ----
+export async function getPayoutEmailAction(projectId: string): Promise<{ ok: true; email: string | null } | { ok: false; message: string }> {
+  await requireAdmin();
+  try {
+    return { ok: true, email: await getPayoutEmail(projectId) };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Couldn't read it." };
+  }
+}
+export async function setPayoutEmailAction(projectId: string, email: string) {
+  await requireAdmin();
+  return run(() => setPayoutEmail(projectId, email.trim()), "PayPal payout email saved.");
+}
+
+// ---- Procurement Agent: run now (server-side; INTERNAL_TOKEN never reaches the browser) ----
+export type ProcurementRunResult =
+  | { ok: true; runs: { procurementId: number | null; runId: number | null; summary: string }[]; abstained: { procurementId: number | null; reason: string }[] }
+  | { ok: false; message: string };
+export async function runProcurementAgentAction(): Promise<ProcurementRunResult> {
+  await requireAdmin();
+  const agents = (process.env.AGENTS_INTERNAL_URL || process.env.NEXT_PUBLIC_AGENTS_URL)?.replace(/\/$/, "");
+  const token = process.env.INTERNAL_TOKEN ?? "";
+  if (!agents || !token) return { ok: false, message: "The agents service isn't connected (AGENTS URL and INTERNAL_TOKEN on the website's server)." };
+  try {
+    const r = await fetch(`${agents}/agents/procurement/run`, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: "{}",
+      signal: AbortSignal.timeout(120_000),
+    });
+    const d = (await r.json().catch(() => ({}))) as { runs?: Record<string, unknown>[]; abstained?: Record<string, unknown>[]; detail?: unknown };
+    if (!r.ok) return { ok: false, message: typeof d.detail === "string" ? d.detail : `The Procurement Agent couldn't run (${r.status}).` };
+    const num = (v: unknown) => (typeof v === "number" ? v : typeof v === "string" && /^\d+$/.test(v) ? Number(v) : null);
+    const txt = (v: unknown) => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v));
+    revalidatePath("/admin");
+    return {
+      ok: true,
+      runs: (d.runs ?? []).map((x) => ({
+        procurementId: num(x.procurement_id ?? x.procurementId),
+        runId: num(x.run_id ?? x.runId),
+        summary: txt(x.summary ?? x.report_text ?? x.status ?? x.description),
+      })),
+      abstained: (d.abstained ?? []).map((x) => ({ procurementId: num(x.procurement_id ?? x.procurementId ?? x.id), reason: txt(x.reason ?? x.why ?? x.detail) })),
+    };
+  } catch {
+    return { ok: false, message: "The agents service didn't answer. It may be waking up; try again in a minute." };
+  }
 }

@@ -5,6 +5,8 @@ import { AuditGrid, CasesGrid, MilestonesGrid, VerificationGrid } from "@/compon
 import { PageTitle } from "@/components/PageTitle";
 import { listProcurement, getAgentStatus, getAuditChain, verifyAuditChain, getAdminData, getDashboard, getProjectDocuments, listRounds } from "@/lib/admin";
 import { OwnerTokenButton } from "@/components/admin/OwnerTokenButton";
+import { PayoutEmailField } from "@/components/admin/PayoutEmailField";
+import { RunProcurementAgent } from "@/components/admin/RunProcurementAgent";
 import { RoundsPanel } from "@/components/admin/RoundsPanel";
 import { RefundPanel } from "@/components/admin/RefundPanel";
 import { getCategories, getLeaderboard, getProjects } from "@/lib/api";
@@ -113,7 +115,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                         <p className="font-medium text-ink">
                           {project.title} <span className="text-sm text-text">#{project.id}</span>
                         </p>
-                        <OwnerTokenButton projectId={project.id} />
+                        <div className="flex flex-wrap items-end gap-3"><PayoutEmailField projectId={project.id} /><OwnerTokenButton projectId={project.id} /></div>
                       </div>
                       {documents.length === 0 ? (
                         <p className="text-sm">No documents yet.</p>
@@ -146,7 +148,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               <MilestonesGrid rows={data.milestones} />
             </div>
           )}
-          {tab === "procurement" && <ProcurementPanel rows={procurement} />}
+          {tab === "procurement" && (
+            <div className="space-y-4">
+              <RunProcurementAgent />
+              <ProcurementPanel rows={procurement} />
+            </div>
+          )}
           {tab === "trust" && <TrustPanel initial={chain} rows={chainRows} />}
           {tab === "log" && (
             <div className="space-y-3">

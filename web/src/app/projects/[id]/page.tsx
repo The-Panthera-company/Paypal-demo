@@ -236,6 +236,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               )}
             </div>
             <h1 className="mb-3 text-4xl">{p.title}</h1>
+            <Link href={`/projects/${p.id}/evidence`} className="mb-3 inline-block text-sm font-bold text-primary underline-offset-4 hover:underline">
+              Owner tools →
+            </Link>
             <p className="mb-6 text-lg leading-8">{p.summary}</p>
             <div className="mb-6 grid grid-cols-3 gap-3 sm:gap-[30px]">
               <StatBox value={formatMoney(p.raised)} label="Raised" />

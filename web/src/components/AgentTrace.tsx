@@ -109,11 +109,15 @@ export function AgentTrace({ run, animate = false, compact = false }: { run: Age
               <p className="text-sm">Nothing this time.</p>
             ) : (
               <ul className="mt-2 space-y-1 text-sm">
-                {run.chosen.map((c) => (
-                  <li key={c.project_id} className="flex justify-between gap-3">
-                    <Link href={`/projects/${c.project_id}`} className="text-ink hover:text-primary hover:underline">
-                      {c.title ?? `Project ${c.project_id}`}
-                    </Link>
+                {run.chosen.map((c, i) => (
+                  <li key={c.project_id ?? `pending-${i}`} className="flex justify-between gap-3">
+                    {c.project_id != null ? (
+                      <Link href={`/projects/${c.project_id}`} className="text-ink hover:text-primary hover:underline">
+                        {c.title ?? `Project ${c.project_id}`}
+                      </Link>
+                    ) : (
+                      <span className="text-ink">{c.title ?? "Not proposed yet"}</span>
+                    )}
                     <span className="tabular font-medium text-ink">{fmt(c.amount_cents)}</span>
                   </li>
                 ))}
@@ -154,7 +158,7 @@ function stepsFromDecisions(run: AgentRun): TraceStep[] {
   const add = (s: Omit<TraceStep, "seq" | "at" | "actor">) => steps.push({ seq: steps.length + 1, at: run.run_at, actor: "giving-agent", ...s });
   add({ step: "search", tool: "search_projects", status: "ok", title: `Read ${run.chosen.length + run.skipped.length} candidate projects in the donor's causes`, input: null, result: null, rule: null, reason: null });
   for (const c of run.chosen)
-    add({ step: "request_donation", tool: "request_checked_donation", status: "ok", title: `Asked the rules engine for ${fmt(c.amount_cents)} to ${c.title ?? `project ${c.project_id}`}`, input: { project_id: c.project_id, amount_cents: c.amount_cents }, result: null, rule: "ok", reason: null });
+    add({ step: "request_donation", tool: "request_checked_donation", status: "ok", title: `Asked the rules engine for ${fmt(c.amount_cents)} to ${c.title ?? (c.project_id != null ? `project ${c.project_id}` : "a project")}`, input: { project_id: c.project_id, amount_cents: c.amount_cents }, result: null, rule: "ok", reason: null });
   const byReason = new Map<string, AgentRun["skipped"]>();
   for (const k of run.skipped) byReason.set(k.reason ?? "other", [...(byReason.get(k.reason ?? "other") ?? []), k]);
   for (const [reason, list] of byReason)
