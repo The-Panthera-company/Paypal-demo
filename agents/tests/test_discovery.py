@@ -188,9 +188,9 @@ def test_girls_stem_club_ranks_first_end_to_end():
 
     import asyncio
 
-    out = asyncio.get_event_loop().run_until_complete(
-        a.chat("I care about education for girls")
-    )
+    # asyncio.run, not get_event_loop: an earlier test file can leave the policy without a loop,
+    # and get_event_loop then raises instead of running the coroutine.
+    out = asyncio.run(a.chat("I care about education for girls"))
     assert out["projects"][0]["id"] == 2
     assert out["projectIds"][0] == "2"
 

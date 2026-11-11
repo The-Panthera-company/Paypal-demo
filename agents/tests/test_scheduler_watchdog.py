@@ -30,10 +30,14 @@ class RecordingSource:
 
 @pytest.fixture()
 def recorder(monkeypatch):
-    """Patch both source classes on the watchdog module and clear MCP, so nothing hits the net."""
+    """Swap both source classes for recorders so nothing reaches the network.
+
+    The patch targets app.scheduler, not app.agents.watchdog: run_watchdog binds the two
+    names at import, so once app.scheduler is in sys.modules patching watchdog does nothing.
+    """
     RecordingSource.made = []
-    monkeypatch.setattr(watchdog_module, "CoreEventsSource", RecordingSource)
-    monkeypatch.setattr(watchdog_module, "FakeEventsSource", RecordingSource)
+    monkeypatch.setattr("app.scheduler.CoreEventsSource", RecordingSource)
+    monkeypatch.setattr("app.scheduler.FakeEventsSource", RecordingSource)
     return RecordingSource
 
 
