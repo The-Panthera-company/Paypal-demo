@@ -158,6 +158,43 @@ Off unless `SCHEDULER_ENABLED=true`. Jobs: giving run for every active mandate, 
 milestone checks. Intervals: `GIVING_INTERVAL_HOURS`, `WATCHDOG_INTERVAL_SECONDS`,
 `MILESTONE_INTERVAL_SECONDS`.
 
+### Procurement run contract
+
+`POST /agents/procurement/run` proposes and pays open purchase requests. Same internal token as
+`/agents/giving/run`. Body:
+
+```json
+{"procurementId": 12}
+```
+
+`procurementId` is optional: omit it to consider every open request. Response:
+
+```json
+{
+  "runs": [
+    {"procurement_id": 12, "proposed": true, "supplier_id": 3,
+     "supplier_name": "Nakuru Books & Stationery", "amount_cents": 3000,
+     "status": "paid", "payment": {"...": "what the MCP pay call returned"}}
+  ],
+  "abstained": [
+    {"procurement_id": 13, "proposed": false, "reason": "no quote for any supplier"}
+  ]
+}
+```
+
+Every considered request lands in exactly one of `runs` or `abstained`; nothing is dropped
+silently. `status` is `paid`, or `awaiting_approval` when the amount is over the automatic limit.
+
+**Quote-source contract.** The agent reads its quote from the supplier row returned by
+`list_procurement_suppliers`. Each supplier must carry:
+
+- `unit_amount_cents` — integer cents per unit, never a float or a bool
+- `reliability` — a number in `0..1`
+
+Both are required. A supplier missing either field has **no quote**, and the agent abstains for
+that request rather than inventing a price. Person 1 needs to add both fields to
+`list_procurement_suppliers`; until then the real agent abstains on every request.
+
 ## Blocked on Person 1
 
 `WatchdogAgent` and `MilestoneAgent` read through `EventsSource` and `MilestoneSource`. Both have

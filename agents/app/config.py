@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     giving_interval_hours: int = 720
     watchdog_interval_seconds: int = 300
     milestone_interval_seconds: int = 600
+    # Rare enough that a person can notice a request and still let the agent act.
+    procurement_interval_seconds: int = 300
 
     @property
     def mcp_server_file(self) -> Path:

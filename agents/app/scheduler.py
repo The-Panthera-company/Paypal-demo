@@ -1,6 +1,7 @@
 """APScheduler wiring. Off unless SCHEDULER_ENABLED=true.
 
-Jobs: Giving run for every active mandate (monthly), Watchdog scan, Milestone checks.
+Jobs: Giving run for every active mandate (monthly), Watchdog scan, Milestone checks,
+Procurement proposals for open purchase requests.
 Nothing here starts on import; main.py only starts it when the flag is set.
 """
 from __future__ import annotations
@@ -9,6 +10,7 @@ import logging
 
 from .agents.giving import GivingAgent
 from .agents.milestone import MilestoneAgent
+from .agents.procurement import ProcurementAgent
 from .agents.watchdog import CoreEventsSource, FakeEventsSource, WatchdogAgent
 from .config import Settings, settings
 
@@ -56,6 +58,19 @@ async def run_milestones() -> list[dict]:
         await agent.mcp.aclose()
 
 
+async def run_procurement() -> dict:
+    """Propose (and pay, under the limit) every open purchase request.
+
+    The agent abstains on its own when a supplier has no quote, so this job is safe to run
+    before Person 1 adds the quote fields: it lists, finds nothing it can price, and stops.
+    """
+    agent = ProcurementAgent()
+    try:
+        return await agent.run()
+    finally:
+        await agent.mcp.aclose()
+
+
 def build_scheduler(cfg: Settings | None = None):
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -82,6 +97,13 @@ def build_scheduler(cfg: Settings | None = None):
         id="milestones",
         replace_existing=True,
     )
+    scheduler.add_job(
+        run_procurement,
+        "interval",
+        seconds=cfg.procurement_interval_seconds,
+        id="procurement",
+        replace_existing=True,
+    )
     return scheduler
 
 
@@ -92,7 +114,7 @@ def start_if_enabled(cfg: Settings | None = None):
         return None
     scheduler = build_scheduler(cfg)
     scheduler.start()
-    log.info("scheduler started: giving=%sh watchdog=%ss milestones=%ss",
+    log.info("scheduler started: giving=%sh watchdog=%ss milestones=%ss procurement=%ss",
              cfg.giving_interval_hours, cfg.watchdog_interval_seconds,
-             cfg.milestone_interval_seconds)
+             cfg.milestone_interval_seconds, cfg.procurement_interval_seconds)
     return scheduler
