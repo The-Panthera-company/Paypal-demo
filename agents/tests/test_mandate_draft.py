@@ -432,7 +432,7 @@ def test_category_lookup_failure_is_a_warning_not_a_500(monkeypatch):
     # sending them hunting for a category that does exist.
     assert body["rejected"] == []
     assert body["warnings"] == [
-        "couldn" + "t verify category Education, try again in a minute"]
+        "couldn't verify category Education, try again in a minute"]
     # [1] is the donor's own untouched value; 2 (Education) is the unverified
     # category and must NOT appear.
     assert body["proposed"]["categories"] == [1]
@@ -473,7 +473,7 @@ def test_failed_lookup_warns_and_leaves_the_field_alone() -> None:
     out = asyncio.run(agent_.draft("education", Current(categories=[1])))
     assert out["rejected"] == [], "a cold core is never a bad category"
     assert out["warnings"] == [
-        "couldn" + "t verify category Education, try again in a minute"]
+        "couldn't verify category Education, try again in a minute"]
     # [1] is the donor's own untouched value; 2 (Education) is the unverified
     # category and must NOT appear.
     assert out["proposed"]["categories"] == [1]
@@ -498,7 +498,7 @@ def test_failure_is_not_cached_and_the_next_request_succeeds() -> None:
     first = asyncio.run(agent_.draft("education", Current(categories=[1])))
     assert first["rejected"] == [], "a cold core is not a bad category"
     assert first["warnings"] == [
-        "couldn" + "t verify category Education, try again in a minute"]
+        "couldn't verify category Education, try again in a minute"]
     # [1] is the donor's own untouched value; 2 (Education) is the unverified
     # category and must NOT appear.
     assert first["proposed"]["categories"] == [1]

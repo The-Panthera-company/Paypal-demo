@@ -664,7 +664,7 @@ class MandateDraftAgent:
                 # The catalogue could not be read. Saying "no such category" would blame
                 # the donor for the core being cold, so warn and leave the field alone.
                 warnings.append(
-                    "couldn" + "t verify category " + str(value) + ", try again in a minute")
+                    "couldn't verify category " + str(value) + ", try again in a minute")
                 continue
             resolved = match_category(value, known)
             if resolved is None:
@@ -731,7 +731,7 @@ class MandateDraftAgent:
             found = await asyncio.wait_for(
                 self.mcp.call("search_projects", sort="urgency", limit=100),
                 timeout=LOOKUP_SECONDS)
-        except (asyncio.TimeoutError, Exception) as exc:
+        except Exception as exc:
             log.warning("tag lookup failed, tags will be unverified: %s", exc)
             return None
         seen: set[str] = set()
