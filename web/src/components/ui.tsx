@@ -47,6 +47,7 @@ export const DEMO_PHOTOS: Record<string, string> = {
   "Lanet Library": d("reading-group"),
   "New Reading Corner": d("reading-tutor"),
   "Mobile Eye Clinic": d("clinic-nepal"),
+  "Taiz Cholera Treatment Corner": d("crowd-hands"),
 };
 
 export function assignPhotos(projects: { id: string; categoryId: string; title?: string }[]): Record<string, string> {
