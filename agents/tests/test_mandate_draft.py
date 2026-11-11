@@ -10,6 +10,7 @@ from app.agents.mandate_draft import (
     CategoryCache,
     Current,
     DEFAULT_WEIGHTS,
+    FALLBACK_CONSTRAINTS,
     MandateDraftAgent,
     Proposal,
     clean_tag,
@@ -90,16 +91,27 @@ def test_match_category_does_not_match_inside_longer_words():
 
 def test_clean_tag_trims_lowercases_and_caps():
     assert clean_tag("  Faith-Based  ") == "faith-based"
-    assert len(clean_tag("x" * 100)) == 32
+    assert len(clean_tag("x" * 100)) == 40
     assert clean_tag(None) == ""
 
 
 def test_safe_weights_clamps_and_reports():
-    kept, shifted = safe_weights({"few_backers": 45, "urgency": 0.22})
-    default = DEFAULT_WEIGHTS["few_backers"]
-    assert kept["few_backers"] == default + 20
-    assert kept["urgency"] == 0.22
-    assert shifted == [("few_backers", 45.0)]
+    # Weights are on the API 0-100 scale and the band is default +/- 20.
+    # urgency defaults to 20, so its band is 0..40: 22 is inside and survives as asked.
+    kept, shifted = safe_weights({"few_backers": 90, "urgency": 22, "bogus": 5},
+                                 FALLBACK_CONSTRAINTS)
+    assert DEFAULT_WEIGHTS["urgency"] == 20
+    assert kept["urgency"] == 22
+    # few_backers defaults to 35, so anything above 55 clamps down to 55.
+    assert DEFAULT_WEIGHTS["few_backers"] == 35
+    assert kept["few_backers"] == 55
+    # An unknown key is dropped, not clamped and not reported as a shift.
+    assert "bogus" not in kept
+    assert shifted == [("few_backers", 90.0)]
+
+    kept, shifted = safe_weights({"few_backers": 5}, FALLBACK_CONSTRAINTS)
+    assert kept["few_backers"] == 15, "below the band clamps up to default - 20"
+    assert shifted == [("few_backers", 5.0)]
 
 
 def test_safe_weights_ignores_unknown_keys_and_negative_values():
@@ -148,7 +160,7 @@ async def test_unknown_category_is_rejected_not_invented():
 @pytest.mark.asyncio
 async def test_verified_tag_is_added_without_warning():
     a = agent(proposal=Proposal(excluded_tags=["girls"]))
-    out = await a.draft("skip girls projects", Current())
+    out = await a.draft("skip girls projects", Current(categories=[1]))
     assert out["proposed"]["excluded_tags"] == ["girls"]
     assert out["warnings"] == []
 
@@ -156,7 +168,7 @@ async def test_verified_tag_is_added_without_warning():
 @pytest.mark.asyncio
 async def test_unverifiable_tag_is_kept_and_flagged():
     a = agent(proposal=Proposal(excluded_tags=["faith-based"]))
-    out = await a.draft("nothing religious", Current())
+    out = await a.draft("nothing religious", Current(categories=[1]))
     assert out["proposed"]["excluded_tags"] == ["faith-based"]
     assert out["warnings"] == ["couldn't verify tag faith-based"]
 
@@ -169,7 +181,7 @@ async def test_tag_lookup_failure_still_keeps_the_tag():
 
     a = MandateDraftAgent(core=FakeCore(), llm=FakeLLM(json_replies=[Proposal(
         excluded_tags=["faith-based"])]), mcp=Broken({}))
-    out = await a.draft("nothing religious", Current())
+    out = await a.draft("nothing religious", Current(categories=[1]))
     assert out["proposed"]["excluded_tags"] == ["faith-based"]
     assert out["warnings"] == ["couldn't verify tag faith-based"]
 
@@ -177,7 +189,8 @@ async def test_tag_lookup_failure_still_keeps_the_tag():
 @pytest.mark.asyncio
 async def test_existing_tags_are_normalised_and_deduped():
     a = agent(proposal=Proposal(excluded_tags=["Girls"]))
-    out = await a.draft("skip girls", Current(excluded_tags=["girls", "  Girls "]))
+    out = await a.draft("skip girls",
+                        Current(categories=[1], excluded_tags=["girls", "  Girls "]))
     assert out["proposed"]["excluded_tags"] == ["girls"]
     assert out["warnings"] == []
 
@@ -251,7 +264,11 @@ def test_system_prompt_lists_allowed_names():
 
 
 def test_system_prompt_without_catalogue_is_still_valid():
-    assert system_prompt([]) == LLM_SYSTEM
+    prompt = system_prompt([])
+    assert prompt.startswith(LLM_SYSTEM)
+    # The API limits are injected on every prompt, catalogue or not.
+    assert "1000" in prompt or "100" in prompt
+    assert "ignore" in prompt.lower()
 
 
 @pytest.mark.asyncio
@@ -323,7 +340,8 @@ def test_route_returns_the_web_contract(client):
     })
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"proposed", "warnings", "rejected", "used_llm"}
+    assert set(body) == {"proposed", "warnings", "rejected", "used_llm", "diff"}
+    assert isinstance(body["diff"], list)
     assert body["proposed"]["monthly_budget_cents"] == 5000
     assert body["proposed"]["categories"] == [2]
     assert all(isinstance(w, str) for w in body["warnings"])
@@ -405,7 +423,8 @@ def test_category_lookup_failure_is_a_warning_not_a_500(monkeypatch):
         llm=FakeLLM(json_replies=[Proposal(categories=["Education"])]),
         mcp=FakeMcpClient({"search_projects": []})))
     with TestClient(main_module.app) as c:
-        r = c.post("/agents/mandate/draft", json={"text": "education", "current": {}})
+        r = c.post("/agents/mandate/draft",
+                   json={"text": "education", "current": {"categories": [1]}})
     main_module._hits.clear()
     assert r.status_code == 200
     body = r.json()
@@ -414,7 +433,10 @@ def test_category_lookup_failure_is_a_warning_not_a_500(monkeypatch):
     assert body["rejected"] == []
     assert body["warnings"] == [
         "couldn" + "t verify category Education, try again in a minute"]
-    assert "categories" not in body["proposed"]
+    # [1] is the donor's own untouched value; 2 (Education) is the unverified
+    # category and must NOT appear.
+    assert body["proposed"]["categories"] == [1]
+    assert 2 not in body["proposed"]["categories"]
 
 
 class FlakyCore(FakeCore):
@@ -448,11 +470,14 @@ def draft_agent(core, category: str = "Education") -> MandateDraftAgent:
 
 def test_failed_lookup_warns_and_leaves_the_field_alone() -> None:
     agent_ = draft_agent(FlakyCore(failures=99))
-    out = asyncio.run(agent_.draft("education", Current()))
+    out = asyncio.run(agent_.draft("education", Current(categories=[1])))
     assert out["rejected"] == [], "a cold core is never a bad category"
     assert out["warnings"] == [
         "couldn" + "t verify category Education, try again in a minute"]
-    assert "categories" not in out["proposed"], "an unverified category is not applied"
+    # [1] is the donor's own untouched value; 2 (Education) is the unverified
+    # category and must NOT appear.
+    assert out["proposed"]["categories"] == [1]
+    assert 2 not in out["proposed"]["categories"]
 
 
 def test_lookup_is_retried_once_before_giving_up() -> None:
@@ -470,25 +495,46 @@ def test_failure_is_not_cached_and_the_next_request_succeeds() -> None:
     core = FlakyCore(failures=4)
     agent_ = draft_agent(core)
 
-    first = asyncio.run(agent_.draft("education", Current()))
+    first = asyncio.run(agent_.draft("education", Current(categories=[1])))
     assert first["rejected"] == [], "a cold core is not a bad category"
     assert first["warnings"] == [
         "couldn" + "t verify category Education, try again in a minute"]
-    assert "categories" not in first["proposed"]
+    # [1] is the donor's own untouched value; 2 (Education) is the unverified
+    # category and must NOT appear.
+    assert first["proposed"]["categories"] == [1]
+    assert 2 not in first["proposed"]["categories"]
 
-    second = asyncio.run(agent_.draft("education", Current()))
+    second = asyncio.run(agent_.draft("education", Current(categories=[1])))
     assert second["warnings"] == []
     assert second["rejected"] == []
     # Categories are applied as ids: 2 is Education in FAKE_CATEGORIES.
-    assert second["proposed"]["categories"] == [2]
+    # The donor's own [1] is kept, and the newly resolved Education (2) is added.
+    assert second["proposed"]["categories"] == [1, 2]
 
 
 def test_a_real_catalogue_still_rejects_an_unknown_name() -> None:
     """The failure path must not swallow genuine rejections."""
     agent_ = draft_agent(FakeCore(), category="Space travel")
-    out = asyncio.run(agent_.draft("space travel", Current()))
+    out = asyncio.run(agent_.draft("space travel", Current(categories=[1])))
     assert out["rejected"] == ["category Space travel: no such category"]
     assert out["warnings"] == []
+
+
+def test_a_draft_with_no_cause_warns_instead_of_failing(client):
+    """An empty effective cause list is a warning on a 200, never an error.
+
+    The donor cannot save a mandate with no cause, so the draft says so plainly.
+    """
+    main_module._hits.clear()
+    r = client.post("/agents/mandate/draft", json={
+        "text": "give a bit each month",
+        "current": {},
+    })
+    main_module._hits.clear()
+    assert r.status_code == 200
+    body = r.json()
+    assert "Choose at least one cause before saving" in body["warnings"]
+    assert body["rejected"] == []
 
 
 def test_empty_catalogue_is_not_cached_and_the_cache_retries() -> None:
