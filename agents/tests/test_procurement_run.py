@@ -59,7 +59,7 @@ def test_run_with_the_token_is_200_and_abstains_with_no_quote(main_module, monke
                                                             "force": False},
                            headers={"Authorization": "Bearer " + TOKEN})
     assert resp.status_code == 200
-    assert resp.json() == {"runs": [], "abstained": []}
+    assert resp.json() == {"runs": [], "abstained": [], "skipped": []}
 
 
 def test_run_accepts_a_procurement_id_and_closes_its_client(main_module, monkeypatch):
@@ -87,6 +87,147 @@ def test_run_accepts_a_procurement_id_and_closes_its_client(main_module, monkeyp
     assert made[0].mcp is not None
     # finally-block teardown ran: the agent's own client was closed.
     assert getattr(made[0].mcp, "closed", False) or isinstance(made[0].mcp, FakeMcpClient)
+
+
+# --- The real answer shape ---------------------------------------------------------------
+# The probe against giving-api.onrender.com returned ONE dict for a single open request.
+# _unwrap correctly hands that back as a dict (an object tool), so LIST_TOOLS must re-wrap it.
+
+REAL_REQUEST = {
+    "id": 41,
+    "project_id": 7,
+    "milestone_id": 3,
+    "description": "Print 500 leaflets",
+    "quantity": 500,
+    "max_amount_cents": 1_200_000,
+    "status": "requested",
+    "supplier_id": None,
+    "line_items": [],
+    "needs_approval": True,
+}
+
+REAL_SUPPLIER = {
+    "id": 5,
+    "name": "Acme Print",
+    "project_id": 7,
+    "unit": "leaflet",
+    "region": "Nairobi",
+}
+
+
+def test_a_single_procurement_request_becomes_a_one_item_list() -> None:
+    mcp = FakeMcpClient({"list_procurement_requests": REAL_REQUEST})
+    out = asyncio.run(ProcurementAgent(mcp=mcp).run())
+    # The run did not crash by iterating the dict's keys, and the request was considered.
+    assert out["skipped"] == []
+    assert [item["procurement_id"] for item in out["abstained"]] == [41]
+
+
+def test_a_single_supplier_becomes_a_one_item_list() -> None:
+    mcp = FakeMcpClient({"list_procurement_requests": REAL_REQUEST,
+                         "list_procurement_suppliers": REAL_SUPPLIER})
+    out = asyncio.run(ProcurementAgent(mcp=mcp).run())
+    assert out["skipped"] == []
+    # One supplier is one supplier: join a dict's keys and the trace would say "5, name, ...".
+    trace = out["abstained"][0]["trace"]
+    first = [step for step in trace if step.get("tool") == "list_procurement_suppliers"][0]
+    assert first["title"] == "Found 1 eligible suppliers"
+
+
+def test_an_empty_procurement_answer_stays_an_empty_list() -> None:
+    mcp = FakeMcpClient({"list_procurement_requests": [],
+                         "list_procurement_suppliers": []})
+    out = asyncio.run(ProcurementAgent(mcp=mcp).run())
+    assert out == {"runs": [], "abstained": [], "skipped": []}
+
+
+def test_coerce_shape_wraps_a_bare_dict_and_none() -> None:
+    from app.mcp_client import _coerce_shape
+
+    assert _coerce_shape("list_procurement_requests", REAL_REQUEST) == [REAL_REQUEST]
+    assert _coerce_shape("list_procurement_requests", None) == []
+    assert _coerce_shape("list_procurement_requests", [REAL_REQUEST]) == [REAL_REQUEST]
+    assert _coerce_shape("list_procurement_suppliers", REAL_SUPPLIER) == [REAL_SUPPLIER]
+    assert _coerce_shape("list_procurement_suppliers", None) == []
+    # An object tool is untouched: the rule is per tool name, not "wrap everything".
+    assert _coerce_shape("get_project", {"id": 1}) == {"id": 1}
+
+
+real_request = REAL_REQUEST
+real_supplier = REAL_SUPPLIER
+
+
+0
+# --- Malformed answers ------------------------------------------------------------------
+
+
+def test_a_non_dict_item_is_skipped_not_fatal() -> None:
+    """One bad row must not stop the run: the good ones are still considered."""
+    good = {"id": 1, "project": {"id": 7}, "quantity": 1}
+    mcp = FakeMcpClient({"list_procurement_requests": [good, "oops", 42, None]})
+    out = asyncio.run(ProcurementAgent(mcp=mcp).run())
+    assert [item["index"] for item in out["skipped"]] == [1, 2, 3]
+    assert [item["type"] for item in out["skipped"]] == ["str", "int", "NoneType"]
+    # The surviving request was still considered and, having no quote, abstained.
+    assert len(out["abstained"]) == 1
+    assert out["abstained"][0]["procurement_id"] == 1
+
+
+def test_a_skipped_item_never_echoes_the_payload() -> None:
+    """The trace names the position and the type, never the value: a row may hold a contact."""
+    mcp = FakeMcpClient({"list_procurement_requests": ["buyer@example.org asked"]})
+    out = asyncio.run(ProcurementAgent(mcp=mcp).run())
+    assert "@" not in repr(out["skipped"])
+    assert "example" not in repr(out["skipped"])
+
+
+def test_an_answer_that_is_not_a_list_is_reported_not_crashed() -> None:
+    mcp = FakeMcpClient({"list_procurement_requests": {"id": 3}})
+    out = asyncio.run(ProcurementAgent(mcp=mcp).run())
+    # A lone dict is one request, not an error: the client unwraps single objects.
+    assert out["skipped"] == []
+    assert len(out["abstained"]) == 1
+
+
+def test_an_unexpected_failure_is_a_502_not_a_500(main_module, monkeypatch) -> None:
+    """A bug or a malformed answer is ours to report, with a named type and no payload."""
+
+    class Exploding(ProcurementAgent):
+        async def run(self, procurement_id=None):
+            raise AttributeError("'str' object has no attribute 'get'")
+
+    monkeypatch.setattr(main_module, "ProcurementAgent", Exploding)
+    with TestClient(main_module.app) as client:
+        resp = client.post("/agents/procurement/run", json={},
+                           headers={"Authorization": "Bearer " + TOKEN})
+    assert resp.status_code == 502
+    detail = resp.json()["detail"]
+    assert "AttributeError" in detail
+    assert "example" not in detail
+
+
+def test_an_unexpected_failure_still_closes_the_client(main_module, monkeypatch) -> None:
+    closed: list[bool] = []
+
+    class Exploding(ProcurementAgent):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+
+            async def aclose():
+                closed.append(True)
+
+            self.mcp = FakeMcpClient()
+            self.mcp.aclose = aclose
+
+        async def run(self, procurement_id=None):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(main_module, "ProcurementAgent", Exploding)
+    with TestClient(main_module.app) as client:
+        resp = client.post("/agents/procurement/run", json={},
+                           headers={"Authorization": "Bearer " + TOKEN})
+    assert resp.status_code == 502
+    assert closed == [True], "the finally block must still run"
 
 
 # --- The scheduler ---------------------------------------------------------------------
@@ -122,7 +263,7 @@ def test_run_procurement_abstains_under_the_fake_defaults(monkeypatch) -> None:
     from app.scheduler import run_procurement
 
     out = asyncio.run(run_procurement())
-    assert out == {"runs": [], "abstained": []}
+    assert out == {"runs": [], "abstained": [], "skipped": []}
 
 
 # --- Fake defaults ---------------------------------------------------------------------
