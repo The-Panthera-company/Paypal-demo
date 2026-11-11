@@ -87,7 +87,8 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
         setHasMandate(true);
         // Already set up: open on the agent's own page; back from PayPal: on the funding step,
         // where monthly giving shows PayPal's answer
-        setStep(new URLSearchParams(window.location.search).has("subscription") ? 3 : 4);
+        // Open on step 1 (interests); back from PayPal: on the funding step
+        if (new URLSearchParams(window.location.search).has("subscription")) setStep(3);
       } else if (i.categories) setCats(i.categories);
       const p = await call<Pending[]>(`/donors/${DONOR_ID}/pending-approvals`);
       if (p.ok) setPending(p.data);

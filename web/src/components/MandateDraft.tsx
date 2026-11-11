@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Category } from "@/lib/types";
 import { Banner } from "./Status";
+import { BundiIcon } from "./BundiIcon";
 
 // "Describe your giving in your own words": the agents service turns the words into a proposed
 // mandate. The donor sees a field-by-field diff and decides. Accept only fills the wizard; the
@@ -151,17 +152,25 @@ export function MandateDraft({
   const changed = rows.filter(([, a, b]) => a !== b);
 
   return (
-    <section className="space-y-4 border border-primary bg-primary-container/40 p-6" aria-labelledby="nl-title">
-      <div>
-        <h2 id="nl-title" className="font-display text-xl text-ink">Describe your giving in your own words</h2>
-        <p className="text-sm">The agent drafts your rules; you see every change and decide. Nothing is saved until you press Save.</p>
+    <section className="space-y-5 border-t-4 border-primary bg-white p-6 shadow-[0_10px_30px_rgba(11,46,51,0.08)] sm:p-8" aria-labelledby="nl-title">
+      <div className="flex items-start gap-4">
+        <span className="grid size-12 shrink-0 place-items-center bg-[#fffaf2] text-[#6b4a3a] ring-1 ring-line"><BundiIcon size={34} /></span>
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[2px] text-primary">Ask Bundi</p>
+          <h2 id="nl-title" className="font-display text-2xl text-ink">Describe your giving in your own words</h2>
+          <p className="mt-1 text-sm">Bundi drafts your rules; you see every change and decide. Nothing is saved until you press Save.</p>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        {EXAMPLES.map((x) => (
-          <button key={x} type="button" onClick={() => setText(x)} className="min-h-9 border border-line bg-white px-3 text-left text-sm text-ink hover:border-primary">
-            “{x}”
-          </button>
-        ))}
+      <div className="space-y-2">
+        <p className="text-xs font-bold uppercase tracking-[2px] text-text">Try one</p>
+        <div className="flex flex-wrap gap-2">
+          {EXAMPLES.map((x) => (
+            <button key={x} type="button" onClick={() => setText(x)} aria-pressed={text === x} className={`flex min-h-10 items-center gap-2 px-4 text-left text-sm transition-colors ${text === x ? "bg-ink text-white" : "bg-surface-alt text-ink hover:bg-primary-container"}`}>
+              <span aria-hidden className={text === x ? "text-accent" : "text-primary"}>✦</span>
+              {x}
+            </button>
+          ))}
+        </div>
       </div>
       <form
         className="space-y-3"
@@ -173,7 +182,7 @@ export function MandateDraft({
         <label className="sr-only" htmlFor="nl-text">
           Your giving in your own words
         </label>
-        <textarea id="nl-text" value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={1000} className="w-full border border-line bg-white p-3 text-ink" placeholder="e.g. Clean water and girls' education, $15 a month, ask me before anything over $5" />
+        <textarea id="nl-text" value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={1000} className="field w-full p-4 text-ink" placeholder="e.g. Clean water and girls' education, $15 a month, ask me before anything over $5" />
         <div className="flex flex-wrap items-center gap-3">
           <button className="btn btn-2 disabled:opacity-50" disabled={busy || !text.trim()}>
             {busy ? "Reading…" : "Draft my rules"}

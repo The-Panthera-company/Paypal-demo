@@ -10,13 +10,14 @@ const art: Record<string, { from: string; to: string; label: string }> = {
 
 // Free Unsplash photos (Unsplash licence), loaded by the visitor's browser. Placeholders until
 // projects upload their own photos. Several per category so cards don't repeat.
-const u = (id: string) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=640&q=55`;
+// Cause-matched photos shipped with the site (public/photos)
+const l = (f: string) => `/photos/${f}.jpg`;
 export const PHOTOS: Record<string, string[]> = {
-  health: [u("1576091160550-2173dba999ef"), u("1584515933487-779824d29309"), u("1579684385127-1ef15d508118")],
-  education: [u("1503676260728-1c00da094a0b"), u("1497633762265-9d179a990aa6"), u("1509062522246-3755977927d7")],
-  environment: [u("1542601906990-b4d3fb778b09"), u("1466692476868-aef1dfb1e735"), u("1500382017468-9049fed747ef")],
-  water: [u("1509099836639-18ba1795216e"), u("1541544537156-7627a7a4aa1c"), u("1559825481-12a05cc00344")],
-  people: [u("1488521787991-ed7bbaae773c"), u("1559027615-cd4628902d4a"), u("1532629345422-7515f3d16bb6")],
+  health: [l("clinic-nepal-2"), l("first-aid"), l("clinic-nepal"), l("winter-blanket")],
+  education: [l("classroom"), l("reading-tutor"), l("reading-group")],
+  environment: [l("seedlings"), l("bridge-nepal"), l("flood-street")],
+  water: [l("water-hands"), l("water-tap-kids"), l("water-tap-bucket"), l("hand-pump-sudan")],
+  people: [l("crowd-hands"), l("food-bags"), l("food-serving"), l("shelter-rain"), l("camp-aerial")],
 };
 
 /** Stable choice: the same project always gets the same photo */
