@@ -35,6 +35,8 @@ log = logging.getLogger(__name__)
 MAX_TEXT = 1000
 # The web aborts at 20 s. These budgets leave room to build and return the answer.
 LOOKUP_SECONDS = 3.0
+# The one retry is allowed a longer budget: a cold core often needs more than 3 s to wake.
+CATEGORY_RETRY_SECONDS = 8.0
 LLM_SECONDS = 12.0
 CATEGORY_TTL_SECONDS = 600.0
 
@@ -104,28 +106,55 @@ def _now() -> float:
 
 
 class CategoryCache:
-    """Name -> id lookup, refreshed at most once per TTL. Never raises to the caller."""
+    """Name -> id lookup, refreshed at most once per TTL. Never raises to the caller.
 
-    def __init__(self, ttl: float = CATEGORY_TTL_SECONDS, now=_now) -> None:
+    Only a real catalogue is cached. A failed or empty answer is thrown away so the next
+    request tries again: a cold core that fails once must not pin "no categories" for the
+    whole TTL, which is worse than the extra call.
+    """
+
+    def __init__(self, ttl: float = CATEGORY_TTL_SECONDS, now=_now,
+                 timeout: float = CATEGORY_RETRY_SECONDS) -> None:
         self.ttl = ttl
         self._now = now
+        self.timeout = timeout
         self._values: list[dict] = []
         self._at = 0.0
 
     async def get(self, core: Core) -> list[dict]:
-        if self._values and self._now() - self._at < self.ttl:
-            return self._values
-        try:
-            values = await asyncio.wait_for(core.categories(), timeout=LOOKUP_SECONDS)
-        except (CoreError, asyncio.TimeoutError, OSError) as exc:
-            log.warning("category lookup failed: %s", exc)
-            return []
-        except Exception as exc:
-            log.warning("category lookup failed: %s", exc)
-            return []
-        self._values = values
-        self._at = self._now()
+        """The catalogue, or [] when it could not be read. Callers that must tell the two
+        apart use lookup()."""
+        values, _ = await self.lookup(core)
         return values
+
+    async def lookup(self, core: Core) -> tuple[list[dict], bool]:
+        """(catalogue, verified). Never caches a failure or an empty answer.
+
+        One retry with the longer budget: a cold core usually answers on the second ask,
+        and wasting the whole request on one timeout would be a worse trade.
+        """
+        if self._values and self._now() - self._at < self.ttl:
+            return self._values, True
+        for attempt in range(2):
+            if attempt:
+                log.info("category lookup retrying with a %.1fs budget", self.timeout)
+            try:
+                values = await asyncio.wait_for(core.categories(), timeout=self.timeout)
+            except (CoreError, asyncio.TimeoutError, OSError) as exc:
+                log.warning("category lookup failed: %s", exc)
+                continue
+            except Exception as exc:
+                log.warning("category lookup failed: %s", exc)
+                continue
+            # An empty answer is a failure too: a deployed core always has categories, so
+            # caching it would pin the bug for the full TTL.
+            if not values:
+                log.warning("category lookup returned nothing, treating it as unavailable")
+                continue
+            self._values = list(values)
+            self._at = self._now()
+            return list(values), True
+        return [], False
 
     def clear(self) -> None:
         self._values = []
@@ -332,7 +361,7 @@ class MandateDraftAgent:
         # Categories: the donor values are kept verbatim; a newly named one is resolved.
         cats = list(current.categories)
         cats = await self._add_categories(proposal.categories if proposal else [], cats,
-                                          rejected)
+                                          warnings, rejected)
         if cats:
             proposed["categories"] = cats
 
@@ -367,11 +396,18 @@ class MandateDraftAgent:
         return {"proposed": proposed, "warnings": warnings, "rejected": rejected,
                 "used_llm": used_llm}
 
-    async def _add_categories(self, wanted: list, cats: list, rejected: list) -> list:
+    async def _add_categories(self, wanted: list, cats: list, warnings: list,
+                              rejected: list) -> list:
         if not wanted:
             return cats
-        known = await self.categories.get(self.core)
+        known, verified = await self.categories.lookup(self.core)
         for value in wanted:
+            if not verified:
+                # The catalogue could not be read. Saying "no such category" would blame
+                # the donor for the core being cold, so warn and leave the field alone.
+                warnings.append(
+                    "couldn" + "t verify category " + str(value) + ", try again in a minute")
+                continue
             resolved = match_category(value, known)
             if resolved is None:
                 rejected.append("category " + str(value) + ": no such category")

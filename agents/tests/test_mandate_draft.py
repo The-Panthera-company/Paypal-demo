@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app import main as main_module
 from app.agents.mandate_draft import (
+    CategoryCache,
     Current,
     DEFAULT_WEIGHTS,
     MandateDraftAgent,
@@ -407,4 +408,123 @@ def test_category_lookup_failure_is_a_warning_not_a_500(monkeypatch):
         r = c.post("/agents/mandate/draft", json={"text": "education", "current": {}})
     main_module._hits.clear()
     assert r.status_code == 200
-    assert r.json()["rejected"] == ["category Education: no such category"]
+    body = r.json()
+    # A cold core is not the donor fault: warn and leave the field alone rather than
+    # sending them hunting for a category that does exist.
+    assert body["rejected"] == []
+    assert body["warnings"] == [
+        "couldn" + "t verify category Education, try again in a minute"]
+    assert "categories" not in body["proposed"]
+
+
+class FlakyCore(FakeCore):
+    """Down for `failures` reads, then up. A cold core waking up.
+
+    One draft reads the catalogue twice (once for the prompt, once in _add_categories),
+    and each read retries once, so a draft against a dead core makes up to four reads.
+    """
+
+    def __init__(self, failures: int = 1, **kw) -> None:
+        super().__init__(**kw)
+        self.failures = failures
+        self.calls = 0
+
+    async def categories(self) -> list[dict]:
+        from app.core import CoreError
+
+        self.calls += 1
+        if self.failures:
+            self.failures -= 1
+            raise CoreError("GET /categories -> 500")
+        return await super().categories()
+
+
+def draft_agent(core, category: str = "Education") -> MandateDraftAgent:
+    return MandateDraftAgent(
+        core=core,
+        llm=FakeLLM(json_replies=[Proposal(categories=[category])]),
+        mcp=FakeMcpClient({"search_projects": []}))
+
+
+def test_failed_lookup_warns_and_leaves_the_field_alone() -> None:
+    agent_ = draft_agent(FlakyCore(failures=99))
+    out = asyncio.run(agent_.draft("education", Current()))
+    assert out["rejected"] == [], "a cold core is never a bad category"
+    assert out["warnings"] == [
+        "couldn" + "t verify category Education, try again in a minute"]
+    assert "categories" not in out["proposed"], "an unverified category is not applied"
+
+
+def test_lookup_is_retried_once_before_giving_up() -> None:
+    """One retry per read, with the longer budget: two reads in a draft that fails."""
+    core = FlakyCore(failures=99)
+    agent_ = draft_agent(core)
+    asyncio.run(agent_.draft("education", Current()))
+    assert core.calls == 4, "two reads (propose + merge), each retried once"
+
+
+def test_failure_is_not_cached_and_the_next_request_succeeds() -> None:
+    """One cold failure must not pin no-categories for the TTL."""
+    # Each read retries once, so a draft makes four reads (propose x2, merge x2).
+    # All four must fail for the whole request to come back unverified.
+    core = FlakyCore(failures=4)
+    agent_ = draft_agent(core)
+
+    first = asyncio.run(agent_.draft("education", Current()))
+    assert first["rejected"] == [], "a cold core is not a bad category"
+    assert first["warnings"] == [
+        "couldn" + "t verify category Education, try again in a minute"]
+    assert "categories" not in first["proposed"]
+
+    second = asyncio.run(agent_.draft("education", Current()))
+    assert second["warnings"] == []
+    assert second["rejected"] == []
+    # Categories are applied as ids: 2 is Education in FAKE_CATEGORIES.
+    assert second["proposed"]["categories"] == [2]
+
+
+def test_a_real_catalogue_still_rejects_an_unknown_name() -> None:
+    """The failure path must not swallow genuine rejections."""
+    agent_ = draft_agent(FakeCore(), category="Space travel")
+    out = asyncio.run(agent_.draft("space travel", Current()))
+    assert out["rejected"] == ["category Space travel: no such category"]
+    assert out["warnings"] == []
+
+
+def test_empty_catalogue_is_not_cached_and_the_cache_retries() -> None:
+    """A deployed core always has categories, so [] means unavailable, not none-exist.
+
+    Asserted on the cache directly: a draft reads it twice, so within one request the
+    second read would already succeed and hide the point.
+    """
+    calls = {"n": 0}
+
+    class EmptyThenFull(FakeCore):
+        async def categories(self) -> list[dict]:
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                return []
+            return [{"id": 2, "name": "Education", "project_count": 4}]
+
+    core = EmptyThenFull()
+    cache = CategoryCache()
+
+    values, verified = asyncio.run(cache.lookup(core))
+    assert (values, verified) == ([], False)
+    assert calls["n"] == 2, "the empty answer was retried once"
+
+    values, verified = asyncio.run(cache.lookup(core))
+    assert verified is True
+    assert values == [{"id": 2, "name": "Education", "project_count": 4}]
+
+    # A good answer IS cached: no third fetch inside the TTL.
+    asyncio.run(cache.lookup(core))
+    assert calls["n"] == 3
+
+
+def test_a_successful_lookup_is_cached_for_the_ttl() -> None:
+    core = FlakyCore(failures=0)
+    agent_ = draft_agent(core)
+    asyncio.run(agent_.draft("education", Current()))
+    asyncio.run(agent_.draft("education", Current()))
+    assert core.calls == 1, "only failures are retried; successes are cached"
