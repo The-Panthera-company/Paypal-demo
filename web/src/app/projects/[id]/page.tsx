@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { PageTitle } from "@/components/PageTitle";
-import { CategoryArt, ProgressBar, StatBox } from "@/components/ui";
+import { assignPhotos, CategoryArt, ProgressBar, StatBox } from "@/components/ui";
 import Link from "next/link";
 import { DonatePanel } from "@/components/DonatePanel";
 import { MilestoneTimeline } from "@/components/MilestoneTimeline";
@@ -10,7 +10,7 @@ import { ProjectTabs } from "@/components/ProjectTabs";
 import { TeamRoster } from "@/components/TeamRoster";
 import { boughtTitle, fetchProjectProcurements, type Procurement } from "@/lib/procurement";
 import { LineItems } from "@/components/PurchaseRequests";
-import { daysLeft, formatDate, formatMoney, getImpactUpdates, getProject, getRound, getSimilarProjects } from "@/lib/api";
+import { daysLeft, formatDate, formatMoney, getImpactUpdates, getProject, getProjects, getRound, getSimilarProjects } from "@/lib/api";
 import { getProjectTeam } from "@/lib/project-team";
 
 // Krowd single-project layout, with the PayPal donate panel (#14).
@@ -22,6 +22,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const [updates, similar, round, procurements] = await Promise.all([getImpactUpdates(p.id), getSimilarProjects(p), getRound(), fetchProjectProcurements(p.id, { next: { revalidate: 60 } } as RequestInit).catch(() => [] as Procurement[])]);
   const bought = procurements.filter((x) => x.status === "paid");
 
+  // Same photo as the project's card on Explore and Home (photos are assigned across the list)
+  const photo = assignPhotos(await getProjects().catch(() => []))[p.id];
   const team = getProjectTeam(p);
   const milestones = [...(p.milestones ?? [])].sort((a, b) => a.seq - b.seq);
   const fundsTotal = milestones.reduce((t, m) => t + m.amount.amount, 0) || p.goal.amount;
@@ -215,7 +217,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <section className="bg-surface-alt pb-20 pt-12 lg:pb-28 lg:pt-[100px]">
         <div className="container-k grid gap-10 lg:grid-cols-2">
           <div className="aspect-[4/3]">
-            <CategoryArt id={p.categoryId} seed={p.id} label={`Photo for ${p.title}`} />
+            <CategoryArt id={p.categoryId} seed={p.id} photo={photo} label={`Photo for ${p.title}`} />
           </div>
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink">
