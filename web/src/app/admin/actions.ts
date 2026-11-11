@@ -200,7 +200,13 @@ export async function runProcurementAgentAction(): Promise<ProcurementRunResult>
       runs: (d.runs ?? []).map((x) => ({
         procurementId: num(x.procurement_id ?? x.procurementId),
         runId: num(x.run_id ?? x.runId),
-        summary: txt(x.summary ?? x.report_text ?? x.status ?? x.description),
+        summary: [
+          x.supplier_name ? txt(x.supplier_name) : "",
+          typeof x.amount_cents === "number" ? "$" + (x.amount_cents / 100).toFixed(2) : "",
+          x.status ? txt(x.status).replaceAll("_", " ") : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
       })),
       abstained: (d.abstained ?? []).map((x) => ({ procurementId: num(x.procurement_id ?? x.procurementId ?? x.id), reason: txt(x.reason ?? x.why ?? x.detail) })),
     };

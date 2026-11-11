@@ -139,6 +139,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 <h2 className="text-xl">Owner token for any project</h2>
                 <p className="text-sm">For seeded projects or a lost token. The project then uploads evidence at /projects/&lt;id&gt;/evidence.</p>
                 <OwnerTokenButton withInput />
+                <h2 className="pt-4 text-xl">PayPal email for payouts</h2>
+                <p className="text-sm">Where a project&apos;s released tranches are paid (in the sandbox, a sandbox personal account).</p>
+                <PayoutEmailField withInput />
               </section>
             </div>
           )}
