@@ -6,6 +6,7 @@ import type { Category } from "@/lib/types";
 import { DonatePanel } from "./DonatePanel";
 import { MonthlyGiving } from "./MonthlyGiving";
 import { AgentRunViewer } from "./AgentRunViewer";
+import { AgentReport } from "./AgentReport";
 import { MandateDraft, type DraftValues } from "./MandateDraft";
 import { categoryIcon, Icon } from "./Icon";
 
@@ -454,7 +455,7 @@ export function MandateSetup({ categories, tags }: { categories: Category[]; tag
                   runs.map((r) => (
                     <div key={r.id} className="border-t border-line pt-3 text-sm">
                       <p className="font-medium text-ink">{new Date(r.run_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</p>
-                      <p>{r.report_text ?? "Run recorded."}</p>
+                      {r.report_text ? <AgentReport text={r.report_text} compact /> : <p>Run recorded.</p>}
                     </div>
                   ))
                 )}

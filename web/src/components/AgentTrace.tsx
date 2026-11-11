@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AgentReport } from "./AgentReport";
 import type { AgentRun, TraceStep } from "@/lib/agent-trace";
 
 const CHIP: Record<string, string> = {
@@ -53,10 +54,10 @@ export function AgentTrace({ run, animate = false, compact = false }: { run: Age
   return (
     <div className="space-y-5">
       {run.report_text && (
-        <p className="border-l-4 border-primary bg-white p-4 text-ink">
-          <span className="block text-[11px] font-bold uppercase tracking-[2px] text-primary">The agent&apos;s report</span>
-          {run.report_text}
-        </p>
+        <div className="border-l-4 border-primary bg-white p-4">
+          <span className="mb-2 block text-[11px] font-bold uppercase tracking-[2px] text-primary">The agent&apos;s report</span>
+          <AgentReport text={run.report_text} compact={compact} />
+        </div>
       )}
 
       {derived && (
