@@ -816,6 +816,8 @@ class SupplierOut(BaseModel):
             "categories": ["Education"],
             "tags": ["books", "literacy", "schools"],
             "region": "Nakuru",
+            "unit_amount_cents": 75,
+            "reliability": 90,
         }
     )
     id: int = Field(description="Supplier id")
@@ -823,6 +825,8 @@ class SupplierOut(BaseModel):
     categories: list[str | int] = Field(description="Category names or ids the supplier serves")
     tags: list[str | int] = Field(description="Project tags the supplier can supply")
     region: str | None = Field(description="Supplier's service area")
+    unit_amount_cents: int | None = Field(None, description="The supplier's usual price for one unit, in cents; null when unknown")
+    reliability: int | None = Field(None, ge=0, le=100, description="How reliably it has delivered, 0 to 100; null when unknown")
 
 
 # --- Agent (internal) endpoints --------------------------------------------------------
@@ -1285,9 +1289,14 @@ class TraceStep(BaseModel):
 class AgentRunChoice(BaseModel):
     model_config = _example({"project_id": 1, "title": "Lanet Library", "amount_cents": 500})
 
-    project_id: int = Field(description="Project the agent chose")
-    title: str | None = Field(None, description="Project title, joined for display")
-    amount_cents: int = Field(description="What the agent asked the rules engine to give, in cents")
+    project_id: int | None = Field(
+        description="Giving Agent: the project it chose. Procurement Agent: the project the purchase is for "
+        "(null only if the run names no purchase)"
+    )
+    title: str | None = Field(None, description="Project title; for a purchase, the supplier and the project")
+    amount_cents: int = Field(description="What the agent asked for: the gift, or the supplier's price, in cents")
+    supplier_id: int | None = Field(None, description="Procurement Agent runs: the supplier it chose")
+    supplier_name: str | None = Field(None, description="Procurement Agent runs: that supplier's name")
 
 
 class AgentRunSkip(BaseModel):

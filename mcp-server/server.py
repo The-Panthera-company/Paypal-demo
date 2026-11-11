@@ -196,7 +196,9 @@ def list_procurement_requests() -> list[dict[str, Any]]:
 @server.tool(annotations=READ)
 def list_procurement_suppliers(project_id: int) -> list[dict[str, Any]]:
     """Active suppliers allowed for this project: their region fits and a category or tag matches.
-    Returns id, name, categories, tags and region. Propose only one of these ids."""
+    Returns id, name, categories, tags, region, unit_amount_cents (usual price for one unit) and
+    reliability (0-100); the last two are null when unknown. Propose only one of these ids. The
+    API does not check that line items add up to the amount: check that yourself."""
     return _call("GET", "/internal/procurement/suppliers", params={"project_id": project_id})
 
 

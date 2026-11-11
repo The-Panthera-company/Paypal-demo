@@ -306,6 +306,10 @@ class Supplier(Base):
     categories: Mapped[list] = mapped_column(JSON, default=list)
     tags: Mapped[list] = mapped_column(JSON, default=list)
     region: Mapped[str | None] = mapped_column(String(60))
+    # What the Procurement Agent compares: the supplier's usual price for one unit, and how
+    # reliably it has delivered (0-100). Both unknown (null) until someone records them.
+    unit_amount_cents: Mapped[int | None] = mapped_column(BigInteger)
+    reliability: Mapped[int | None] = mapped_column(Integer)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
