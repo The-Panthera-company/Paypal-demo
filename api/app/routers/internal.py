@@ -430,8 +430,9 @@ def procurement_requests(db: Session = Depends(get_db)):
     responses={404: {"model": ErrorOut}},
 )
 def procurement_suppliers(project_id: int, db: Session = Depends(get_db)):
-    """Active suppliers whose categories or tags and service region match the project. Only the id,
-    name, categories, tags and region are returned: the agent never needs the PayPal email."""
+    """Active suppliers whose categories or tags and service region match the project, with each
+    one's unit price and reliability (null when unknown) to compare. The PayPal email is never
+    returned: the agent doesn't need it."""
     project = db.get(Project, project_id)
     if project is None:
         raise _error(404, "PROJECT_NOT_FOUND", "No such project")
@@ -443,6 +444,8 @@ def procurement_suppliers(project_id: int, db: Session = Depends(get_db)):
             categories=list(s.categories or []),
             tags=list(s.tags or []),
             region=s.region,
+            unit_amount_cents=s.unit_amount_cents,
+            reliability=s.reliability,
         )
         for s in suppliers
         if procurement_service.supplier_eligible(db, s, project)

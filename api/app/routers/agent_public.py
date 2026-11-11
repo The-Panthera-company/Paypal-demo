@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.demo import DEMO_MANDATE_ID
-from app.models import AuditLog, Donation, MandateRun, Milestone, Project, WatchdogCase
+from app.models import AuditLog, Donation, MandateRun, Milestone, Procurement, Project, Supplier, WatchdogCase
 from app.schemas import (
     AgentActivityOut,
     AgentRunChoice,
@@ -147,10 +147,49 @@ def _trace(run: MandateRun) -> list[TraceStep]:
     return sorted(steps, key=lambda step: step.seq)
 
 
-def _chosen(db: Session, decisions: dict) -> list[AgentRunChoice]:
+def _chosen_suppliers(db: Session, run: MandateRun, raw: list) -> list[AgentRunChoice]:
+    """A Procurement Agent run chooses suppliers, not projects: {supplier_id, amount_cents} and
+    optionally procurement_id or project_id. The project comes from the entry, its purchase, or
+    the purchase this run proposed. Only the supplier's name is shown, never its PayPal email."""
+    items = [item for item in raw if isinstance(item, dict)]
+    supplier_ids = {_as_int(item.get("supplier_id")) for item in items} - {None}
+    purchase_ids = {_as_int(item.get("procurement_id")) for item in items} - {None}
+    suppliers = {s.id: s.name for s in db.scalars(select(Supplier).where(Supplier.id.in_(supplier_ids)))}
+    purchases = {p.id: p for p in db.scalars(select(Procurement).where(
+        (Procurement.run_id == run.id) | Procurement.id.in_(purchase_ids)))}
+    of_run = [p for p in purchases.values() if p.run_id == run.id]
+
+    resolved = []
+    for item in items:
+        purchase = purchases.get(_as_int(item.get("procurement_id")) or 0) or (of_run[0] if len(of_run) == 1 else None)
+        project_id = _as_int(item.get("project_id")) or (purchase.project_id if purchase else None)
+        supplier_id = _as_int(item.get("supplier_id")) or (purchase.supplier_id if purchase else None)
+        if supplier_id is None and project_id is None:
+            continue
+        amount = _as_int(item.get("amount_cents")) or (purchase.amount_cents if purchase else None) or 0
+        resolved.append((project_id, supplier_id, amount, item))
+    titles = _titles(db, {pid for pid, *_ in resolved if pid is not None})
+    missing = {sid for _, sid, *_ in resolved if sid is not None and sid not in suppliers}
+    if missing:
+        suppliers.update({s.id: s.name for s in db.scalars(select(Supplier).where(Supplier.id.in_(missing)))})
+
+    chosen = []
+    for project_id, supplier_id, amount, item in resolved:
+        supplier = suppliers.get(supplier_id) if supplier_id is not None else None
+        supplier = supplier or _safe_text(item.get("supplier_name") or item.get("title"), 160)
+        project = titles.get(project_id) if project_id is not None else None
+        title = " for ".join(part for part in (supplier, project) if part) or None
+        chosen.append(AgentRunChoice(project_id=project_id, title=title, amount_cents=amount,
+                                     supplier_id=supplier_id, supplier_name=supplier))
+    return chosen
+
+
+def _chosen(db: Session, run: MandateRun, decisions: dict) -> list[AgentRunChoice]:
     raw = decisions.get("chosen")
     if not isinstance(raw, list):
         return []
+    if run.agent == PROCUREMENT_AGENT:
+        return _chosen_suppliers(db, run, raw)
     ids: set[int] = set()
     for item in raw:
         if isinstance(item, dict) and (project_id := _as_int(item.get("project_id"))) is not None:
@@ -208,7 +247,7 @@ def _run_out(db: Session, run: MandateRun) -> AgentRunOut:
         run_at=run.run_at,
         report_text=_safe_text(run.report_text, 4000),
         trace=_trace(run),
-        chosen=_chosen(db, decisions),
+        chosen=_chosen(db, run, decisions),
         skipped=_skipped(db, decisions),
     )
 

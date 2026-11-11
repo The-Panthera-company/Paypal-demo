@@ -138,7 +138,8 @@ def test_supplier_list_matches_and_hides_paypal_email(client, db_session_factory
     r = client.get("/internal/procurement/suppliers", params={"project_id": 1}, headers=INTERNAL)
     assert r.status_code == 200, r.text
     assert [s["id"] for s in r.json()] == [eligible]
-    assert set(r.json()[0]) == {"id", "name", "categories", "tags", "region"}
+    assert set(r.json()[0]) == {"id", "name", "categories", "tags", "region", "unit_amount_cents", "reliability"}
+    assert (r.json()[0]["unit_amount_cents"], r.json()[0]["reliability"]) == (None, None)  # unknown until recorded
     assert "paypal_email" not in r.json()[0]
 
 
@@ -453,3 +454,33 @@ def test_admin_retry_is_logged_as_the_admin(client, db_session_factory, fake_pay
     with db_session_factory() as db:
         retry = db.scalar(select(AuditLog).where(AuditLog.action == "procurement_retry"))
     assert retry.actor == "admin" and retry.inputs == {"procurement_id": request["id"]}
+
+
+def test_suppliers_come_with_price_and_reliability(client, db_session_factory):
+    supplier_id = _supplier(db_session_factory)
+    with db_session_factory() as db:
+        supplier = db.get(Supplier, supplier_id)
+        supplier.unit_amount_cents, supplier.reliability = 75, 95
+        db.commit()
+    row = client.get("/internal/procurement/suppliers", params={"project_id": 1}, headers=INTERNAL).json()[0]
+    assert (row["unit_amount_cents"], row["reliability"]) == (75, 95)
+    assert "paypal_email" not in row
+
+
+def test_a_procurement_run_shows_the_supplier_it_chose(client, db_session_factory, fake_paypal):
+    request = _request(client, _owner(client), _milestone(db_session_factory))
+    supplier_id = _supplier(db_session_factory)
+    run = client.post("/internal/procurement/runs", headers=INTERNAL, json={
+        "decisions": {"chosen": [{"supplier_id": supplier_id, "amount_cents": 3000}]}, "report_text": "Chose the bookseller"})
+    run_id = run.json()["id"]
+    # Before the proposal the run names no purchase: the supplier still shows, without a project.
+    early = client.get(f"/agents/runs/{run_id}").json()["chosen"]
+    assert early == [{"project_id": None, "title": "Nakuru Books", "amount_cents": 3000,
+                      "supplier_id": supplier_id, "supplier_name": "Nakuru Books"}]
+
+    client.post(f"/internal/procurement/{request['id']}/propose", headers=INTERNAL,
+                json={"supplier_id": supplier_id, "amount_cents": 3000, "rationale": "x", "run_id": run_id})
+    chosen = client.get(f"/agents/runs/{run_id}").json()["chosen"]
+    assert chosen == [{"project_id": 1, "title": "Nakuru Books for Lanet Library", "amount_cents": 3000,
+                       "supplier_id": supplier_id, "supplier_name": "Nakuru Books"}]
+    assert "@supplier.co.ke" not in client.get(f"/agents/runs/{run_id}").text

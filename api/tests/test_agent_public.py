@@ -100,7 +100,8 @@ def test_run_has_trace_choices_and_no_donor_identifiers(client, db_session_facto
     assert body["trace"][1]["input"] == {"project_id": 1, "amount_cents": 500}
     assert body["trace"][1]["result"] == {"status": "recorded"}
     assert body["trace"][1]["reason"] == "Three backers, [redacted] confirmed"
-    assert body["chosen"] == [{"project_id": 1, "title": "Lanet Library", "amount_cents": 500}]
+    assert body["chosen"] == [{"project_id": 1, "title": "Lanet Library", "amount_cents": 500,
+                               "supplier_id": None, "supplier_name": None}]
     assert body["skipped"] == [
         {"project_id": 2, "title": "Faith School Desks", "reason": "Already backed this month"}
     ]
