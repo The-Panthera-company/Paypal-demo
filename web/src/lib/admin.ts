@@ -370,3 +370,16 @@ export async function retryProcurement(id: number) {
   if (!API_URL || !ADMIN_TOKEN) return;
   await adminFetch(`/admin/procurement/${id}/retry`, { method: "POST" });
 }
+
+// ---- Project payout account (PayPal email the tranches are paid to) ----
+export async function getPayoutEmail(projectId: string): Promise<string | null> {
+  if (!API_URL || !ADMIN_TOKEN) return null;
+  const r = await fetch(`${API_URL}/admin/projects/${projectId}/payout-account`, { cache: "no-store", headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`Couldn't read the payout account (${r.status})`);
+  return ((await r.json()) as { paypal_email: string }).paypal_email || null;
+}
+export async function setPayoutEmail(projectId: string, email: string) {
+  if (!API_URL || !ADMIN_TOKEN) return;
+  await adminFetch(`/admin/projects/${projectId}/payout-account`, { method: "PUT", body: JSON.stringify({ paypal_email: email }) });
+}
