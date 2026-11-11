@@ -15,6 +15,9 @@ TIMEOUT = httpx.Timeout(90.0, connect=15.0)
 # short budget rather than the 90 s the funding/story reads use.
 CATEGORIES_TIMEOUT = httpx.Timeout(3.0, connect=3.0)
 
+# /mandates/constraints feeds the same draft, so it gets the same short budget.
+CONSTRAINTS_TIMEOUT = httpx.Timeout(3.0, connect=3.0)
+
 
 class CoreError(RuntimeError):
     pass
@@ -66,6 +69,26 @@ class Core:
             raise CoreError(f"GET /categories unreachable: {exc}") from exc
         return [c for c in data if isinstance(c, dict)] if isinstance(data, list) else []
 
+    async def constraints(self) -> dict:
+        """Public GET /mandates/constraints: the limits the API enforces on a mandate.
+
+        Weights are on the API 0-100 scale, not fractions. Uses a 3 s timeout: a slow
+        constraints read must not use up the draft endpoint budget.
+        """
+        try:
+            r = await self._client.get("/mandates/constraints",
+                                       headers=self._headers("/mandates/constraints"),
+                                       timeout=CONSTRAINTS_TIMEOUT)
+            r.raise_for_status()
+            data = r.json()
+        except httpx.HTTPStatusError as exc:
+            raise CoreError(f"GET /mandates/constraints -> {exc.response.status_code}") from exc
+        except httpx.HTTPError as exc:
+            raise CoreError(f"GET /mandates/constraints unreachable: {exc}") from exc
+        if not isinstance(data, dict):
+            raise CoreError("GET /mandates/constraints did not return an object")
+        return data
+
     async def aclose(self) -> None:
         await self._client.aclose()
 
@@ -80,17 +103,35 @@ FAKE_CATEGORIES = [
 ]
 
 
+# Canned constraints for FAKE_CORE. These are the live API values, on the API 0-100 weight
+# scale, so a fake draft enforces exactly what a real one would.
+FAKE_CONSTRAINTS = {
+    "default_weights": {"few_backers": 35, "progress": 25, "urgency": 20,
+                        "evidence": 10, "days_since_funded": 10},
+    "max_weight_shift": 20,
+    "max_budget_cents": 1000000,
+    "max_tags": 20,
+    "max_tag_length": 40,
+    "min_per_project_cents": 100,
+    "max_per_project_cents": 1000000,
+    "min_approval_threshold_cents": 100,
+    "max_approval_threshold_cents": 1000000,
+}
+
+
 class FakeCore(Core):
     """FAKE_CORE / test double: canned public reads, no network."""
 
     def __init__(self, funding: dict[int, list[dict]] | None = None,
                  stories: dict[int, list[dict]] | None = None,
-                 categories: list[dict] | None = None) -> None:
+                 categories: list[dict] | None = None,
+                 constraints: dict | None = None) -> None:
         self.cfg = settings()
         self.base = "fake"
         self._funding = funding or {}
         self._stories = stories or {}
         self._categories = FAKE_CATEGORIES if categories is None else categories
+        self._constraints = FAKE_CONSTRAINTS if constraints is None else constraints
         self._client = None  # type: ignore[assignment]
 
     async def funding_history(self, project_id: int) -> list[dict]:
@@ -101,6 +142,9 @@ class FakeCore(Core):
 
     async def categories(self) -> list[dict]:
         return [dict(c) for c in self._categories]
+
+    async def constraints(self) -> dict:
+        return dict(self._constraints)
 
     async def aclose(self) -> None:
         return None
