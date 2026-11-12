@@ -22,8 +22,8 @@ The servers are on Render's free plan and sleep when idle: **the first page can 
 
 All payments are **PayPal sandbox**: no real money moves. To pay, use a sandbox buyer account in the PayPal window:
 
-- Email: `<sandbox buyer email>`
-- Password: `<sandbox buyer password>`
+- Email: `sb-segph53627780@personal.example.com`
+- Password: `^_8w-(tR`
 
 Things to try:
 
