@@ -258,6 +258,8 @@ def _status(action: str, result: str | None) -> str:
         return "blocked"
     if action == "case_opened":
         return "pending"  # a case needs an admin
+    if action == "checked_donation" and value not in {"recorded", "awaiting_donor_approval", "duplicate", "ok", ""}:
+        return "blocked"  # a refused gift is logged with the rule that blocked it, e.g. over_monthly_budget
     if value in {"awaiting_donor_approval", "held_for_admin", "pending", "created", "processing"}:
         return "pending"
     if value in {"rejected", "failed", "error", "blocked", "mismatch", "unmatched", "denied", "returned"}:
