@@ -4,9 +4,9 @@ The group decides where the money goes; AI agents protect it; rules keep it fair
 
 | Folder | What | Owner |
 |---|---|---|
-| `web/` | Next.js website: donor app, project pages, admin console | Person 2 |
-| `api/` | Python (FastAPI) core API: PayPal, ledger, matching | Person 1 |
-| `agents/` | AI agents (DeepSeek) and the MCP client | Person 3 |
+| `web/` | Next.js website: donor app, project pages, admin console | Busolo Titus |
+| `api/` | Python (FastAPI) core API: PayPal, ledger, matching | Kowiti Allan |
+| `agents/` | AI agents (DeepSeek) and the MCP client | Kalukwo Shadrack |
 | `docs/` | Design docs, [team schedule](docs/TEAM_SCHEDULE.md), [UI ↔ backend guide](docs/UI_BACKEND_GUIDE.md) | All |
 
 ## Try it (live demo)
@@ -180,18 +180,18 @@ Both must pass. **Do not run `npm audit fix --force`**: it upgrades major versio
 
 ## Put the website online (Render)
 
-`render.yaml` describes three things: `giving-api` (Person 1), its database `giving-db`, and the website `giving-web`. Free plan.
+`render.yaml` describes three things: `giving-api` (Kowiti Allan), its database `giving-db`, and the website `giving-web`. Free plan.
 
 **First time** (whoever owns the Render account):
 
 1. render.com → **New → Blueprint** → repo `The-Panthera-company/Paypal-demo`, branch `main` → it reads `render.yaml`.
-   - If the API already exists from Person 1's earlier deploy, open that Blueprint and click **Manual sync** instead; Render adds `giving-web`.
+   - If the API already exists from Kowiti Allan's earlier deploy, open that Blueprint and click **Manual sync** instead; Render adds `giving-web`.
 2. It asks for the values marked `sync: false`:
    | Service | Key | Value |
    |---|---|---|
    | giving-web | `NEXT_PUBLIC_API_URL` | the API's address, e.g. `https://giving-api.onrender.com` (no `/` at the end) |
    | giving-web | `ADMIN_UI_PASSWORD` | choose a password for `/admin`; share it privately |
-   | giving-web | `NEXT_PUBLIC_AGENTS_URL` | leave empty until Person 3's agents are deployed |
+   | giving-web | `NEXT_PUBLIC_AGENTS_URL` | leave empty until Kalukwo Shadrack's agents are deployed |
    `ADMIN_TOKEN` is copied from the API automatically.
 3. **Apply**, wait for both builds (the website takes ~3–5 min).
 4. Copy the website's address (`https://giving-web-xxxx.onrender.com`). In **giving-api → Environment**, set
