@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { AgentReport } from "@/components/AgentReport";
+import { MoneyBars, type MoneyRow } from "@/components/MoneyBars";
+import { assignPhotos } from "@/components/ui";
 import { Avatar } from "@/components/Avatar";
 import { LeaderboardOptIn } from "@/components/LeaderboardOptIn";
 import { PageTitle } from "@/components/PageTitle";
@@ -37,16 +40,17 @@ export default async function ReportPage() {
   const backed = new Set(report.gifts.map((g) => g.projectId).filter(Boolean)).size;
 
   // Chart: given vs matching unlocked, per project
-  const byProject = new Map<string, { title: string; given: number; match: number }>();
+  const photos = assignPhotos(projects);
+  const byProject = new Map<string, MoneyRow>();
   for (const g of report.gifts) {
     const key = g.projectId ?? `via-${g.via}`;
-    const row = byProject.get(key) ?? { title: g.projectTitle ?? via[g.via], given: 0, match: 0 };
+    const pr = projects.find((p) => p.id === g.projectId);
+    const row = byProject.get(key) ?? { title: g.projectTitle ?? via[g.via], given: 0, match: 0, categoryId: pr?.categoryId, seed: pr?.id, photo: pr ? photos[pr.id] : undefined };
     row.given += g.amount.amount;
     row.match += g.matchUnlocked.amount;
     byProject.set(key, row);
   }
   const rows = [...byProject.values()].sort((a, b) => b.given + b.match - (a.given + a.match));
-  const max = Math.max(1, ...rows.map((r) => Math.max(r.given, r.match)));
   const title = (id: string) => projects.find((p) => p.id === id)?.title ?? "A project you backed";
 
   return (
@@ -92,41 +96,7 @@ export default async function ReportPage() {
               {/* Chart */}
               <section className="space-y-4 bg-white p-6">
                 <h2 className="text-2xl">Where your money went</h2>
-                <div className="flex flex-wrap gap-5 text-sm" aria-hidden>
-                  <span className="flex items-center gap-2"><span className="h-3 w-6 bg-primary" /> You gave</span>
-                  <span className="flex items-center gap-2"><span className="h-3 w-6 bg-cobalt-green" /> Matching unlocked</span>
-                </div>
-                <table className="w-full">
-                  <caption className="sr-only">Amount you gave and matching unlocked, per project</caption>
-                  <thead className="sr-only">
-                    <tr>
-                      <th scope="col">Project</th>
-                      <th scope="col">You gave</th>
-                      <th scope="col">Matching unlocked</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r) => (
-                      <tr key={r.title} className="border-b border-line last:border-0">
-                        <th scope="row" className="w-1/3 py-3 pr-4 text-left font-medium text-ink">
-                          {r.title}
-                        </th>
-                        <td className="w-1/3 py-3 pr-2" colSpan={1}>
-                          <div className="flex items-center gap-2">
-                            <span className="h-4 bg-primary" style={{ width: `${(r.given / max) * 100}%`, minWidth: 4 }} aria-hidden />
-                            <span className="tabular text-sm text-ink">{m(r.given)}</span>
-                          </div>
-                        </td>
-                        <td className="w-1/3 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className="h-4 bg-cobalt-green" style={{ width: `${(r.match / max) * 100}%`, minWidth: 4 }} aria-hidden />
-                            <span className="tabular text-sm text-ink">{m(r.match)}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <MoneyBars rows={rows} format={m} />
                 <p className="text-sm">Matching is projected until the round closes, then final. It is paid out with the project&apos;s next milestone.</p>
               </section>
 
@@ -176,7 +146,7 @@ export default async function ReportPage() {
                       Your Giving Agent
                     </h2>
                     {report.agentReport ? (
-                      <p className="leading-7 text-cobalt-green">{report.agentReport}</p>
+                      <div className="bg-white p-4"><AgentReport text={report.agentReport} /></div>
                     ) : (
                       <p className="text-footer-text">No agent runs yet. Set your rules and it will explain every choice here.</p>
                     )}

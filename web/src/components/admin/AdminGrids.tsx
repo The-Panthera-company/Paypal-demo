@@ -1,6 +1,7 @@
 "use client";
 
 import { Banner, Confirm, notify as toast } from "@/components/Status";
+import { plainReport } from "@/components/AgentReport";
 import {
   AllCommunityModule,
   ModuleRegistry,
@@ -404,7 +405,8 @@ export function AuditGrid({ rows }: { rows: AuditEntry[] }) {
         minWidth: 260,
         wrapText: true,
         autoHeight: true,
-        cellStyle: { lineHeight: "1.5", paddingTop: 16, paddingBottom: 16 },
+        valueFormatter: (p) => (p.value ? plainReport(String(p.value)) : ""),
+        cellStyle: { lineHeight: "1.5", paddingTop: 16, paddingBottom: 16, whiteSpace: "pre-line" },
       },
       {
         colId: "trace",

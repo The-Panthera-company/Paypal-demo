@@ -311,3 +311,42 @@ body {
     height: 100%;
   }
 }
+
+/* Forms: one consistent look for every text field, number, select and textarea */
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]),
+  select,
+  textarea {
+    border-width: 2px;
+    border-color: var(--color-line);
+    background-color: #fff;
+    color: var(--color-ink);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):hover,
+  select:hover,
+  textarea:hover {
+    border-color: var(--color-primary-line);
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+  select:focus,
+  textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 18%, transparent);
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  }
+  input[aria-invalid="true"],
+  textarea[aria-invalid="true"] {
+    border-color: var(--color-cat-health);
+  }
+  label {
+    font-weight: 500;
+  }
+}
+.field {
+  min-height: 2.75rem;
+}

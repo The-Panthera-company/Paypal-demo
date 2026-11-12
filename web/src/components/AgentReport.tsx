@@ -36,6 +36,7 @@ export function AgentReport({ text, compact = false }: { text: string; compact?:
     title = t[1];
     intro = intro.slice(t[0].length);
   }
+  const max = Math.max(0, ...items.map((it) => Number((it.match(/\$([\d,]+(?:\.\d+)?)/) || [])[1]?.replace(/,/g, "") || 0)));
   return (
     <div className="space-y-3 text-ink">
       {title && <p className="font-display text-xl">{title}</p>}
@@ -44,10 +45,16 @@ export function AgentReport({ text, compact = false }: { text: string; compact?:
         <ul className="space-y-2">
           {items.map((it, i) => {
             const [head, why] = it.split(/\s+[—–-]\s+/, 2);
+            const amt = Number((head.match(/\$([\d,]+(?:\.\d+)?)/) || [])[1]?.replace(/,/g, "") || 0);
             return (
-              <li key={i} className="border-l-2 border-cobalt-green bg-surface-alt px-3 py-2 leading-6">
+              <li key={i} className="border border-line bg-white px-3 py-2 leading-6">
                 <span>{inline(head)}</span>
                 {why && !compact && <span className="block text-sm text-text">{inline(why)}</span>}
+                {amt > 0 && max > 0 && (
+                  <span className="mt-2 block h-2 bg-surface-alt" aria-hidden>
+                    <span className="block h-full bg-primary" style={{ width: `${(amt / max) * 100}%` }} />
+                  </span>
+                )}
               </li>
             );
           })}
@@ -56,4 +63,9 @@ export function AgentReport({ text, compact = false }: { text: string; compact?:
       {closing && <p className="text-sm leading-6 text-text">{inline(closing)}</p>}
     </div>
   );
+}
+
+/** The same report as plain text for tables (admin log): no markdown marks, no "(N cents)" */
+export function plainReport(text: string) {
+  return text.replace(/\*\*/g, "").replace(/\s*\(\d[\d,]*\s*cents?\)/gi, "").replace(/\s+-\s+(?=\$)/g, "\n• ");
 }
