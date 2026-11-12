@@ -128,10 +128,24 @@ class McpClient:
             args=[str(server)],
             env=env,
         )
-        self._stack = AsyncExitStack()
-        read, write = await self._stack.enter_async_context(stdio_client(params))
-        session = await self._stack.enter_async_context(ClientSession(read, write))
-        await session.initialize()
+        stack = AsyncExitStack()
+        self._stack = stack
+        try:
+            read, write = await stack.enter_async_context(stdio_client(params))
+            session = await stack.enter_async_context(ClientSession(read, write))
+            await session.initialize()
+        except BaseException:
+            # CancelledError is a BaseException: a request the web gave up on, or a
+            # shutdown, must not leak a half-open stack. Teardown can itself raise
+            # (anyio: "Attempted to exit cancel scope in a different task"), so it is
+            # swallowed here - the original error is the one worth propagating.
+            self._session = None
+            self._stack = None
+            try:
+                await stack.aclose()
+            except BaseException as exc:
+                log.warning("MCP connect teardown failed: %s", exc)
+            raise
         self._session = session
         log.info("MCP connected: %s", server.name)
         return session
