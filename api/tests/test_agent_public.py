@@ -276,3 +276,19 @@ def test_activity_is_newest_first_with_cursor_and_project_titles(client, db_sess
 
 def test_activity_rejects_bad_cursor(client):
     assert client.get("/agents/activity", params={"before_id": 0}).status_code == 422
+
+
+def test_refused_agent_gifts_are_shown_as_blocked(client, db_session_factory):
+    """The API logs a refused gift with the rule that blocked it; that is never "recorded"."""
+    results = ["recorded", "awaiting_donor_approval", "over_monthly_budget", "excluded_tag", "insufficient_balance"]
+    with db_session_factory() as db:
+        db.add_all(AuditLog(actor="giving-agent", action="checked_donation", inputs={"project_id": 1},
+                            rule_result=result, reason="Three backers") for result in results)
+        db.commit()
+    feed = {a["rule"] or a["title"]: (a["status"], a["title"])
+            for a in client.get("/agents/activity", params={"limit": 10}).json()}
+    for rule in ("over_monthly_budget", "excluded_tag", "insufficient_balance"):
+        status, title = feed[rule]
+        assert status == "blocked" and title.startswith("Agent gift to Lanet Library blocked"), (rule, title)
+    statuses = sorted(s for s, _ in feed.values())
+    assert statuses.count("ok") == 1 and statuses.count("pending") == 1  # recorded, and waiting for the donor
