@@ -1,3 +1,4 @@
+import { plainReport } from "@/components/AgentReport";
 import Link from "next/link";
 import type { GlobePin } from "@/components/GlobeBackdrop";
 import { GlobeBackdrop } from "@/components/GlobeBackdrop";
@@ -181,7 +182,7 @@ export function Overview({ data, dash, projects, lb, categories, globe }: { data
                   <span className="mt-1.5 size-2 shrink-0 bg-growth" aria-hidden />
                   <span>
                     <span className="font-medium text-ink">{a.actor}</span> · {a.action.replaceAll("_", " ")}
-                    {a.reason && <span className="block text-text">{a.reason}</span>}
+                    {a.reason && <span className="block whitespace-pre-line text-text">{a.reason.length > 220 ? `${plainReport(a.reason).slice(0, 220).trimEnd()}…` : plainReport(a.reason)}</span>}
                     <span className="block text-xs text-text">{new Date(a.createdAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
                   </span>
                 </li>
