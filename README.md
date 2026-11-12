@@ -7,9 +7,6 @@ The group decides where the money goes; AI agents protect it; rules keep it fair
 | `web/` | Next.js website: donor app, project pages, admin console | Busolo Titus |
 | `api/` | Python (FastAPI) core API: PayPal, ledger, matching | Kowiti Allan |
 | `agents/` | AI agents (DeepSeek) and the MCP client | Kalukwo Shadrack |
-| `web/` | Next.js website: donor app, project pages, admin console | BUSOLO TITUS |
-| `api/` | Python (FastAPI) core API: PayPal, ledger, matching | KOWITI ALLAN |
-| `agents/` | AI agents (DeepSeek) and the MCP client | KALUKWO SHADRACK |
 | `docs/` | Design docs, [team schedule](docs/TEAM_SCHEDULE.md), [UI ↔ backend guide](docs/UI_BACKEND_GUIDE.md) | All |
 
 ## Try it (live demo)
