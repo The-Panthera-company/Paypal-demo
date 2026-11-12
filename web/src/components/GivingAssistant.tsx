@@ -1,5 +1,6 @@
 "use client";
 
+import { assignPhotos, CategoryArt } from "./ui";
 import { BundiIcon } from "./BundiIcon";
 import { doodleTile, doodleUrl } from "@/lib/doodles";
 import { Avatar } from "./Avatar";
@@ -8,7 +9,7 @@ import { Avatar } from "./Avatar";
 const WALLPAPER = doodleUrl(doodleTile({ stroke: "#b9d8cb", seed: 11, density: 7 }));
 const clock = () => new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project } from "@/lib/types";
 import { Icon } from "./Icon";
 
@@ -76,6 +77,7 @@ async function agentAnswer(message: string, projects: Project[]): Promise<Extrac
 }
 
 export function GivingAssistant({ projects }: { projects: Project[] }) {
+  const photos = useMemo(() => assignPhotos(projects), [projects]);
   const [open, setOpen] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [text, setText] = useState("");
@@ -197,25 +199,36 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
                           ))}
                         </span>
                       )}
-                      {t.text}
+                      <ChatText text={t.text} />
                       <span className="mt-0.5 block text-right text-[10px] text-text">{t.at}</span>
                     </div>
                   </div>
                   {t.picks.length > 0 && (
-                    <div className="ml-9 max-w-[80%] overflow-hidden rounded-lg bg-white shadow-sm">
-                      {t.picks.map((p) => (
-                        <div key={p.id} className="flex items-center justify-between gap-3 border-b border-line px-3 py-2 text-sm last:border-0">
-                          <span>
-                            <span className="block font-medium text-ink">{p.title}</span>
-                            <span className="text-xs">
-                              {p.backerCount} backers · {Math.round((p.raised.amount / p.goal.amount) * 100)}% funded
-                            </span>
-                          </span>
-                          <Link href={`/projects/${p.id}#donate-box`} className="shrink-0 rounded-full bg-ink px-3 py-1.5 text-xs font-bold text-white hover:bg-primary">
-                            Back it
-                          </Link>
-                        </div>
-                      ))}
+                    <div className="ml-9 max-w-[85%] space-y-2">
+                      <p className="text-[11px] font-bold uppercase tracking-[2px] text-text">{t.picks.length === 1 ? "My pick" : `My top ${t.picks.length}`}</p>
+                      {t.picks.map((p, k) => {
+                        const pct = Math.min(100, Math.round((p.raised.amount / p.goal.amount) * 100));
+                        const why = p.backerCount < 5 ? `Only ${p.backerCount} backer${p.backerCount === 1 ? "" : "s"}` : p.urgency >= 4 ? "Urgent need" : `${pct}% funded`;
+                        return (
+                          <div key={p.id} className="flex gap-3 overflow-hidden rounded-lg bg-white p-2 shadow-sm">
+                            <div className="relative size-16 shrink-0 overflow-hidden rounded-md">
+                              <CategoryArt id={p.categoryId} seed={p.id} photo={photos[p.id]} tint={false} label="" />
+                              <span className="absolute left-1 top-1 grid size-5 place-items-center rounded-full bg-ink text-[10px] font-bold text-white">{k + 1}</span>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-ink">{p.title}</p>
+                              <p className="text-[11px] capitalize text-text">{p.categoryId} · {p.facets.region}</p>
+                              <div className="mt-1 h-1.5 bg-surface-alt"><div className="h-full bg-growth" style={{ width: `${Math.max(pct, 2)}%` }} /></div>
+                              <div className="mt-1.5 flex items-center justify-between gap-2">
+                                <span className="truncate text-[11px] font-medium text-primary">✦ {why}</span>
+                                <Link href={`/projects/${p.id}#donate-box`} className="shrink-0 rounded-full bg-ink px-3 py-1 text-xs font-bold text-white hover:bg-primary">
+                                  Back it
+                                </Link>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -268,5 +281,26 @@ export function GivingAssistant({ projects }: { projects: Project[] }) {
         </section>
       )}
     </>
+  );
+}
+
+/** Bundi's reply text: **bold**, "- " or "1." lists and line breaks, as React (never HTML) */
+function ChatText({ text }: { text: string }) {
+  const lines = text.replace(/\s+(?=(?:-|\d+\.)\s+\*\*)/g, "\n").split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const bold = (l: string) => l.split(/(\*\*[^*]+\*\*)/g).map((part, i) => (/^\*\*[^*]+\*\*$/.test(part) ? <strong key={i} className="font-semibold text-ink">{part.slice(2, -2)}</strong> : part));
+  const items = lines.filter((l) => /^(?:-|•|\d+\.)\s+/.test(l));
+  return (
+    <span className="block space-y-1.5 leading-5">
+      {lines.map((l, i) =>
+        /^(?:-|•|\d+\.)\s+/.test(l) ? (
+          <span key={i} className="flex gap-2">
+            <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+            <span>{bold(l.replace(/^(?:-|•|\d+\.)\s+/, ""))}</span>
+          </span>
+        ) : (
+          <span key={i} className={`block ${items.length && i === 0 ? "font-medium" : ""}`}>{bold(l)}</span>
+        ),
+      )}
+    </span>
   );
 }

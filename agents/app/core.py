@@ -18,6 +18,13 @@ CATEGORIES_TIMEOUT = httpx.Timeout(3.0, connect=3.0)
 # /mandates/constraints feeds the same draft, so it gets the same short budget.
 CONSTRAINTS_TIMEOUT = httpx.Timeout(3.0, connect=3.0)
 
+# /projects feeds the same draft, and only its tags are used: same short budget.
+PROJECTS_TIMEOUT = httpx.Timeout(3.0, connect=3.0)
+
+# The most projects one tag lookup asks for. The draft needs the tag vocabulary, not the
+# whole catalogue, and a smaller page keeps the core query cheap.
+PROJECTS_LIMIT = 200
+
 
 class CoreError(RuntimeError):
     pass
@@ -89,6 +96,30 @@ class Core:
             raise CoreError("GET /mandates/constraints did not return an object")
         return data
 
+    async def projects(self, limit: int = PROJECTS_LIMIT) -> list[dict]:
+        """Public GET /projects?limit=N: the projects, for their tags.
+
+        Only the tag vocabulary is wanted here, so anything that is not a dict is dropped
+        rather than trusted. The page can come back bare or wrapped in {"items": [...]} -
+        the API has answered both ways, and a wrapper read as a project would silently
+        yield no tags at all.
+        """
+        try:
+            r = await self._client.get("/projects", params={"limit": limit},
+                                       headers=self._headers("/projects"),
+                                       timeout=PROJECTS_TIMEOUT)
+            r.raise_for_status()
+            data = r.json()
+        except httpx.HTTPStatusError as exc:
+            raise CoreError(f"GET /projects -> {exc.response.status_code}") from exc
+        except httpx.HTTPError as exc:
+            raise CoreError(f"GET /projects unreachable: {exc}") from exc
+        if isinstance(data, dict):
+            data = data.get("items")
+        if not isinstance(data, list):
+            raise CoreError("GET /projects did not return a list")
+        return [p for p in data if isinstance(p, dict)]
+
     async def aclose(self) -> None:
         await self._client.aclose()
 
@@ -100,6 +131,15 @@ FAKE_CATEGORIES = [
     {"id": 2, "name": "Education", "project_count": 4},
     {"id": 3, "name": "Environment", "project_count": 1},
     {"id": 4, "name": "Water", "project_count": 1},
+]
+
+# The tag vocabulary the fake core knows about. Deliberately includes "faith-based": the
+# case a donor most needs checked before a tag goes into an exclusion list.
+FAKE_PROJECTS = [
+    {"id": 1, "title": "Sunday school meals", "tags": ["faith-based", "girls"]},
+    {"id": 2, "title": "Well repair", "tags": ["water", "Environment"]},
+    {"id": 3, "title": "Girls STEM club", "tags": ["girls", "education"]},
+    {"id": 4, "title": "Clean water fund", "tags": ["water"]},
 ]
 
 
@@ -125,13 +165,15 @@ class FakeCore(Core):
     def __init__(self, funding: dict[int, list[dict]] | None = None,
                  stories: dict[int, list[dict]] | None = None,
                  categories: list[dict] | None = None,
-                 constraints: dict | None = None) -> None:
+                 constraints: dict | None = None,
+                 projects: list[dict] | None = None) -> None:
         self.cfg = settings()
         self.base = "fake"
         self._funding = funding or {}
         self._stories = stories or {}
         self._categories = FAKE_CATEGORIES if categories is None else categories
         self._constraints = FAKE_CONSTRAINTS if constraints is None else constraints
+        self._projects = FAKE_PROJECTS if projects is None else projects
         self._client = None  # type: ignore[assignment]
 
     async def funding_history(self, project_id: int) -> list[dict]:
@@ -145,6 +187,9 @@ class FakeCore(Core):
 
     async def constraints(self) -> dict:
         return dict(self._constraints)
+
+    async def projects(self, limit: int = PROJECTS_LIMIT) -> list[dict]:
+        return [dict(p) for p in self._projects[:limit]]
 
     async def aclose(self) -> None:
         return None

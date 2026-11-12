@@ -13,6 +13,7 @@ from app.agents.mandate_draft import (
     FALLBACK_CONSTRAINTS,
     MandateDraftAgent,
     Proposal,
+    TagCache,
     clean_tag,
     match_category,
     LLM_SYSTEM,
@@ -167,7 +168,15 @@ async def test_verified_tag_is_added_without_warning():
 
 @pytest.mark.asyncio
 async def test_unverifiable_tag_is_kept_and_flagged():
-    a = agent(proposal=Proposal(excluded_tags=["faith-based"]))
+    """The core does not know this tag: keep it, and tell the donor it went in unchecked."""
+    class UnknownTag(FakeCore):
+        async def projects(self, limit: int = 200) -> list[dict]:
+            return [{"id": 1, "tags": ["girls"]}]
+
+    a = MandateDraftAgent(
+        core=UnknownTag(),
+        llm=FakeLLM(json_replies=[Proposal(excluded_tags=["faith-based"])]),
+        mcp=FakeMcpClient({"search_projects": []}))
     out = await a.draft("nothing religious", Current(categories=[1]))
     assert out["proposed"]["excluded_tags"] == ["faith-based"]
     assert out["warnings"] == ["couldn't verify tag faith-based"]
@@ -175,12 +184,15 @@ async def test_unverifiable_tag_is_kept_and_flagged():
 
 @pytest.mark.asyncio
 async def test_tag_lookup_failure_still_keeps_the_tag():
-    class Broken(FakeMcpClient):
-        async def call(self, tool, **args):
-            raise RuntimeError("search down")
+    """The core cannot be asked at all: warn and keep the tag rather than drop it."""
+    class Broken(FakeCore):
+        async def projects(self, limit: int = 200) -> list[dict]:
+            raise RuntimeError("projects down")
 
-    a = MandateDraftAgent(core=FakeCore(), llm=FakeLLM(json_replies=[Proposal(
-        excluded_tags=["faith-based"])]), mcp=Broken({}))
+    a = MandateDraftAgent(
+        core=Broken(),
+        llm=FakeLLM(json_replies=[Proposal(excluded_tags=["faith-based"])]),
+        mcp=FakeMcpClient({"search_projects": []}))
     out = await a.draft("nothing religious", Current(categories=[1]))
     assert out["proposed"]["excluded_tags"] == ["faith-based"]
     assert out["warnings"] == ["couldn't verify tag faith-based"]
@@ -241,6 +253,47 @@ def test_parse_amounts_variants(text, expected):
     assert parse_amounts(text) == expected
 
 
+@pytest.mark.parametrize('text,expected', [
+    # Commas are what a donor types at these sizes; before the fix "$50,000" read as $0.00
+    # because the regex matched only the trailing "000".
+    ('$50,000 a month', {'monthly_budget_cents': 5000000}),
+    ('$1,000.50 per project', {'per_project_max_cents': 100000}),
+    ('$5,000,000 a month', {'monthly_budget_cents': 500000000}),
+    ('monthly budget of $12,500', {'monthly_budget_cents': 1250000}),
+    ('$50,000 monthly', {}),
+    ('$1,000,000,000,000 a month', {'monthly_budget_cents': 100000000000000}),
+])
+def test_parse_amounts_reads_commas(text, expected):
+    assert parse_amounts(text) == expected
+
+
+@pytest.mark.parametrize('text', ['$5k a month', '$5K per project', '$5m a month'])
+def test_parse_amounts_does_not_guess_at_shorthand(text):
+    """No shorthand: a k or m multiplier is not something we are willing to multiply out."""
+    assert parse_amounts(text) == {}
+
+
+def test_dollars_keeps_thousands_separators_and_two_decimals():
+    """The wording a donor reads. Pinned so the format cannot drift back to a bare $50000.0."""
+    from app.agents.mandate_draft import _dollars
+
+    assert _dollars(5000000) == '$50,000.00'
+    assert _dollars(10000) == '$100.00'
+    assert _dollars(123456) == '$1,234.56'
+    assert _dollars(0) == '$0.00'
+
+
+def test_a_clamped_amount_is_warned_about_in_that_format() -> None:
+    """The clamp warning is the only place a donor sees the cap, so it has to read well."""
+    agent_ = draft_agent(FakeCore())
+    warnings: list[str] = []
+    out = agent_._clamp_amounts({'monthly_budget_cents': 5000000},
+                               Current(), FALLBACK_CONSTRAINTS, warnings)
+    assert out['monthly_budget_cents'] == int(FALLBACK_CONSTRAINTS['max_budget_cents'])
+    assert warnings == ['asked for $50,000.00 a month, using $10,000.00: '
+                        'the most a mandate may allow']
+
+
 def test_parse_categories_is_case_insensitive():
     cats = [{'id': 4, 'name': 'Water'}, {'id': 2, 'name': 'Education'}]
     assert parse_categories('clean WATER please', cats) == [4]
@@ -266,9 +319,41 @@ def test_system_prompt_lists_allowed_names():
 def test_system_prompt_without_catalogue_is_still_valid():
     prompt = system_prompt([])
     assert prompt.startswith(LLM_SYSTEM)
-    # The API limits are injected on every prompt, catalogue or not.
-    assert "1000" in prompt or "100" in prompt
+    # The non-price limits are injected on every prompt, catalogue or not.
+    assert "excluded tags" in prompt
     assert "ignore" in prompt.lower()
+
+
+def test_the_prompt_never_names_a_money_cap():
+    """The model must not see the caps: it returns what the donor said, uncapped.
+
+    The caller still clamps, so a model that ignores this cannot exceed the API range -
+    it only means the donor sees the price walked back as a warning.
+    """
+    prompt = system_prompt(CATALOGUE, FALLBACK_CONSTRAINTS)
+    for key in ("max_budget_cents", "max_per_project_cents",
+                "min_approval_threshold_cents", "max_approval_threshold_cents"):
+        value = str(int(FALLBACK_CONSTRAINTS[key]))
+        # The tag limit is 20 and the min threshold is 100: neither is a money cap, so a
+        # bare digit match would be a false positive. Look for the amount in context.
+        assert value + " cents" not in prompt, key + " leaked into the prompt"
+    assert "budget at most" not in prompt
+    assert "per-project at most" not in prompt
+    assert "threshold" not in prompt
+
+
+def test_the_prompt_asks_for_the_amount_exactly_as_stated():
+    prompt = system_prompt([])
+    assert "exactly as stated" in prompt
+    assert "whole cents" in prompt
+    assert "never lower" in prompt
+
+
+def test_the_prompt_keeps_the_non_price_limits():
+    prompt = system_prompt([], FALLBACK_CONSTRAINTS)
+    assert str(int(FALLBACK_CONSTRAINTS["max_tags"])) + " excluded tags" in prompt
+    assert str(int(FALLBACK_CONSTRAINTS["max_tag_length"])) + " characters" in prompt
+    assert "0-100" in prompt
 
 
 @pytest.mark.asyncio
@@ -468,6 +553,47 @@ def draft_agent(core, category: str = "Education") -> MandateDraftAgent:
         mcp=FakeMcpClient({"search_projects": []}))
 
 
+class TaggedProjects(FakeCore):
+    """A core whose visible projects carry the tags, and which counts the reads."""
+
+    def __init__(self, projects: list[dict] | None = None, fail: int = 0) -> None:
+        super().__init__(projects=projects if projects is not None else [
+            project(1, tags=["faith-based", "girls"])])
+        self.fail = fail
+        self.reads = 0
+
+    async def projects(self, limit: int = 200) -> list[dict]:
+        from app.core import CoreError
+
+        self.reads += 1
+        if self.fail:
+            self.fail -= 1
+            raise CoreError("GET /projects -> 500")
+        return await super().projects(limit)
+
+
+def test_a_project_tagged_faith_based_verifies_an_exclusion() -> None:
+    """The donor writes "nothing faith-based"; a visible project carries that tag.
+
+    The tag is on a real project we can see, so the exclusion is verified and the donor
+    gets no warning. This is the acceptance case for the core-backed tag source: the
+    vocabulary comes from /projects, not from the MCP search.
+    """
+    core = TaggedProjects()
+    agent_ = MandateDraftAgent(
+        core=core,
+        llm=FakeLLM(json_replies=[Proposal(excluded_tags=["faith-based"])]),
+        mcp=FakeMcpClient({"search_projects": []}))
+
+    # A cause is given so the only warning that could appear is a tag one: the
+    # "choose a cause" warning is a different, already-covered rule.
+    out = asyncio.run(agent_.draft("nothing faith-based", Current(categories=[1])))
+    assert out["proposed"]["excluded_tags"] == ["faith-based"]
+    assert out["warnings"] == []
+    assert out["rejected"] == []
+    assert core.reads == 1, "the tag read happens once per draft, warm-up only"
+
+
 def test_failed_lookup_warns_and_leaves_the_field_alone() -> None:
     agent_ = draft_agent(FlakyCore(failures=99))
     out = asyncio.run(agent_.draft("education", Current(categories=[1])))
@@ -485,6 +611,9 @@ def test_lookup_is_retried_once_before_giving_up() -> None:
     core = FlakyCore(failures=99)
     agent_ = draft_agent(core)
     asyncio.run(agent_.draft("education", Current()))
+    # Warm-up reads the catalogue twice (once for the prompt, once for the merge), each
+    # retried once: four failed reads. The tag read is a separate cache and does not count
+    # here - FlakyCore only breaks categories().
     assert core.calls == 4, "two reads (propose + merge), each retried once"
 
 
@@ -566,6 +695,142 @@ def test_empty_catalogue_is_not_cached_and_the_cache_retries() -> None:
     # A good answer IS cached: no third fetch inside the TTL.
     asyncio.run(cache.lookup(core))
     assert calls["n"] == 3
+
+
+def test_tag_cache_retries_a_failed_lookup_and_does_not_cache_it() -> None:
+    """One retry, then a good answer; the failure never reaches the cache."""
+    core = TaggedProjects(fail=1)
+    cache = TagCache()
+
+    tags, verified = asyncio.run(cache.lookup(core))
+    assert verified is True
+    assert tags == {"faith-based", "girls"}
+    assert core.reads == 2, "the failed read was retried once and the retry succeeded"
+
+
+def test_tag_cache_does_not_cache_an_empty_lookup() -> None:
+    """A core with no tagged projects is a failure, not a verified empty vocabulary."""
+    calls = {"n": 0}
+
+    class Untagged(FakeCore):
+        async def projects(self, limit: int = 200) -> list[dict]:
+            calls["n"] += 1
+            return [project(1, tags=[])]
+
+    core = Untagged()
+    cache = TagCache()
+
+    tags, verified = asyncio.run(cache.lookup(core))
+    assert tags is None, "an empty vocabulary is never reported as verified"
+    assert verified is False
+    assert cache._values == set() and cache._at == 0.0, "the empty answer was not cached"
+    assert calls["n"] == 2, "the empty read was retried once"
+
+    # The next caller asks the core again instead of trusting a pinned empty answer.
+    asyncio.run(cache.lookup(core))
+    assert calls["n"] == 4
+
+
+def test_a_draft_with_no_mcp_client_never_builds_one() -> None:
+    """The draft route needs the core and the model, never MCP.
+
+    build_client is replaced with something that raises, so any lazy build during the
+    draft turns into a test failure instead of a spawned subprocess.
+    """
+    import app.agents.mandate_draft as mandate_module
+
+    def explode(*a, **kw):
+        raise AssertionError("build_client() was called during a draft")
+
+    original = mandate_module.build_client
+    mandate_module.build_client = explode
+    try:
+        agent_ = MandateDraftAgent(
+            core=TaggedProjects(),
+            llm=FakeLLM(json_replies=[Proposal(excluded_tags=["faith-based"])]))
+        assert agent_._mcp is None, "no client before any use"
+        out = asyncio.run(agent_.draft("nothing faith-based", Current(categories=[1])))
+        assert out["proposed"]["excluded_tags"] == ["faith-based"]
+        assert agent_._mcp is None, "a full draft still never built a client"
+    finally:
+        mandate_module.build_client = original
+
+
+def test_the_three_reads_overlap_instead_of_queueing() -> None:
+    """Constraints, tags and categories must be in flight at the same time.
+
+    The web aborts at 20 s, so three serialised cold reads can lose the draft. Each read
+    here parks on a shared event and records that it arrived; the draft only proceeds once
+    all three have arrived, so a serialised implementation deadlocks (and the assertion
+    below reports it) instead of passing on a cold-core fluke.
+    """
+    first_round: list[str] = []
+    all_here = asyncio.Event()
+
+    class Overlapping(FakeCore):
+        async def _meet(self, name: str) -> None:
+            # Only the first read of each source participates: a retry is a second visit
+            # and must not be mistaken for a third source arriving.
+            if name in first_round:
+                return
+            first_round.append(name)
+            if len(first_round) == 3:
+                all_here.set()
+            # Bounded: a serialised read never fills the set, and waits out the budget.
+            await asyncio.wait_for(all_here.wait(), timeout=1.0)
+
+        async def constraints(self) -> dict:
+            await self._meet("constraints")
+            return await super().constraints()
+
+        async def projects(self, limit: int = 200) -> list[dict]:
+            await self._meet("tags")
+            return await super().projects(limit)
+
+        async def categories(self) -> list[dict]:
+            await self._meet("categories")
+            return await super().categories()
+
+    agent_ = MandateDraftAgent(
+        core=Overlapping(projects=[project(1, tags=["faith-based"])]),
+        llm=FakeLLM(json_replies=[Proposal(categories=["Education"])]),
+        mcp=FakeMcpClient({"search_projects": []}))
+
+    out = asyncio.run(agent_.draft("nothing faith-based", Current()))
+    assert sorted(first_round) == ["categories", "constraints", "tags"], (
+        "all three reads must be in flight together; a serialised read waits out the",
+        "1 s budget and leaves the others out of `first_round`")
+    assert out["rejected"] == []
+    assert out["proposed"]["categories"] == [2], "Education is 2 in FAKE_CATEGORIES"
+
+
+def test_aclose_closes_an_owned_client_but_not_an_injected_one() -> None:
+    """B2: the agent closes what it built, and never what the caller handed it."""
+    class CountingMcp(FakeMcpClient):
+        def __init__(self) -> None:
+            super().__init__({"search_projects": []})
+            self.closed = 0
+
+        async def aclose(self) -> None:
+            self.closed += 1
+
+    # An injected client belongs to the caller: aclose must leave it open.
+    injected = CountingMcp()
+    owned_agent = MandateDraftAgent(core=FakeCore(), llm=FakeLLM(json_replies=[]))
+    asyncio.run(owned_agent.aclose())
+    assert injected.closed == 0, "an injected client is never closed"
+
+    # An agent that built its own client closes exactly that one.
+    built = CountingMcp()
+    owning_agent = MandateDraftAgent(core=FakeCore(), llm=FakeLLM(json_replies=[]))
+    owning_agent._mcp = built  # stand in for the lazy property building it
+    asyncio.run(owning_agent.aclose())
+    assert built.closed == 1, "an owned client is closed once"
+
+    # Never built: aclose must not build one just to shut it down.
+    lazy_agent = MandateDraftAgent(core=FakeCore(), llm=FakeLLM(json_replies=[]))
+    asyncio.run(lazy_agent.aclose())
+    assert lazy_agent._mcp is None
 
 
 def test_a_successful_lookup_is_cached_for_the_ttl() -> None:
